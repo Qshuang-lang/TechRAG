@@ -1,0 +1,602 @@
+[
+ {
+  "category": "docker",
+  "question": "Docker 与虚拟机有何不同？",
+  "answer": "Docker 最初使用\nLinuX Containers\n（LXC），但后来改用\nrunC\n（以前称为\nlibcontainer\n），它与宿主机运行在同一个操作系统中。这使得它能够共享大量宿主机操作系统资源。此外，它使用分层文件系统（\nAuFS\n）并管理网络。\n\n\nAuFS 是一种分层文件系统，因此你可以有一个只读部分和一个写入部分，它们被合并在一起。可以将操作系统的公共部分设为只读（并在所有容器之间共享），然后为每个容器提供自己的写入挂载点。\n\n\n假设你有一个 1 GB 的容器镜像；如果你想使用完整的虚拟机，就需要 1 GB × 你想要的虚拟机数量。使用 Docker 和 AuFS，你可以在所有容器之间共享这 1 GB 的大部分内容，即使你有 1000 个容器，容器操作系统可能仍然只占用略多于 1 GB 的空间（假设它们都运行相同的操作系统镜像）。\n\n\n完整的虚拟化系统会获得自己分配的一组资源，共享极少。你可以获得更好的隔离性，但它要重得多（需要更多资源）。使用 Docker，隔离性较差，但容器是轻量级的（需要更少资源）。因此你可以在一个宿主机上轻松运行数千个容器，它甚至不会有任何压力。试试用 Xen 做同样的事，除非你有一个非常强大的宿主机，否则我认为这是不可能的。\n\n\n完整的虚拟化系统通常需要几分钟才能启动，而 Docker/LXC/runC 容器只需几秒钟，通常甚至不到一秒。\n\n\n每种虚拟化系统都有各自的优缺点。如果你想要完全隔离并保证资源，完整虚拟机是更好的选择。如果你只是想将进程彼此隔离，并希望在规模合理的宿主机上运行大量进程，那么 Docker/LXC/runC 似乎是更好的选择。\n\n\n如需了解更多信息，请查看\n这组博客文章\n，它们很好地解释了 LXC 的工作原理。\n\n\n\n\n为什么将软件部署到 docker 镜像（如果这是正确的术语）比简单地部署到一致的生产环境更容易？\n\n\n\n\n部署一致的生产环境说起来容易做起来难。即使你使用像\nChef\n和\nPuppet\n这样的工具，宿主机和环境之间也总会有操作系统更新和其他变化。\n\n\nDocker 使你能够将操作系统快照到一个共享镜像中，并轻松部署到其他 Docker 宿主机上。本地、dev、qa、prod 等：全都使用同一个镜像。当然，你也可以用其他工具做到这一点，但不会这么容易或这么快。\n\n\n这对测试非常有用；假设你有数千个测试需要连接数据库，每个测试都需要数据库的一个原始副本，并且会修改数据。传统方法是在每个测试之后使用自定义代码或像\nFlyway\n这样的工具重置数据库——这可能非常耗时，并且意味着测试必须串行运行。然而，使用 Docker，你可以创建数据库的镜像，并为每个测试运行一个实例，然后并行运行所有测试，因为你知道它们都将针对数据库的同一个快照运行。由于测试是在 Docker 容器中并行运行的，它们可以同时在同一台机器上运行，并且应该会快得多。试试用完整虚拟机做同样的事。\n\n\n来自评论……\n\n\n\n\n有意思！我想我仍然对“将操作系统快照”这个概念感到困惑。一个人如何在不制作操作系统镜像的情况下做到这一点呢？\n\n\n\n\n好吧，让我看看能否解释一下。你从一个基础镜像开始，然后进行更改，并使用 docker 提交这些更改，它会创建一个镜像。这个镜像只包含与基础镜像的差异。当你想运行你的镜像时，你还需要基础镜像，并且它使用分层文件系统将你的镜像叠加在基础镜像之上：如上所述，Docker 使用 AuFS。AuFS 将不同层合并在一起，你就得到了想要的结果；你只需要运行它。你可以继续添加越来越多的镜像（层），而它仍然只会保存差异。由于 Docker 通常基于来自\nregistry\n的现成镜像进行构建，你很少需要自己“快照”整个操作系统。",
+  "link": "https://stackoverflow.com/questions/16047306/how-is-docker-different-from-a-virtual-machine"
+ },
+ {
+  "category": "docker",
+  "question": "从 Docker 容器内部，如何连接到机器的 localhost？",
+  "answer": "如果你使用的是\nDocker-for-mac\n或\nDocker-for-Windows\n 18.03+，请使用主机\n```host.docker.internal```\n连接到你的 MySQL 服务（而不是连接字符串中的\n```127.0.0.1```\n）。\n\n\n如果你使用的是\nDocker-for-Linux\n 20.10.0+，并且你在启动 Docker 容器时使用了\n```--add-host host.docker.internal:host-gateway```\n选项，或者在\ndocker-compose.yml\n文件中添加了以下片段，那么你也可以使用主机\n```host.docker.internal```\n：\n\n\n```extra_hosts:\n    - \"host.docker.internal:host-gateway\"\n```\n\n\n否则，请阅读下文\n\n\n\n\nTLDR\n\n\n在你的\n```docker run```\n命令中使用\n```--network=\"host\"```\n，然后 Docker 容器中的\n```127.0.0.1```\n将指向你的 Docker 宿主机。\n\n\n注意：\n根据文档\n，此模式仅适用于 Docker for Linux。\n\n\n\n\n关于 Docker 容器网络模式的说明\n\n\nDocker 在运行容器时提供了\n不同的网络模式\n。根据你选择的模式，你连接 Docker 宿主机上运行的 MySQL 数据库的方式会有所不同。\n\n\ndocker run --network=\"bridge\"（默认）\n\n\nDocker 默认会创建一个名为\n```docker0```\n的网桥。Docker 宿主机和 Docker 容器在该网桥上都有一个 IP 地址。\n\n\n在 Docker 宿主机上，输入\n```sudo ip addr show docker0```\n，你会看到类似下面的输出：\n\n\n```[vagrant@docker:~] $ sudo ip addr show docker0\n4: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default\n    link/ether 56:84:7a:fe:97:99 brd ff:ff:ff:ff:ff:ff\n    inet 172.17.42.1/16 scope global docker0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::5484:7aff:fefe:9799/64 scope link\n       valid_lft forever preferred_lft forever\n```\n\n\n所以这里我的 Docker 宿主机在\n```docker0```\n网络接口上拥有 IP 地址\n```172.17.42.1```\n。\n\n\n现在启动一个新容器并在其中获取一个 shell：\n```docker run --rm -it ubuntu:trusty bash```\n，然后在容器中输入\n```ip addr show eth0```\n来查看其主网络接口是如何设置的：\n\n\n```root@e77f6a1b3740:/# ip addr show eth0\n863: eth0: <BROADCAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000\n    link/ether 66:32:13:f0:f1:e3 brd ff:ff:ff:ff:ff:ff\n    inet 172.17.1.192/16 scope global eth0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::6432:13ff:fef0:f1e3/64 scope link\n       valid_lft forever preferred_lft forever\n```\n\n\n这里我的容器拥有 IP 地址\n```172.17.1.192```\n。现在查看路由表：\n\n\n```root@e77f6a1b3740:/# route\nKernel IP routing table\nDestination     Gateway         Genmask         Flags Metric Ref    Use Iface\ndefault         172.17.42.1     0.0.0.0         UG    0      0        0 eth0\n172.17.0.0      *               255.255.0.0     U     0      0        0 eth0\n```\n\n\n因此，Docker 宿主机的 IP 地址\n```172.17.42.1```\n被设置为默认路由，并且可以从你的容器访问。\n\n\n```root@e77f6a1b3740:/# ping 172.17.42.1\nPING 172.17.42.1 (172.17.42.1) 56(84) bytes of data.\n64 bytes from 172.17.42.1: icmp_seq=1 ttl=64 time=0.070 ms\n64 bytes from 172.17.42.1: icmp_seq=2 ttl=64 time=0.201 ms\n64 bytes from 172.17.42.1: icmp_seq=3 ttl=64 time=0.116 ms\n```\n\n\ndocker run --network=\"host\"\n\n\n或者，你可以使用设置为\n```host```\n的网络设置来运行 Docker 容器。这样的容器将与 Docker 宿主机共享网络栈，从容器角度看，\n```localhost```\n（或\n```127.0.0.1```\n）将指向 Docker 宿主机。\n\n\n请注意，在 Docker 容器中打开的任何端口都会在 Docker 宿主机上打开。而且这不需要在\n```docker run```\n中使用\n```-p```\n或\n```-P```\n选项。\n\n\n我的 Docker 宿主机上的 IP 配置：\n\n\n```[vagrant@docker:~] $ ip addr show eth0\n2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000\n    link/ether 08:00:27:98:dc:aa brd ff:ff:ff:ff:ff:ff\n    inet 10.0.2.15/24 brd 10.0.2.255 scope global eth0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a00:27ff:fe98:dcaa/64 scope link\n       valid_lft forever preferred_lft forever\n```\n\n\n而在\nhost\n模式下的 Docker 容器中：\n\n\n```[vagrant@docker:~] $ docker run --rm -it --network=host ubuntu:trusty ip addr show eth0\n2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000\n    link/ether 08:00:27:98:dc:aa brd ff:ff:ff:ff:ff:ff\n    inet 10.0.2.15/24 brd 10.0.2.255 scope global eth0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a00:27ff:fe98:dcaa/64 scope link\n       valid_lft forever preferred_lft forever\n```\n\n\n如你所见，Docker 宿主机和 Docker 容器共享完全相同的网络接口，因此具有相同的 IP 地址。\n\n\n\n\n从容器连接到 MySQL\n\n\n桥接模式\n\n\n要从\n桥接模式\n下的容器访问运行在 Docker 宿主机上的 MySQL，你需要确保 MySQL 服务正在\n```172.17.42.1```\n这个 IP 地址上监听连接。\n\n\n为此，请确保你的 MySQL 配置文件（\nmy.cnf\n）中设置了\n```bind-address = 172.17.42.1```\n或\n```bind-address = 0.0.0.0```\n。\n\n\n如果你需要设置一个包含网关 IP 地址的环境变量，可以在容器中运行以下代码：\n\n\n```export DOCKER_HOST_IP=$(route -n | awk '/UG[ \\t]/{print $2}')\n```\n\n\n然后在你的应用程序中，使用\n```DOCKER_HOST_IP```\n环境变量来打开与 MySQL 的连接。\n\n\n注意：\n如果你使用\n```bind-address = 0.0.0.0```\n，你的 MySQL 服务器将监听所有网络接口上的连接。这意味着你的 MySQL 服务器可能会从互联网访问；请确保相应地设置防火墙规则。\n\n\n注意 2：\n如果你使用\n```bind-address = 172.17.42.1```\n，你的 MySQL 服务器将不会监听发往\n```127.0.0.1```\n的连接。运行在 Docker 宿主机上、想要连接 MySQL 的进程将不得不使用\n```172.17.42.1```\n这个 IP 地址。\n\n\n主机模式\n\n\n要从\n主机模式\n下的容器访问运行在 docker 宿主机上的 MySQL，你可以在 MySQL 配置中保留\n```bind-address = 127.0.0.1```\n，并从容器连接到\n```127.0.0.1```\n：\n\n\n```[vagrant@docker:~] $ docker run --rm -it --network=host mysql mysql -h 127.0.0.1 -uroot -p\nEnter password:\nWelcome to the MySQL monitor.  Commands end with ; or \\g.\nYour MySQL connection id is 36\nServer version: 5.5.41-0ubuntu0.14.04.1 (Ubuntu)\n\nCopyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.\n\nOracle is a registered trademark of Oracle Corporation and/or its affiliates. Other names may be trademarks of their respective owners.\n\nType 'help;' or '\\h' for help. Type '\\c' to clear the current input statement.\n\nmysql>\n```\n\n\n注意：\n请务必使用\n```mysql -h 127.0.0.1```\n，而不是\n```mysql -h localhost```\n；否则 MySQL 客户端会尝试使用 Unix socket 进行连接。",
+  "link": "https://stackoverflow.com/questions/24319662/from-inside-of-a-docker-container-how-do-i-connect-to-the-localhost-of-the-mach"
+ },
+ {
+  "category": "docker",
+  "question": "Dockerfile 中的 'COPY' 和 'ADD' 命令有什么区别？",
+  "answer": "你应该查看 \n```ADD```\n 和 \n```COPY```\n 的文档，以获取它们行为的更详细描述，但简而言之，主要区别在于 \n```ADD```\n 能做的比 \n```COPY```\n 更多：\n\n\n\n\n```ADD```\n 允许 \n```<src>```\n 是一个 URL\n\n\n参考下面的评论，\n```ADD```\n \n文档\n 指出：\n\n\n\n\n\n\n如果 是一个本地 tar 归档文件，且采用可识别的压缩格式（identity、gzip、bzip2 或 xz），那么它会被解包为一个目录。来自远程 URL 的资源不会被解压缩。\n\n\n\n\n注意，\n编写 Dockerfile 的最佳实践\n 建议在不需要 \n```ADD```\n 的魔法时使用 \n```COPY```\n。否则，你（\n既然你不得不查这个答案\n）很可能在某天感到惊讶，当你本意是想把 \n```keep_this_archive_intact.tar.gz```\n 复制到容器中，结果却把内容喷洒到了你的文件系统上。",
+  "link": "https://stackoverflow.com/questions/24958140/what-is-the-difference-between-the-copy-and-add-commands-in-a-dockerfile"
+ },
+ {
+  "category": "docker",
+  "question": "从 Docker 容器复制文件到主机",
+  "answer": "为了将文件从容器复制到主机，你可以使用命令\n\n\n```docker cp <containerId>:/file/path/within/container /host/path/target\n```\n\n\n下面是一个例子：\n\n\n```$ sudo docker cp goofy_roentgen:/out_read.jpg .\n```\n\n\n这里 \ngoofy_roentgen\n 是我从以下命令中得到的容器名称：\n\n\n```$ sudo docker ps\n\nCONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS                                            NAMES\n1b4ad9311e93        bamos/openface      \"/bin/bash\"         33 minutes ago      Up 33 minutes       0.0.0.0:8000->8000/tcp, 0.0.0.0:9000->9000/tcp   goofy_roentgen\n```\n\n\n你也可以使用（部分的）\nContainer ID\n。以下命令与第一个命令等价\n\n\n```$ sudo docker cp 1b4a:/out_read.jpg .\n```",
+  "link": "https://stackoverflow.com/questions/22049212/copying-files-from-docker-container-to-host"
+ },
+ {
+  "category": "docker",
+  "question": "Dockerfile 中 CMD 和 ENTRYPOINT 有什么区别？",
+  "answer": "Docker 有一个默认的 entrypoint，即 \n```/bin/sh -c```\n，但没有默认的 command。\n\n\n当你这样运行 docker 时：\n\n```docker run -i -t ubuntu bash```\n\nentrypoint 是默认的 \n```/bin/sh -c```\n，镜像是 \n```ubuntu```\n，command 是 \n```bash```\n。\n\n\ncommand 是通过 entrypoint 运行的。也就是说，实际执行的是 \n```/bin/sh -c bash```\n。这使得 Docker 能够依赖 shell 的解析器快速实现 \n```RUN```\n。\n\n\n后来，人们要求能够自定义这一行为，于是引入了 \n```ENTRYPOINT```\n 和 \n```--entrypoint```\n。\n\n\n镜像名称（在上面的例子中是 \n```ubuntu```\n）之后的所有内容都是 command，并会传递给 entrypoint。使用 \n```CMD```\n 指令时，效果完全等同于执行：\n\n\n```docker run -i -t ubuntu <cmd>```\n\nentrypoint 的参数就是 \n```<cmd>```\n。\n\n\n如果你改为输入 \n```docker run -i -t ubuntu```\n，也会得到相同的结果：容器中会启动一个 bash shell，因为在 \nubuntu Dockerfile\n 中指定了默认的 \n```CMD```\n：\n\n\n```CMD [\"bash\"]```\n。\n\n\n由于所有内容都会传递给 entrypoint，你可以让镜像表现出非常优雅的行为。@Jiri 的例子就很好，它展示了如何把镜像当作一个“二进制文件”来使用。当使用 \n```[\"/bin/cat\"]```\n 作为 entrypoint，然后执行 \n```docker run img /etc/passwd```\n 时，你会得到结果，\n```/etc/passwd```\n 是 command，并被传递给 entrypoint，所以最终执行的就是 \n```/bin/cat /etc/passwd```\n。\n\n\n另一个例子是把任意 cli 作为 entrypoint。例如，如果你有一个 redis 镜像，不必运行 \n```docker run redisimg redis -H something -u toto get key```\n，你可以直接使用 \n```ENTRYPOINT [\"redis\", \"-H\", \"something\", \"-u\", \"toto\"]```\n，然后这样运行即可得到相同结果：\n```docker run redisimg get key```\n。",
+  "link": "https://stackoverflow.com/questions/21553353/what-is-the-difference-between-cmd-and-entrypoint-in-a-dockerfile"
+ },
+ {
+  "category": "docker",
+  "question": "如何将文件从宿主机复制到 Docker 容器？",
+  "answer": "可以使用 \n```cp```\n 命令来复制文件。\n\n\n可以将某个特定文件复制\n到\n容器中，例如：\n\n\n```docker cp foo.txt container_id:/foo.txt\n```\n\n\n也可以将某个特定文件从容器中复制\n出来\n，例如：\n\n\n```docker cp container_id:/foo.txt foo.txt\n```\n\n\n需要特别强调，\n```container_id```\n 是\n容器\n ID，\n不是\n\n镜像\n ID。（使用 \n```docker ps```\n 查看列表，其中包含 \n```container_id```\n。）\n\n\n可以使用以下命令将 \n```src```\n 文件夹中包含的多个文件复制到 \n```target```\n 文件夹中：\n\n\n```docker cp src/. container_id:/target\ndocker cp container_id:/src/. target\n```\n\n\n参考：\nDocker CLI 文档中的 \n```cp```\n\n\n在 1.8 之前的 Docker 版本中，只能将文件从容器复制到宿主机，不能从宿主机复制到容器。",
+  "link": "https://stackoverflow.com/questions/22907231/how-can-i-copy-files-from-a-host-to-a-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "如何以类似控制台的方式连接到 Docker 容器的 shell？",
+  "answer": "```docker attach```\n可以让你连接到 Docker 容器，但这与\n```ssh```\n并不完全相同。例如，如果你的容器运行着一个 Web 服务器，\n```docker attach```\n可能会把你连接到 Web 服务器进程的\nstdout\n。它不一定会给你一个 shell。\n\n\n\n```docker exec```\n命令可能才是你想要的；它可以让你在现有容器内运行任意命令。例如，要在容器内运行\n```bash```\n：\n\n\n```docker exec -it <mycontainer> sh\n```\n\n\n当然，你运行的任何命令都必须存在于容器文件系统中；如果你的容器没有\n```sh```\n，这会失败并报类似如下错误：\n\n\n```OCI runtime exec failed: exec failed: unable to start container process:\nexec: \"sh\": executable file not found in $PATH: unknown\n```\n\n\n[如果你的容器没有\n```sh```\n——这在最小化镜像中很常见——你可能需要研究其他方式来探索容器文件系统。]\n\n\n在上面的命令中，\n```<mycontainer>```\n是目标容器的名称或 ID。你是否使用\n```docker compose```\n并不重要；只需运行\n```docker ps```\n，然后使用 ID（显示在第一列的十六进制字符串）或名称（显示在最后一列）。例如，给定：\n\n\n```$ docker ps\nd2d4a89aaee9        larsks/mini-httpd   \"mini_httpd -d /cont   7 days ago          Up 7 days                               web                 \n```\n\n\n我可以运行：\n\n\n```$ docker exec -it web ip addr\n1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN \n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n    inet 127.0.0.1/8 scope host lo\n       valid_lft forever preferred_lft forever\n    inet6 ::1/128 scope host \n       valid_lft forever preferred_lft forever\n18: eth0: <BROADCAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP \n    link/ether 02:42:ac:11:00:03 brd ff:ff:ff:ff:ff:ff\n    inet 172.17.0.3/16 scope global eth0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::42:acff:fe11:3/64 scope link \n       valid_lft forever preferred_lft forever\n```\n\n\n我也可以通过运行以下命令达到同样的效果：\n\n\n```$ docker exec -it d2d4a89aaee9 ip addr\n```\n\n\n同样，我也可以在容器中启动一个 shell；\n\n\n```$ docker exec -it web sh\n/ # echo This is inside the container.\nThis is inside the container.\n/ # exit\n$\n```\n\n\n\n\n在本答案展示的命令中，\n```-i```\n和\n```-t```\n选项（组合为\n```-it```\n）是获得交互式 shell 所必需的：\n\n\n\n\n```-i```\n保持\nstdin\n连接；如果你不指定\n```-i```\n，shell 会直接退出。\n\n\n\n\n```-t```\n分配一个 tty 设备；如果你不指定\n```-t```\n，你的交互体验不会很愉快（例如，不会有 shell 提示符或作业控制）。\n\n\n\n\n\n\n\n\n如果你专门使用\n```docker compose```\n，有一个便捷的\n```docker compose exec```\n命令，其工作方式与\n```docker exec```\n命令非常相似，区别在于：\n\n\n\n\n它默认采用\n```-i```\n和\n```-t```\n的行为\n\n\n它允许你通过\n```compose.yaml```\n文件中的服务名称来引用容器。\n\n\n\n\n例如，如果你有一个像这样的\n```compose.yaml```\n：\n\n\n```services:\n  web:\n    image: docker.io/alpinelinux/darkhttpd\n```\n\n\n那么你可以运行：\n\n\n```docker compose exec web sh\n```\n\n\n等效的\n```docker exec```\n命令大致如下：\n\n\n```docker exec -it myproject-web-1 sh\n```",
+  "link": "https://stackoverflow.com/questions/30172605/how-do-i-get-a-console-like-connection-into-a-docker-containers-shell"
+ },
+ {
+  "category": "docker",
+  "question": "如何在不使用仓库的情况下将 Docker 镜像从一台主机复制到另一台主机",
+  "answer": "你需要将 Docker 镜像保存为 tar 文件：\n\n\n```docker save -o <path for generated tar file> <image name>\n```\n\n\n然后使用常规文件传输工具（如\n```cp```\n、\n```scp```\n或\n```rsync```\n（大文件首选））将镜像复制到新系统。之后，你需要将镜像加载到 Docker 中：\n\n\n```docker load -i <path to image tar file>\n```\n\n\n使用 -o 时应添加文件名（而不仅仅是目录），例如：\n\n\n```docker save -o c:/myfile.tar centos:16\n```\n\n\n你的镜像语法可能需要仓库前缀（:latest 标签是默认值）\n\n\n```docker save -o C:\\path\\to\\file.tar repository/imagename\n```\n\n\n\n\n附注：你可能需要为所有命令加上\n```sudo```\n。",
+  "link": "https://stackoverflow.com/questions/23935141/how-to-copy-docker-images-from-one-host-to-another-without-using-a-repository"
+ },
+ {
+  "category": "docker",
+  "question": "如何从宿主机获取 Docker 容器的 IP 地址",
+  "answer": "此解决方案仅在容器连接到单个网络时有效。\n```--format```\n 选项的 \n```inspect```\n 命令可以解决这个问题。\n\n\n现代 Docker 客户端语法为：\n\n\n```docker inspect \\\n  -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' container_name_or_id\n```\n\n\n旧版 Docker 客户端语法为：\n\n\n```docker inspect \\\n  --format '{{ .NetworkSettings.IPAddress }}' container_name_or_id\n```\n\n\n这些命令将返回 Docker 容器的 IP 地址。\n\n\n如评论中所述：如果您在 Windows 上，请使用双引号 \n```\"```\n 而不是单引号 \n```'```\n 包围花括号。",
+  "link": "https://stackoverflow.com/questions/17157721/how-to-get-a-docker-containers-ip-address-from-the-host"
+ },
+ {
+  "category": "docker",
+  "question": "我应该使用 Vagrant 还是 Docker 来创建隔离环境？",
+  "answer": "披露：我编写了 Vagrant！但正因为编写了 Vagrant，我大部分时间都生活在 DevOps 世界中，其中包括 Docker 等软件。我与许多使用 Vagrant 的公司合作，其中许多也使用 Docker，我看到了两者如何相互作用。\n\n\n在过多讨论之前，直接回答：\n 在您的特定场景中（您独自工作、在 Linux 上工作、在生产中使用 Docker），您可以只使用 Docker 并简化事情。在许多其他场景中（我进一步讨论），情况并非如此简单。\n\n\n直接将 Vagrant 与 Docker 进行比较是不正确的。在某些场景中，它们确实重叠，而在绝大多数情况下，它们并不重叠。实际上，更恰当的比较是 Vagrant 与类似 Boot2Docker（可运行 Docker 的最小操作系统）的东西。Vagrant 在抽象层面上高于 Docker，因此在大多数情况下，这不是一个公平的比较。\n\n\nVagrant 启动东西来运行应用程序/服务以用于开发目的。这可以在 VirtualBox、VMware 上。它可以是远程的，如 AWS、OpenStack。在其中，如果您使用容器，Vagrant 不关心，并拥抱这一点：例如，它可以自动安装、拉取、构建和运行 Docker 容器。在 Vagrant 1.6 中，Vagrant 具有 \n基于 Docker 的开发环境\n，并支持在 Linux、Mac 和 Windows 上使用与 Vagrant 相同的工作流使用 Docker。Vagrant 在这里并不试图取代 Docker，而是拥抱 Docker 实践。\n\n\nDocker 专门运行 Docker 容器。如果您直接与 Vagrant 比较：它是一个更具体（只能运行 Docker 容器）、更不灵活（需要 Linux 或 Linux 主机）的解决方案。当然，如果您谈论的是生产或 CI，那就无法与 Vagrant 相比！Vagrant 不存在于这些环境中，因此应使用 Docker。\n\n\n如果您的组织仅为其所有项目运行 Docker 容器，并且只有开发人员在 Linux 上运行，那么好吧，Docker 绝对可以为您工作！\n\n\n否则，我看不出尝试仅使用 Docker 有什么好处，因为您会失去 Vagrant 提供的许多东西，这些东西具有真正的业务/生产力益处：\n\n\n\n\nVagrant 可以启动 VirtualBox、VMware、AWS、OpenStack 等机器。无论您需要什么，Vagrant 都可以启动它。如果您使用 Docker，Vagrant 可以在任何这些上安装 Docker，以便您为此目的使用它们。\n\n\n\n\nVagrant 是您所有项目的单一工作流。或者换句话说，它只是人们必须学习的一件事，以运行项目，无论它是否在 Docker 容器中。例如，如果将来出现一个直接与 Docker 竞争的竞争对手，Vagrant 也将能够运行它。\n\n\n\n\nVagrant 适用于 Windows（回溯到 XP）、Mac（回溯到 10.5）和 Linux（回溯到内核 2.6）。在所有三种情况下，工作流都是相同的。如果您使用 Docker，Vagrant 可以启动一个机器（VM 或远程），可以在所有这三种系统上运行 Docker。\n\n\n\n\nVagrant 知道如何配置一些高级或非平凡的事情，如网络和同步文件夹。例如：Vagrant 知道如何将静态 IP 附加到机器或转发端口，并且无论您使用什么系统（VirtualBox、VMware 等），配置都是相同的。对于同步文件夹，Vagrant 提供了多种机制来将本地文件传输到远程机器（VirtualBox 共享文件夹、NFS、rsync、Samba [插件] 等）。如果您使用 Docker，即使是没有 Vagrant 的 VM 中的 Docker，您也必须手动执行此操作，或者他们必须在这种情况下重新发明 Vagrant。\n\n\n\n\nVagrant 1.6 对 \n基于 Docker 的开发环境\n 提供了一流支持。这不会在 Linux 上启动虚拟机，并会在 Mac 和 Windows 上自动启动虚拟机。最终结果是，在所有平台上使用 Docker 都是统一的，而 Vagrant 仍然处理诸如网络、同步文件夹等繁琐细节。\n\n\n\n\n\n\n针对我听到的支持使用 Docker 而不是 Vagrant 的具体反驳：\n\n\n\n\n“它更少移动部件” - 是的，如果您为每个项目独家使用 Docker，它可以是这样。即使如此，它也是牺牲灵活性来换取 Docker 锁定。如果您曾经决定不为任何项目使用 Docker，过去、现在或未来，那么您将有更多移动部件。如果您使用了 Vagrant，您就有那个支持其余的单一移动部件。\n\n\n\n\n“它更快！” - 一旦您拥有可以运行 Linux 容器的主机，Docker 在运行容器方面肯定比任何虚拟机启动更快。但启动虚拟机（或远程机器）是一次性成本。在一天中，大多数 Vagrant 用户实际上从未销毁他们的 VM。对于开发环境来说，这是一种奇怪的优化。在生产中，Docker 真正闪耀的地方，我理解快速启动/关闭容器的需求。\n\n\n\n\n\n\n我希望现在清楚看到，将 Docker 与 Vagrant 比较是非常困难的，我认为是不正确的。对于开发环境，Vagrant 更抽象、更通用。Docker（以及您可以使其表现得像 Vagrant 的各种方式）是 Vagrant 的一个特定用例，忽略了 Vagrant 提供的其他一切。\n\n\n总之：在高度特定的用例中，Docker 肯定是 Vagrant 的可能替代品。在大多数用例中，它不是。Vagrant 不会阻碍您使用 Docker；它实际上尽其所能使这种体验更顺畅。如果您发现这不是真的，我很乐意接受改进建议，因为 Vagrant 的目标是与任何系统同样良好地工作。\n\n\n希望这能澄清问题！",
+  "link": "https://stackoverflow.com/questions/16647069/should-i-use-vagrant-or-docker-for-creating-an-isolated-environment"
+ },
+ {
+  "category": "docker",
+  "question": "如何强制 Docker 对镜像进行干净构建",
+  "answer": "有一个 \n```--no-cache```\n 选项：\n\n\n```docker build --no-cache -t u12_core -f u12_core .\n```\n\n\n在旧版本的 Docker 中，你需要传递 \n```--no-cache=true```\n，但现在不再需要这样做了。",
+  "link": "https://stackoverflow.com/questions/35594987/how-to-force-docker-for-a-clean-build-of-an-image"
+ },
+ {
+  "category": "docker",
+  "question": "如何将环境变量传递给 Docker 容器？",
+  "answer": "你可以使用 \n```-e```\n（别名 \n```--env```\n）标志将环境变量传递给容器。\n\n\n```docker run -e xx=yy```\n\n\n一个启动脚本中的示例：\n\n\n```sudo docker run -d -t -i -e REDIS_NAMESPACE='staging' \\ \n-e POSTGRES_ENV_POSTGRES_PASSWORD='foo' \\\n-e POSTGRES_ENV_POSTGRES_USER='bar' \\\n-e POSTGRES_ENV_DB_NAME='mysite_staging' \\\n-e POSTGRES_PORT_5432_TCP_ADDR='docker-db-1.hidden.us-east-1.rds.amazonaws.com' \\\n-e SITE_URL='staging.mysite.com' \\\n-p 80:80 \\\n--link redis:redis \\  \n--name container_name dockerhub_id/image_name\n```\n\n\n或者，如果你不想让值出现在命令行上（因为 \n```ps```\n 等命令会显示它），\n```-e```\n 可以在只给出变量名而不带 \n```=```\n 时从当前环境中获取值：\n\n\n```sudo PASSWORD='foo' docker run  [...] -e PASSWORD [...]\n```\n\n\n如果你有很多环境变量，尤其是当它们需要保密时，你可以\n使用 env-file：\n\n\n```$ docker run --env-file ./env.list ubuntu bash\n```\n\n\n\n\n--env-file 标志接受一个文件名作为参数，并期望每一行的格式为 VAR=VAL，模拟传递给 --env 的参数。注释行只需以 # 开头。",
+  "link": "https://stackoverflow.com/questions/30494050/how-do-i-pass-environment-variables-to-docker-containers"
+ },
+ {
+  "category": "docker",
+  "question": "如何删除旧的 Docker 容器",
+  "answer": "从 \nDocker 1.13.x\n 开始，你可以使用 \nDocker container prune\n：\n\n\n```docker container prune\n```\n\n\n这将删除所有已停止的容器，并且在所有平台上都应该以相同的方式工作。\n\n\n还有一个 \nDocker system prune\n：\n\n\n```docker system prune\n```\n\n\n它可以在一个命令中清理所有未使用的容器、网络、镜像（包括悬空和未被引用的镜像），以及可选的卷。\n\n\n\n\n对于较旧的 Docker 版本，你可以将 Docker 命令与其他 Unix 命令串联起来，以满足你的需求。以下是一个示例，展示如何清理几周前的旧容器：\n\n\n```$ docker ps --filter \"status=exited\" | grep 'weeks ago' | awk '{print $1}' | xargs --no-run-if-empty docker rm\n```\n\n\n这个示例来自 \nhttps://twitter.com/jpetazzo/status/347431091415703552\n，特此致谢。",
+  "link": "https://stackoverflow.com/questions/17236796/how-to-remove-old-docker-containers"
+ },
+ {
+  "category": "docker",
+  "question": "如何修复 Docker：权限被拒绝",
+  "answer": "如果你希望以非 root 用户身份运行 Docker，那么你需要将你的用户添加到 \n```docker```\n 组中。\n\n\n\n\n如果 \n```docker```\n 组不存在，则创建它：\n\n\n\n\n```$ sudo groupadd docker\n```\n\n\n\n\n将你的用户添加到 \n```docker```\n 组中：\n\n\n\n\n```$ sudo usermod -aG docker $USER\n```\n\n\n\n\n登录到新的 \n```docker```\n 组（以避免必须注销并重新登录；但如果还不够，请尝试重启）：\n\n\n\n\n```$ newgrp docker\n```\n\n\n\n\n检查 Docker 是否可以在不使用 root 的情况下运行：\n\n\n\n\n```$ docker run hello-world\n```\n\n\n如果仍然遇到错误，请重启：\n\n\n```$ reboot\n```\n\n\n\n\n来自官方 Docker 文档“\n以非 root 用户身份管理 Docker\n”：\n\n\n⚠️ \n警告\n\n\n\n\n```docker```\n 组会向用户授予 root 级别的权限。有关这如何影响系统安全性的详细信息，请参阅 \nDocker Daemon Attack Surface\n。",
+  "link": "https://stackoverflow.com/questions/48957195/how-to-fix-docker-permission-denied"
+ },
+ {
+  "category": "docker",
+  "question": "Docker 镜像和容器有什么区别？",
+  "answer": "镜像的实例称为容器。你有一个镜像，它是一组层的集合。如果你启动这个镜像，你就有了这个镜像的一个运行中的容器。你可以有多个运行同一镜像的容器。\n\n\n你可以使用 \n```docker images```\n 查看所有镜像，而使用 \n```docker ps```\n 查看正在运行的容器（使用 \n```docker ps -a```\n 查看所有容器）。\n\n\n因此，镜像的运行实例就是容器。",
+  "link": "https://stackoverflow.com/questions/23735149/what-is-the-difference-between-a-docker-image-and-a-container"
+ },
+ {
+  "category": "docker",
+  "question": "如何删除旧的、未使用的 Docker 镜像？",
+  "answer": "（见下方原始答案）\n\n\n\n\n2016 年 9 月更新\n：Docker 1.13：\nPR 26108\n 和 \ncommit 86de7c0\n 引入了一些新命令，帮助可视化 docker daemon 数据在磁盘上占用的空间，并方便清理“不需要的”多余数据。\n\n\n```docker system prune```\n 将删除所有悬空数据（容器、网络和镜像）。你可以使用 \n```--volumes```\n 选项删除所有未使用的卷，并使用 \n```-a```\n 选项删除所有未使用的镜像（不仅仅是悬空镜像）。\n\n\n你还有：\n\n\n\n\n```docker container prune```\n\n\n```docker image prune```\n\n\n```docker network prune```\n\n\n```docker volume prune```\n\n\n\n\n对于\n未使用\n的镜像，使用 \n```docker image prune -a```\n（用于删除悬空\n和\n未使用的镜像，其中“悬空”意味着镜像没有标签）。\n\n警告：“\n未使用\n”意味着“未被任何容器引用的镜像”：在使用 \n```-a```\n 之前要小心。\n\n\n正如 \nA L\n 的 \n回答\n 所示，\n```docker system prune --all```\n 将删除所有\n未使用\n的镜像，而不仅仅是悬空镜像……这可能有点过度。\n\n\n将 \n```docker xxx prune```\n 与 \n```--filter```\n 选项结合使用\n 是限制清理范围的好方法（\n最低需要 docker SDK API 1.28，即 docker 17.04+\n）\n\n\n\n\n当前支持的过滤器有：\n\n\n\n\n\n\n```until (<timestamp>)```\n - 仅删除在给定时间戳之前创建的容器、镜像和网络\n\n\n```label```\n（\n```label=<key>```\n、\n```label=<key>=<value>```\n、\n```label!=<key>```\n 或 \n```label!=<key>=<value>```\n）- 仅删除具有（或\n不具有\n，在使用 \n```label!=...```\n 的情况下）指定标签的容器、镜像、网络和卷。\n\n\n\n\n参见“\nPrune images\n”中的示例。\n\n\n\n\n警告：这些 \n```docker xxx prune```\n 命令没有“预览”或“\n```--dry-run```\n”选项。\n\n\n自 2017 年以来，\n```moby/moby```\n issue 30623\n 就请求了此功能，但似乎\n实现起来很棘手\n（2022 年 8 月）\n\n\n\n\n由于各种原因，要更直观地了解将被清理的内容会相当复杂；\n\n\n\n\n竞态条件\n（可以通过记录限制来解决）；\n\n在使用“dry run”时，容器/镜像/卷/网络可能未被使用，但在实际执行 prune 的那一刻可能正在使用（反之亦然），因此 dry run 始终是“将被清理内容”的“近似值”。\n\n\n更困难的部分在于\n对象（容器、镜像、网络等）之间如何相互依赖\n。\n\n例如，如果镜像不再有引用（没有更多标签，没有更多容器使用它），则可以删除该镜像；这就是 docker system prune 按特定顺序删除对象的原因（首先删除所有未使用的容器，然后删除未使用的镜像）。\n\n为了为“dry-run”复制相同的流程，需要临时构建所有对象的表示以及它们基于此的引用位置（基本上；复制所有引用计数器，然后从该“影子”表示中移除引用）。\n\n\n最后；随着\n集成 \n```containerd```\n snapshotter（镜像和层存储）\n 的工作的进行，情况可能会发生更多变化；\n\n例如，镜像现在可以是多架构的，并且（有待讨论），“pruning”可以从镜像中删除未使用的变体（架构）以清理空间，这为计算“可以删除什么”带来了另一个维度。\n\n\n\n\n\n\n\n\n原始答案（2016 年 9 月）\n\n\n我通常这样做：\n\n\n```docker rmi $(docker images --filter \"dangling=true\" -q --no-trunc)\n```\n\n\n我有一个[用于删除那些\n悬空镜像\n的别名：\n```drmi```\n]\n13\n\n\n\n\n```dangling=true```\n 过滤器查找未使用的镜像\n\n\n\n\n这样，任何不再被带标签镜像引用的中间镜像都会被删除。\n\n\n我\n首先\n对\n已退出的进程（容器）\n做同样的事情\n\n\n```alias drmae='docker rm $(docker ps -qa --no-trunc --filter \"status=exited\")'\n```\n\n\n正如 \nharidsv\n 在评论中\n指出的\n：\n\n\n\n\n从技术上讲，\n你应该先清理容器，然后再清理镜像，因为这样可以捕获更多悬空镜像并减少错误\n。\n\n\n\n\n\n\nJess Frazelle (jfrazelle)\n 有\nbashrc 函数\n：\n\n\n```dcleanup(){\n    docker rm -v $(docker ps --filter status=exited -q 2>/dev/null) 2>/dev/null\n    docker rmi $(docker images --filter dangling=true -q 2>/dev/null) 2>/dev/null\n}\n```\n\n\n\n\n要删除旧镜像，而不仅仅是“未引用的悬空”镜像，你可以考虑 \n```docker-gc```\n：\n\n\n\n\n\n\n一个简单的 Docker 容器和镜像垃圾回收脚本。\n\n\n\n\n超过一小时前退出的容器会被删除。\n\n\n之后不属于任何剩余容器的镜像会被删除。",
+  "link": "https://stackoverflow.com/questions/32723111/how-can-i-remove-old-and-unused-docker-images"
+ },
+ {
+  "category": "docker",
+  "question": "如何删除所有本地 Docker 镜像？",
+  "answer": "Unix\n\n\n要删除所有容器（包括其卷），请使用：\n\n\n```docker rm -vf $(docker ps -aq)\n```\n\n\n要删除所有镜像，请使用：\n\n\n```docker rmi -f $(docker images -aq)\n```\n\n\n请记住，在删除所有镜像之前，应先删除所有容器，因为这些容器是从这些镜像创建的。\n\n\nWindows - Powershell\n\n\n```docker images -a -q | % { docker image rm $_ -f }\n```\n\n\nWindows - cmd.exe\n\n\n```for /F %i in ('docker images -a -q') do docker rmi -f %i\n```",
+  "link": "https://stackoverflow.com/questions/44785585/how-can-i-delete-all-local-docker-images"
+ },
+ {
+  "category": "docker",
+  "question": "探索 Docker 容器的文件系统",
+  "answer": "这里介绍几种不同的方法……\n\n\nA) 使用 docker exec\n（最简单）\n\n\nDocker 1.3 或更高版本支持命令\n```exec```\n，其行为类似于\n```nsenter```\n。该命令可以在已运行的容器中运行新进程（容器必须已有 PID 1 进程在运行）。你可以运行\n```/bin/bash```\n来探索容器状态：\n\n\n```docker exec -t -i mycontainer /bin/bash\n```\n\n\n参见\nDocker 命令行文档\n\n\nB) 使用快照\n\n\n你可以通过这种方式评估容器文件系统：\n\n\n```# 找到正在运行的容器的 ID：\ndocker ps\n\n# 从容器文件系统创建镜像（快照）\ndocker commit 12345678904b5 mysnapshot\n\n# 使用 bash（例如）探索此文件系统\ndocker run -t -i mysnapshot /bin/bash\n```\n\n\n这样，你可以在精确的时间点评估正在运行的容器的文件系统。容器仍在运行，不包含未来的更改。\n\n\n之后你可以使用以下命令删除快照（正在运行的容器的文件系统不受影响！）：\n\n\n```docker rmi mysnapshot\n```\n\n\nC) 使用 ssh\n\n\n如果你需要持续访问，可以在容器中安装 sshd 并运行 sshd 守护进程：\n\n\n```docker run -d -p 22 mysnapshot /usr/sbin/sshd -D\n \n# 你需要找出要连接的端口：\ndocker ps\n```\n\n\n这样，你可以通过 ssh 运行你的应用（连接并执行你想要的操作）。\n\n\nD) 使用 nsenter\n\n\n使用\n```nsenter```\n，参见\n为什么你不需要在 Docker 容器中运行 SSHd\n\n\n\n\n简而言之：使用 nsenter，你可以进入现有容器的 shell，即使该容器没有运行 SSH 或任何特殊用途的守护进程。",
+  "link": "https://stackoverflow.com/questions/20813486/exploring-docker-containers-file-system"
+ },
+ {
+  "category": "docker",
+  "question": "在 Docker 中如何处理持久化存储（例如数据库）",
+  "answer": "Docker 1.9.0 及以上版本\n\n\n使用 \nvolume API\n\n\n```docker volume create --name hello\ndocker run -d -v hello:/container/path/for/volume container_image my_command\n```\n\n\n这意味着必须放弃 data-only container 模式，转而使用新的 volumes。\n\n\n实际上，volume API 只是实现 data-container 模式的一种更好的方式。\n\n\n如果你使用 \n```-v volume_name:/container/fs/path```\n 创建一个容器，Docker 会自动为你创建一个命名卷，该卷可以：\n\n\n\n\n通过 \n```docker volume ls```\n 列出\n\n\n通过 \n```docker volume inspect volume_name```\n 识别\n\n\n作为普通目录进行备份\n\n\n像以前一样通过 \n```--volumes-from```\n 连接进行备份\n\n\n\n\n新的 volume API 增加了一个有用的命令，可以让你识别悬空卷：\n\n\n```docker volume ls -f dangling=true\n```\n\n\n然后通过名称删除它：\n\n\n```docker volume rm <volume name>\n```\n\n\n正如 @mpugach 在评论中指出的，你可以用一行漂亮的命令清除所有悬空卷：\n\n\n```docker volume rm $(docker volume ls -f dangling=true -q)\n# Or using 1.13.x\ndocker volume prune\n```\n\n\nDocker 1.8.x 及以下版本\n\n\n对于生产环境来说，似乎最有效的方法是使用 \ndata only container\n。\n\n\ndata only container 运行在一个精简镜像上，实际上除了暴露一个数据卷之外什么都不做。\n\n\n然后你可以运行任何其他容器来访问数据容器的卷：\n\n\n```docker run --volumes-from data-container some-other-container command-to-execute\n```\n\n\n\n\n这里\n 你可以很好地了解如何安排不同的容器。\n\n\n这里\n 有关于卷如何工作的很好的见解。\n\n\n\n\n在 \n这篇博客文章\n 中，对所谓的 \ncontainer as volume pattern\n 有很好的描述，阐明了拥有 \ndata only containers\n 的要点。\n\n\nDocker 文档现在有了 \ncontainer as volume/s\n 模式的权威描述。\n\n\n以下是 Docker 1.8.x 及以下版本的备份/恢复流程。\n\n\n备份：\n\n\n```sudo docker run --rm --volumes-from DATA -v $(pwd):/backup busybox tar cvf /backup/backup.tar /data\n```\n\n\n\n\n--rm：容器退出时删除容器\n\n\n--volumes-from DATA：附加到 DATA 容器共享的卷\n\n\n-v $(pwd):/backup：将当前目录绑定挂载到容器中；用于写入 tar 文件\n\n\nbusybox：一个小型精简镜像——适合快速维护\n\n\ntar cvf /backup/backup.tar /data：创建 /data 目录中所有文件的未压缩 tar 文件\n\n\n\n\n恢复：\n\n\n```# Create a new data container\n$ sudo docker run -v /data -name DATA2 busybox true\n# untar the backup files into the new container᾿s data volume\n$ sudo docker run --rm --volumes-from DATA2 -v $(pwd):/backup busybox tar xvf /backup/backup.tar\ndata/\ndata/sven.txt\n# Compare to the original container\n$ sudo docker run --rm --volumes-from DATA -v `pwd`:/backup busybox ls /data\nsven.txt\n```\n\n\n这里有一篇来自优秀的 Brian Goff 的 \n文章\n，解释了为什么对容器和数据容器使用相同的镜像是有好处的。",
+  "link": "https://stackoverflow.com/questions/18496940/how-to-deal-with-persistent-storage-e-g-databases-in-docker"
+ },
+ {
+  "category": "docker",
+  "question": "Docker 镜像存储在宿主机的什么位置？",
+  "answer": "\n```/var/lib/docker```\n 目录的内容因 \nDocker 使用的存储驱动\n 而异。\n\n\n默认情况下是 \n```aufs```\n，但根据内核支持情况，也可能回退到 \n```overlay```\n、\n```overlay2```\n、\n```btrfs```\n、\n```devicemapper```\n 或 \n```zfs```\n。在大多数地方会是 \n```aufs```\n，但 \nRedHat 选择了 \n```devicemapper```\n。\n\n\n你可以通过 \nDocker daemon\n 的 \n```-s```\n 或 \n```--storage-driver=```\n 选项手动设置存储驱动。\n\n\n\n\n```/var/lib/docker/{driver-name}```\n 将包含镜像内容的驱动特定存储。\n\n\n```/var/lib/docker/graph/<id>```\n 现在只包含镜像的元数据，位于 \n```json```\n 和 \n```layersize```\n 文件中。\n\n\n\n\n在 \n```aufs```\n 的情况下：\n\n\n\n\n```/var/lib/docker/aufs/diff/<id>```\n 包含镜像的文件内容。\n\n\n```/var/lib/docker/repositories-aufs```\n 是一个包含本地镜像信息的 JSON 文件。可以使用 \n```docker images```\n 命令查看。\n\n\n\n\n在 \n```devicemapper```\n 的情况下：\n\n\n\n\n```/var/lib/docker/devicemapper/devicemapper/data```\n 存储镜像\n\n\n```/var/lib/docker/devicemapper/devicemapper/metadata```\n 存储元数据\n\n\n注意这些文件是精简配置的“稀疏”文件，所以并不像看起来那么大。",
+  "link": "https://stackoverflow.com/questions/19234831/where-are-docker-images-stored-on-the-host-machine"
+ },
+ {
+  "category": "docker",
+  "question": "docker-compose 中 ports 和 expose 有什么区别？",
+  "answer": "根据 \ndocker-compose 参考文档\n，\n\n\nPorts\n 的定义是：\n\n\n\n\n\n暴露端口\n。可以同时指定主机端口和容器端口（HOST:CONTAINER），也可以只指定容器端口（此时会随机选择一个主机端口）。\n\n\n\n\n\n\ndocker-compose.yml 中提到的 ports 会在 docker-compose 启动的不同服务之间共享。\n\n\n端口会暴露到主机上，映射到随机端口或指定端口。\n\n\n\n\n我的 \n```docker-compose.yml```\n 长这样：\n\n\n```mysql:\n  image: mysql:5.7\n  ports:\n    - \"3306\"\n```\n\n\n如果我执行 \n```docker-compose ps```\n，结果会是这样：\n\n\n```  Name                     Command               State            Ports\n-------------------------------------------------------------------------------------\n  mysql_1       docker-entrypoint.sh mysqld      Up      0.0.0.0:32769->3306/tcp\n```\n\n\nExpose\n 的定义是：\n\n\n\n\n\n暴露端口但不发布到主机上——这些端口只能被关联的服务访问。只能指定内部端口。\n\n\n\n\n\n端口不会暴露到主机，只暴露给其他服务。\n\n\n```mysql:\n  image: mysql:5.7\n  expose:\n    - \"3306\"\n```\n\n\n如果我执行 \n```docker-compose ps```\n，结果会是这样：\n\n\n```  Name                  Command             State    Ports\n---------------------------------------------------------------\n mysql_1      docker-entrypoint.sh mysqld   Up      3306/tcp\n```\n\n\n补充\n\n\n在较新版本的 Dockerfile 中，\n```EXPOSE```\n \n通常\n 已经不再有任何实际操作上的影响，它只是起说明作用。（\n另见\n）",
+  "link": "https://stackoverflow.com/questions/40801772/what-is-the-difference-between-ports-and-expose-in-docker-compose"
+ },
+ {
+  "category": "docker",
+  "question": "如何使用 Docker Compose 执行多条命令？",
+  "answer": "搞定了，用 \n```bash -c```\n 就行。\n\n\n示例：\n\n\n```command: bash -c \"python manage.py migrate && python manage.py runserver 0.0.0.0:8000\"\n```\n\n\n同样的示例，多行写法：\n\n\n```command: >\n    bash -c \"python manage.py migrate\n    && python manage.py runserver 0.0.0.0:8000\"\n```\n\n\n或者：\n\n\n```command: bash -c \"\n    python manage.py migrate\n    && python manage.py runserver 0.0.0.0:8000\n  \"\n```",
+  "link": "https://stackoverflow.com/questions/30063907/how-to-execute-multiple-commands-with-docker-compose"
+ },
+ {
+  "category": "docker",
+  "question": "错误“输入设备不是 TTY”",
+  "answer": "从你的命令行中移除 \n```-it```\n，使其变为非交互式并移除 TTY。如果你不需要这些，例如在 Jenkins 或 cron 脚本中运行命令，你应该这样做。\n\n\n或者，如果你有来自非 TTY 的输入通过管道传递给 docker 命令，你可以将其改为 \n```-i```\n。如果你的命令行中有类似 \n```xyz | docker ...```\n 或 \n```docker ... <input```\n 的内容，请这样做。\n\n\n或者，如果你想要 TTY 支持但输入设备上不可用，你可以将其改为 \n```-t```\n。对于检查 TTY 以启用日志输出颜色格式的应用程序，或者当你稍后使用适当的终端附加到容器时，请这样做。\n\n\n或者，如果你需要一个交互式终端，并且不是在 Linux 或 MacOS 上的终端中运行，请使用不同的命令行界面。据报道，Windows 上的 PowerShell 包含此支持。\n\n\n\n\n什么是 TTY？它是一种终端接口，支持转义序列、移动光标等，源自过去连接到大型机的哑终端时代。如今，它由 Linux 命令终端和 ssh 接口提供。有关更多详细信息，请参阅维基百科文章。\n\n\n要查看在有和没有 TTY 的情况下运行容器的区别，请运行一个没有 TTY 的容器：\n```docker run --rm -i ubuntu bash```\n。从该容器内部，使用 \n```apt-get update; apt-get install vim```\n 安装 vim。注意缺少提示符。在针对文件运行 vim 时，尝试在文件内移动光标。",
+  "link": "https://stackoverflow.com/questions/43099116/error-the-input-device-is-not-a-tty"
+ },
+ {
+  "category": "docker",
+  "question": "Docker 如何更改仓库名称或重命名镜像？",
+  "answer": "```docker image tag server:latest myname/server:latest\n```\n\n\n或\n\n\n```docker image tag d583c3ac45fd myname/server:latest\n```\n\n\n标签只是完整镜像名称（\n```d583c3ac45fd...```\n）的人类可读别名。\n\n\n因此，你可以为同一个镜像关联任意多个标签。如果你不喜欢旧名称，可以在重新打标签后将其移除：\n\n\n```docker rmi server\n```\n\n\n这只会移除 \n```别名/标签```\n。由于 \n```d583c3ac45fd```\n 还有其他名称，实际镜像不会被删除。",
+  "link": "https://stackoverflow.com/questions/25211198/docker-how-to-change-repository-name-or-rename-image"
+ },
+ {
+  "category": "docker",
+  "question": "如何查看 Docker 镜像的内容",
+  "answer": "如果镜像中包含 shell，你可以使用该镜像运行一个交互式 shell 容器，并浏览镜像中的任何内容。如果 \n```sh```\n 不可用，busybox 的 \n```ash```\n shell 可能可用。\n\n\n例如：\n\n\n```docker run -it image_name sh\n```\n\n\n或者对于带有 \n```entrypoint```\n 的镜像，使用以下命令：\n\n\n```docker run -it --entrypoint sh image_name\n```\n\n\n或者，如果你想查看镜像是如何构建的，即其 \n```Dockerfile```\n 中的步骤，你可以：\n\n\n```docker image history --no-trunc image_name > image_history\n```\n\n\n这些步骤将被记录到 \n```image_history```\n 文件中。",
+  "link": "https://stackoverflow.com/questions/44769315/how-to-see-docker-image-contents"
+ },
+ {
+  "category": "docker",
+  "question": "无法连接到位于 unix:/var/run/docker.sock 的 Docker 守护进程。Docker 守护进程是否正在运行？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/44678725/cannot-connect-to-the-docker-daemon-at-unix-var-run-docker-sock-is-the-docker"
+ },
+ {
+  "category": "docker",
+  "question": "如何在 Docker 中列出容器",
+  "answer": "要仅显示\n正在运行的容器\n，请运行：\n\n\n```docker ps\n```\n\n\n要显示\n所有容器\n，请运行：\n\n\n```docker ps -a\n```\n\n\n要显示\n最新创建的容器\n（包括所有状态），请运行：\n\n\n```docker ps -l\n```\n\n\n要显示\n最近创建的 n 个容器\n（包括所有状态），请运行：\n\n\n```docker ps -n=-1\n```\n\n\n要显示\n总文件大小\n，请运行：\n\n\n```docker ps -s\n```\n\n\n以上内容来自 \ndocker.com\n。\n\n\n在新版本的 Docker 中，命令已更新，并添加了一些管理命令：\n\n\n```docker container ls\n```\n\n\n它用于列出所有正在运行的容器，包括所有状态。\n\n\n```docker container ls -a\n```\n\n\n然后，如果你想清理它们全部，\n\n\n```docker rm $(docker ps -aq)\n```\n\n\n它用于列出所有创建的容器，无论其状态如何。\n\n\n要停止所有 Docker 容器（强制）\n\n\n```docker rm -f $(docker ps -a -q)  \n```\n\n\n这里 container 是管理命令。",
+  "link": "https://stackoverflow.com/questions/16840409/how-to-list-containers-in-docker"
+ },
+ {
+  "category": "docker",
+  "question": "如何在 Docker 容器中挂载主机目录",
+  "answer": "有几种方法可以做到这一点。最简单的方法是使用 dockerfile 的 \n```ADD```\n 命令，如下所示：\n\n\n```ADD . /path/inside/docker/container\n```\n\n\n然而，在构建 dockerfile 后对主机上此目录所做的任何更改都不会显示在容器中。这是因为在构建容器时，docker 会将目录压缩成一个 \n```.tar```\n 文件，并将该 \ncontext\n 永久上传到容器中。\n\n\n第二种方法是您尝试的方法，即挂载卷。由于要尽可能保持可移植性，您无法在 dockerfile 中将主机目录映射到 docker 容器目录，因为主机目录可能会根据您运行所在的机器而变化。要将主机目录映射到 docker 容器目录，您需要在 \n```docker run```\n 时使用 \n```-v```\n 标志，例如：\n\n\n```# Run a container using the `alpine` image, mount the `/tmp`\n# directory from your host into the `/container/directory`\n# directory in your container, and run the `ls` command to\n# show the contents of that directory.\ndocker run \\\n    -v /tmp:/container/directory \\\n    alpine \\\n    ls /container/directory\n```",
+  "link": "https://stackoverflow.com/questions/23439126/how-to-mount-a-host-directory-in-a-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "如何包含 Docker 构建上下文之外的文件？",
+  "answer": "解决这个问题的最佳方法是使用 -f 参数独立于构建上下文指定 Dockerfile。\n\n\n例如，以下命令将使 ADD 命令能够访问当前目录中的任何文件。\n\n\n```docker build -f docker-files/Dockerfile .\n```\n\n\n更新：Docker 现在允许将 Dockerfile 放在构建上下文之外（在 18.03.0-ce 中修复）。因此，你也可以这样做：\n\n\n```docker build -f ../Dockerfile .\n```",
+  "link": "https://stackoverflow.com/questions/27068596/how-to-include-files-outside-of-dockers-build-context"
+ },
+ {
+  "category": "docker",
+  "question": "如何删除 Docker 镜像？",
+  "answer": "试试 \n```docker rmi node```\n。这应该可行。\n\n\n查看所有已创建的容器只需运行 \n```docker ps -a```\n。\n\n\n要删除所有现有容器（不是镜像！），请运行 \n```docker rm $(docker ps -aq)```",
+  "link": "https://stackoverflow.com/questions/17665283/how-does-one-remove-a-docker-image"
+ },
+ {
+  "category": "docker",
+  "question": "如何在进入 Docker 容器后编辑文件？",
+  "answer": "如评论所述，没有设置默认编辑器——这很奇怪——\n```$EDITOR```\n环境变量为空。你可以通过以下命令登录容器：\n\n\n```docker exec -it <container> bash\n```\n\n\n然后运行：\n\n\n```apt-get update\napt-get install vim\n```\n\n\n或者使用以下 Dockerfile：\n\n\n```FROM  confluent/postgres-bw:0.1\n\nRUN [\"apt-get\", \"update\"]\nRUN [\"apt-get\", \"install\", \"-y\", \"vim\"]\n```\n\n\nDocker 镜像被精简到最低限度——因此随附的容器中没有安装编辑器。这就是需要手动安装的原因。\n\n\n编辑\n\n\n我也鼓励你阅读我关于这个主题的\n文章\n。",
+  "link": "https://stackoverflow.com/questions/30853247/how-do-i-edit-a-file-after-i-shell-to-a-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "docker push 错误：denied: requested access to the resource is denied",
+  "answer": "感谢其他人（\nDean Wu\n、\nses\n和\nHito\n）提供的回答，在推送之前，记得从命令行\n登出\n，然后\n登录\n到你的 Docker Hub 账户：\n\n\n```docker login\n```\n\n\n根据\nDocker 文档\n：\n\n\n\n\n你需要包含命名空间，以便 Docker Hub 将其与你的账户关联。命名空间与你的 Docker Hub 账户名相同。你需要将镜像重命名为 YOUR_DOCKERHUB_NAME/docker-whale。\n\n\n\n\n因此，这意味着在推送之前你必须\n标记\n你的镜像：\n\n\n```docker tag firstimage YOUR_DOCKERHUB_NAME/firstimage\n```\n\n\n然后你应该能够推送它。\n\n\n```docker push YOUR_DOCKERHUB_NAME/firstimage\n```",
+  "link": "https://stackoverflow.com/questions/41984399/docker-push-error-denied-requested-access-to-the-resource-is-denied"
+ },
+ {
+  "category": "docker",
+  "question": "将 Docker 镜像作为容器运行",
+  "answer": "具体运行方式取决于你是否为镜像指定了标签/名称。\n\n\n```$ docker images\nREPOSITORY          TAG                 ID                  CREATED             SIZE\nubuntu              12.04               8dbd9e392a96        4 months ago        131.5 MB (virtual 131.5 MB)\n```\n\n\n使用名称（假设为 \nUbuntu\n）：\n\n\n```$ docker run -i -t ubuntu:12.04 /bin/bash\n```\n\n\n不使用名称，仅使用 ID：\n\n\n```$ docker run -i -t 8dbd9e392a96 /bin/bash\n```\n\n\n更多信息请参阅 \nDocker run 参考文档\n。",
+  "link": "https://stackoverflow.com/questions/18497688/run-a-docker-image-as-a-container"
+ },
+ {
+  "category": "docker",
+  "question": "Docker - Ubuntu - bash: ping: 命令未找到",
+  "answer": "Docker 镜像非常精简，但你可以通过以下方式在官方 ubuntu docker 镜像中安装 \n```ping```\n：\n\n\n```apt-get update -y\napt-get install -y iputils-ping\n```\n\n\n很可能你不需要在镜像中使用 \n```ping```\n，只是出于测试目的。上面的示例可以帮助你。\n\n\n但如果你需要在镜像中存在 \n```ping```\n，你可以创建一个 \n```Dockerfile```\n 或者将运行上述命令的容器 \n```commit```\n 为新镜像。\n\n\n提交：\n\n\n```docker commit -m \"Installed iputils-ping\" --author \"Your Name <name@domain.com>\" ContainerNameOrId yourrepository/imagename:tag\n```\n\n\nDockerfile：\n\n\n```FROM ubuntu\nRUN apt-get update && apt-get install -y iputils-ping\nCMD bash\n```\n\n\n请注意，创建 docker 镜像有一些最佳实践，比如之后清理 apt 缓存文件等。",
+  "link": "https://stackoverflow.com/questions/39901311/docker-ubuntu-bash-ping-command-not-found"
+ },
+ {
+  "category": "docker",
+  "question": "如何为已有的 Docker 容器分配端口映射？",
+  "answer": "我也对这个问题感兴趣。\n\n\n正如 @Thasmo 提到的，端口转发只能通过 ```docker run```（以及 ```docker create```）命令来指定。\n\n其他命令，```docker start``` 没有 ```-p``` 选项，而 ```docker port``` 只显示当前的转发规则。\n\n\n要添加端口转发，我总是按照以下步骤操作：\n\n\n\n\n停止正在运行的容器\n\n\n```docker stop test01\n```\n\n\n提交容器\n\n\n```docker commit test01 test02\n```\n\n\n注意：上面的 ```test02``` 是我从 ```test01``` 容器构建的新镜像。\n\n\n从提交的镜像重新运行\n\n\n```docker run -p 8080:8080 -td test02\n```\n\n\n\n\n其中第一个 8080 是本地端口，第二个 8080 是容器端口。",
+  "link": "https://stackoverflow.com/questions/19335444/how-do-i-assign-a-port-mapping-to-an-existing-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "Docker 容器的运行时性能开销是多少？",
+  "answer": "2014 年 IBM 的一篇优秀研究论文《An Updated Performance Comparison of Virtual Machines and Linux Containers》（作者 Felter 等人，镜像）提供了裸机、KVM 和 Docker 容器之间的比较。总体结论是：Docker 的性能几乎与原生性能相同，并且在每个类别中都优于 KVM。\n\n\n唯一的例外是 Docker 的 NAT——如果你使用端口映射（例如 ```docker run -p 8080:8080```），那么可以预期会有轻微的延迟影响，如下所示。不过，现在在启动 Docker 容器时可以使用主机网络栈（例如 ```docker run --net=host```），其性能将与 Native 列完全相同（如下方 Redis 延迟结果所示）。\n\n\n\n\n他们还对几个特定服务（如 Redis）进行了延迟测试。你可以看到，在超过 20 个客户端线程时，最高的延迟开销依次是 Docker NAT、KVM，然后是 Docker host/native 大致持平。\n\n\n\n\n由于这是一篇非常有用的论文，这里还有一些其他数据。请下载全文以获取完整内容。\n\n\n看一下磁盘 I/O：\n\n\n\n\n现在看一下 CPU 开销：\n\n\n\n\n现在是一些内存方面的示例（详情请阅读论文，内存问题可能格外棘手）：",
+  "link": "https://stackoverflow.com/questions/21889053/what-is-the-runtime-performance-cost-of-a-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "如何从 Docker 容器访问主机端口",
+  "answer": "适用于所有平台\n\n\nDocker v 20.10 及以上版本（自 2020 年 12 月 14 日起）\n\n\n使用内部 IP 地址或连接到特殊 DNS 名称 \n```host.docker.internal```\n，它将解析为主机使用的内部 IP 地址。\n\n\n这仅用于开发目的，在 Docker Desktop 之外的生产环境中不起作用。\n\n\nLinux 注意事项\n\n\n要在 Linux 上的 \nDocker\n 中启用此功能，请将 \n```--add-host=host.docker.internal:host-gateway```\n 添加到你的 \n```docker```\n 命令中以启用该功能。\n\n\n要在 Linux 上的 \nDocker Compose\n 中启用此功能，请将以下行添加到容器定义中：\n\n\n```extra_hosts:\n    - \"host.docker.internal:host-gateway\"\n```\n\n\n根据一些用户的反馈，该特殊 DNS 名称仅在 Docker 默认的 \n```bridge```\n 网络中有效，在自定义网络中无效。\n\n\n\n\n适用于较旧版本的 macOS 和 Windows 版 Docker\n\n\nDocker v 18.03 及以上版本（自 2018 年 3 月 21 日起）\n\n\n使用内部 IP 地址或连接到特殊 DNS 名称 \n```host.docker.internal```\n，它将解析为主机使用的内部 IP 地址。\n\n\nLinux 支持待定 \nhttps://github.com/docker/for-linux/issues/264\n\n\n\n\n适用于较旧版本的 macOS 版 Docker\n\n\nDocker for Mac v 17.12 至 v 18.02\n\n\n与上述相同，但改用 \n```docker.for.mac.host.internal```\n。\n\n\n\n\nDocker for Mac v 17.06 至 v 17.11\n\n\n与上述相同，但改用 \n```docker.for.mac.localhost```\n。\n\n\n\n\nDocker for Mac 17.05 及以下版本\n\n\n要从 Docker 容器访问主机，你必须为网络接口附加一个 IP 别名。你可以绑定任意 IP，只需确保没有将其用于其他用途。\n\n\n```sudo ifconfig lo0 alias 123.123.123.123/24```\n\n\n然后确保你的服务器正在监听上述 IP 或 \n```0.0.0.0```\n。如果它监听的是 localhost \n```127.0.0.1```\n，则不会接受该连接。\n\n\n然后只需将你的 Docker 容器指向此 IP，即可访问主机！\n\n\n\n\n要测试，你可以在容器内运行类似 \n```curl -X GET 123.123.123.123:3000```\n 的命令。\n\n\n该别名会在每次重启后重置，因此如有必要请创建启动脚本。\n\n\n解决方案及更多文档请见：\nhttps://docs.docker.com/desktop/networking/#use-cases-and-workarounds-for-all-platforms",
+  "link": "https://stackoverflow.com/questions/31324981/how-to-access-host-port-from-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "在 Dockerfile 中，如何更新 PATH 环境变量？",
+  "answer": "你可以在 \n```Dockerfile```\n 中使用 \nEnvironment Replacement\n，如下所示：\n\n\n```ENV PATH=\"$PATH:/opt/gtk/bin\"\n```\n\n\n（请注意，使用 ${PATH} 时，可能会使用主机的 PATH 而不是容器的 PATH）",
+  "link": "https://stackoverflow.com/questions/27093612/in-a-dockerfile-how-to-update-path-environment-variable"
+ },
+ {
+  "category": "docker",
+  "question": "Docker 中 “expose” 和 “publish” 有什么区别？",
+  "answer": "基本上，你有三（四）种选择：\n\n\n\n\n既不指定 \n```EXPOSE```\n 也不指定 \n```-p```\n\n\n只指定 \n```EXPOSE```\n\n\n同时指定 \n```EXPOSE```\n 和 \n```-p```\n\n\n只指定 \n```-p```\n，这会隐式执行 \n```EXPOSE```\n\n\n\n\n\n\n如果你既不指定 \n```EXPOSE```\n 也不指定 \n```-p```\n，容器中的服务只能从容器\n内部\n访问。\n\n\n\n\n如果你 \n```EXPOSE```\n 了一个端口，容器中的服务无法从 Docker 外部访问，但可以从其他 Docker 容器内部访问。因此，这适用于容器间通信。\n\n\n\n\n如果你同时 \n```EXPOSE```\n 和 \n```-p```\n 了一个端口，容器中的服务可以从任何地方访问，甚至 Docker 外部。\n\n\n\n\n如果你执行了 \n```-p```\n，但没有 \n```EXPOSE```\n，Docker 会隐式执行 \n```EXPOSE```\n。这是因为如果一个端口对公众开放，它自动也对其他 Docker 容器开放。因此 \n```-p```\n 包含了 \n```EXPOSE```\n。这实际上与第 3 种情况相同。\n\n\n\n\n\n\n两者分开的原因，依我看来是因为：\n\n\n\n\n选择主机端口取决于主机，因此不属于 Dockerfile（否则它会依赖于主机），\n\n\n而且通常如果容器中的服务可以从其他容器访问就足够了。\n\n\n\n\n文档\n明确指出：\n\n\n\n\n```EXPOSE```\n 指令暴露端口以供链接内使用。\n\n\n\n\n它还指引你如何 \n链接容器\n（遗留功能），这基本上就是我所说的容器间通信。",
+  "link": "https://stackoverflow.com/questions/22111060/what-is-the-difference-between-expose-and-publish-in-docker"
+ },
+ {
+  "category": "docker",
+  "question": "Docker 报错 “no space left on device”，如何清理？",
+  "answer": "当前的最佳实践是：\n\n\n```docker system prune\n```\n\n\n在接受后果之前，请注意此命令的输出：\n\n\n```WARNING! This will remove:\n  - all stopped containers\n  - all networks not used by at least one container\n  - all dangling images\n  - all dangling build cache\n\nAre you sure you want to continue? [y/N]\n```\n\n\n换句话说，继续执行此命令是永久性的。请记住，最佳实践是将停止的容器视为临时的，即你应该设计你的 Docker 工作，不要保留这些停止的容器。如果你没有在积极调试容器，你可能想考虑在运行时使用 \n```--rm```\n 标志。\n\n\n请务必阅读 \n这个答案\n，关于卷（Volumes）\n\n\n如果 \n```docker system prune```\n 对你不起作用，你可能也会对 \n这个答案\n 感兴趣。",
+  "link": "https://stackoverflow.com/questions/30604846/docker-complains-about-no-space-left-on-device-how-to-clean-up"
+ },
+ {
+  "category": "docker",
+  "question": "如何在 Docker 中暴露多个端口？",
+  "answer": "要仅暴露一个端口，你需要这样做：\n\n\n```docker run -p <host_port>:<container_port>\n```\n\n\n要暴露多个端口，只需提供多个\n```-p```\n参数即可：\n\n\n```docker run -p <host_port1>:<container_port1> -p <host_port2>:<container_port2>\n```",
+  "link": "https://stackoverflow.com/questions/20845056/how-can-i-expose-more-than-1-port-with-docker"
+ },
+ {
+  "category": "docker",
+  "question": "Docker - 名称已被容器使用",
+  "answer": "我也对此感到困惑。这里有两个相关命令：\n\n\n```docker run  # 在**新**容器中运行命令\n```\n\n\n```docker start  # 启动一个或多个已停止的容器\n```",
+  "link": "https://stackoverflow.com/questions/31697828/docker-name-is-already-in-use-by-container"
+ },
+ {
+  "category": "docker",
+  "question": "如何将 Docker 镜像推送到私有仓库",
+  "answer": "首先，你需要使用你的\n```registryhost```\n正确地给镜像打上标签：\n\n\n```docker tag [OPTIONS] IMAGE[:TAG] [REGISTRYHOST/][USERNAME/]NAME[:TAG]\n```\n\n\n然后使用相同的标签执行 docker push。\n\n\n```docker push NAME[:TAG]\n```\n\n\n示例：\n\n\n```docker tag 518a41981a6a myRegistry.com/myImage\ndocker push myRegistry.com/myImage\n```",
+  "link": "https://stackoverflow.com/questions/28349392/how-to-push-a-docker-image-to-a-private-repository"
+ },
+ {
+  "category": "docker",
+  "question": "Dockerfile 中 RUN 和 CMD 的区别",
+  "answer": "RUN\n 是镜像构建步骤，执行\n```RUN```\n命令后容器的状态会被提交到容器镜像中。一个 Dockerfile 可以有多个\n```RUN```\n步骤，它们层层叠加来构建镜像。\n\n\nCMD\n 是启动构建好的镜像时容器默认执行的命令。一个 Dockerfile 只会使用最后定义的\n```CMD```\n。使用\n```docker run $image $other_command```\n启动容器时，可以覆盖\n```CMD```\n。\n\n\nENTRYPOINT\n 也与\n```CMD```\n密切相关，当从镜像启动容器时，它可以改变\n```CMD```\n的解释方式。",
+  "link": "https://stackoverflow.com/questions/37461868/difference-between-run-and-cmd-in-a-dockerfile"
+ },
+ {
+  "category": "docker",
+  "question": "如何在 docker-compose.yml 中重建 docker 容器？",
+  "answer": "docker-compose up\n\n\n```$ docker-compose up -d --no-deps --build <service_name>\n```\n\n\n或者较新版本的 docker\n\n\n```$ docker compose up -d --no-deps --build <service_name>\n```\n\n\n\n\n--no-deps - 不启动关联的服务。\n\n\n\n\n\n\n--build - 在启动容器之前构建镜像。",
+  "link": "https://stackoverflow.com/questions/36884991/how-to-rebuild-docker-container-in-docker-compose-yml"
+ },
+ {
+  "category": "docker",
+  "question": "多个 docker-compose 项目之间的通信",
+  "answer": "你只需确保想要相互通信的容器位于同一网络上。网络是 docker 的一等构造，并非 compose 特有。\n\n\n```# front/docker-compose.yml\nservices:\n  front:\n    ...\n    networks:\n      - some-net\nnetworks:\n  some-net:\n    driver: bridge\n```\n\n\n...\n\n\n```# api/docker-compose.yml\nservices:\n  api:\n    ...\n    networks:\n      - front_some-net\nnetworks:\n  front_some-net:\n    external: true\n```\n\n\n\n\n注意：你的应用的网络名称基于“项目名称”，而项目名称基于其所在目录的名称，在此例中添加了前缀 \n```front_```\n\n\n\n\n然后它们可以使用服务名称相互通信。从 \n```front```\n 你可以执行 \n```ping api```\n，反之亦然。",
+  "link": "https://stackoverflow.com/questions/38088279/communication-between-multiple-docker-compose-projects"
+ },
+ {
+  "category": "docker",
+  "question": "如何进入一个已经在运行中的 Docker 容器并使用新的 TTY？",
+  "answer": "```docker exec```\n 允许你进入一个正在运行的容器：\n\n\n```docker exec -it [container-id] bash\n```\n\n\n注意：\n 这假设你的容器中安装了 \n```bash```\n。你可以运行 \n```sh```\n 或容器中安装的任何交互式 shell。",
+  "link": "https://stackoverflow.com/questions/20932357/how-to-enter-in-a-docker-container-already-running-with-a-new-tty"
+ },
+ {
+  "category": "docker",
+  "question": "如何在 Minikube 中使用本地 Docker 镜像？",
+  "answer": "正如 \n手册\n 所述，你可以通过 \n```eval $(minikube docker-env)```\n 复用 Minikube 的 Docker 守护进程。\n\n\n因此，要在不上传镜像的情况下使用它，你可以按照以下步骤操作：\n\n\n\n\n使用 \n```eval $(minikube docker-env)```\n 设置环境变量\n\n\n使用 Minikube 的 Docker 守护进程构建镜像（例如，\n```docker build -t my-image .```\n）\n\n\n在 Pod 规范中将镜像设置为构建标签（例如，\n```my-image```\n）\n\n\n将 \n```imagePullPolicy```\n 设置为 \n```Never```\n，否则 Kubernetes 会尝试下载镜像。\n\n\n\n\n重要提示：\n 你必须在每个想要使用的终端上运行 \n```eval $(minikube docker-env)```\n，因为它只为当前 shell 会话设置环境变量。",
+  "link": "https://stackoverflow.com/questions/42564058/how-can-i-use-local-docker-images-with-minikube"
+ },
+ {
+  "category": "docker",
+  "question": "如何在 Docker 中使用 COPY 但排除某些文件",
+  "answer": "在你的 Docker 构建上下文目录中（在这种情况下，很可能是 node_modules 的父目录）创建一个名为\n```.dockerignore```\n的文件，并在其中写入一行：\n\n\n```**/node_modules\n```\n\n\n不过你可能只需要：\n\n\n```node_modules\n```\n\n\n关于 dockerignore 的信息：\nhttps://docs.docker.com/engine/reference/builder/#dockerignore-file",
+  "link": "https://stackoverflow.com/questions/43747776/copy-with-docker-but-with-exclusion"
+ },
+ {
+  "category": "docker",
+  "question": "Docker Compose 与 Dockerfile 有什么区别",
+  "answer": "Dockerfile\n\n\n\n\nDockerfile 是一个简单的文本文件，包含用户可以用来组装镜像的命令。\n\n\n例如，\nDockerfile\n\n\n```FROM ubuntu:latest\nMAINTAINER john doe \n\nRUN apt-get update\nRUN apt-get install -y python python-pip wget\nRUN pip install Flask\n\nADD hello.py /home/hello.py\n\nWORKDIR /home\n```\n\n\n\n\nDocker Compose\n\n\n\n\nDocker Compose\n\n\n\n\n是一个用于定义和运行多容器 Docker 应用程序的工具。\n\n\n\n\n在\n```docker-compose.yml```\n中定义构成你应用的服务，以便它们可以在隔离环境中一起运行。\n\n\n\n\n只需运行\n```docker-compose up```\n即可通过一条命令让应用启动运行。\n\n\n\n\n\n\n例如，\ndocker-compose.yml\n\n\n```version: \"3\"\nservices:\n  web:\n    build: .\n    ports:\n    - '5000:5000'\n    volumes:\n    - .:/code\n    - logvolume01:/var/log\n    links:\n    - redis\n  redis:\n    image: redis\n    volumes:\n      logvolume01: {}\n```",
+  "link": "https://stackoverflow.com/questions/29480099/whats-the-difference-between-docker-compose-vs-dockerfile"
+ },
+ {
+  "category": "docker",
+  "question": "Docker Compose 如何在启动容器 Y 之前等待容器 X",
+  "answer": "终于找到了一个使用 docker-compose 方法的解决方案。从 docker-compose 文件格式 2.1 开始，你可以定义\n健康检查\n。\n\n\n我在一个\n示例项目\n中实现了这一点，\n你需要至少安装 docker 1.12.0+。\n我还需要\n扩展 rabbitmq-management 的 Dockerfile\n，因为官方镜像上没有安装 curl。\n\n\n现在我测试 rabbitmq 容器的管理页面是否可用。如果 curl 以退出码 0 结束，容器应用（python pika）将会启动并向 hello 队列发布一条消息。现在它可以正常工作了（输出）。\n\n\ndocker-compose（版本 2.1）：\n\n\n```version: '2.1'\n\nservices:\n  app:\n    build: app/.\n    depends_on:\n      rabbit:\n        condition: service_healthy\n    links: \n        - rabbit\n\n  rabbit:\n    build: rabbitmq/.\n    ports: \n        - \"15672:15672\"\n        - \"5672:5672\"\n    healthcheck:\n        test: [\"CMD\", \"curl\", \"-f\", \"http://localhost:15672\"]\n        interval: 30s\n        timeout: 10s\n        retries: 5\n```\n\n\n输出：\n\n\n```rabbit_1  | =INFO REPORT==== 25-Jan-2017::14:44:21 ===\nrabbit_1  | closing AMQP connection <0.718.0> (172.18.0.3:36590 -> 172.18.0.2:5672)\napp_1     |  [x] Sent 'Hello World!'\nhealthcheckcompose_app_1 exited with code 0\n```\n\n\nDockerfile（rabbitmq + curl）：\n\n\n```FROM rabbitmq:3-management\nRUN apt-get update\nRUN apt-get install -y curl \nEXPOSE 4369 5671 5672 25672 15671 15672\n```\n\n\n版本 3 不再支持 depends_on 的 condition 形式。\n\n因此我从 depends_on 改为 restart on-failure。现在我的应用容器会重启 2-3 次直到正常工作，但这仍然是一个 docker-compose 特性，且不需要覆盖 entrypoint。\n\n\ndocker-compose（版本 3）：\n\n\n```version: \"3\"\n\nservices:\n\n  rabbitmq: # login guest:guest\n    image: rabbitmq:management\n    ports:\n    - \"4369:4369\"\n    - \"5671:5671\"\n    - \"5672:5672\"\n    - \"25672:25672\"\n    - \"15671:15671\"\n    - \"15672:15672\"\n    healthcheck:\n        test: [\"CMD\", \"curl\", \"-f\", \"http://localhost:15672\"]\n        interval: 30s\n        timeout: 10s\n        retries: 5\n\n  app:\n    build: ./app/\n    environment:\n      - HOSTNAMERABBIT=rabbitmq\n    restart: on-failure\n    depends_on:\n      - rabbitmq\n    links: \n        - rabbitmq\n```",
+  "link": "https://stackoverflow.com/questions/31746182/docker-compose-wait-for-container-x-before-starting-y"
+ },
+ {
+  "category": "docker",
+  "question": "镜像变更后如何升级 Docker 容器",
+  "answer": "在评估了各种答案并研究了该主题之后，我想做个总结。\n\n\nDocker 升级容器的方式似乎如下：\n\n\n应用容器不应存储应用数据\n。这样你就可以随时通过执行类似下面的命令，用更新版本替换应用容器：\n\n\n```docker pull mysql\ndocker stop my-mysql-container\ndocker rm my-mysql-container\ndocker run --name=my-mysql-container --restart=always \\\n  -e MYSQL_ROOT_PASSWORD=mypwd -v /my/data/dir:/var/lib/mysql -d mysql\n```\n\n\n你可以将数据存储在宿主机上（挂载为卷的目录中），或存储在专门的\n仅数据容器\n中。更多相关内容请阅读\n\n\n\n\n关于卷\n（Docker 文档）\n\n\nTiny Docker Pieces, Loosely Joined\n（作者 Tom Offermann）\n\n\n如何在 Docker 中处理持久化存储（例如数据库）\n（Stack Overflow 问题）\n\n\n\n\n在容器内升级应用（例如使用 yum/apt-get upgrade）被认为是一种反模式\n。应用容器应当是\n不可变的\n，这应能保证可复现的行为。一些官方应用镜像（尤其是 mysql:5.6）甚至不支持自我更新（apt-get upgrade 将无法工作）。\n\n\n我要感谢所有给出答案的人，这样我们才能看到各种不同的方法。",
+  "link": "https://stackoverflow.com/questions/26734402/how-to-upgrade-docker-container-after-its-image-changed"
+ },
+ {
+  "category": "docker",
+  "question": "如何在 Dockerfile 中设置镜像名称？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/38986057/how-can-i-set-an-image-name-in-a-dockerfile"
+ },
+ {
+  "category": "docker",
+  "question": "如何在 Dockerfile 中添加注释？",
+  "answer": "你可以在行首使用 \n```#```\n 来开始一个\n注释\n（允许在 \n```#```\n 前有空白字符）：\n\n\n```# do some stuff\nRUN apt-get update \\\n    # install some packages\n    && apt-get install -y cron\n```\n\n\n字符串中间的 \n```#```\n 会被传递给命令本身，例如：\n\n\n```RUN echo 'we are running some # of cool things'\n```",
+  "link": "https://stackoverflow.com/questions/36710459/how-do-i-make-a-comment-in-a-dockerfile"
+ },
+ {
+  "category": "docker",
+  "question": "使用 Docker Compose 进行交互式 shell",
+  "answer": "你需要在你的 \n```docker-compose.yml```\n 文件中包含以下行：\n\n\n```version: \"3\"\nservices:\n  app:\n    image: app:1.2.3\n    stdin_open: true # docker run -i\n    tty: true        # docker run -t\n```\n\n\n第一行对应于 \n```docker run```\n 中的 \n```-i```\n，第二行对应于 \n```-t```\n。",
+  "link": "https://stackoverflow.com/questions/36249744/interactive-shell-using-docker-compose"
+ },
+ {
+  "category": "docker",
+  "question": "ps 命令在 Docker 容器中无法工作",
+  "answer": "基础 \n```wheezy```\n 镜像中未安装 \n```ps```\n。尝试在容器内执行以下命令：\n\n\n```apt-get update && apt-get install procps\n```\n\n\n或者将以下行添加到 \n```Dockerfile```\n 中：\n\n\n```RUN apt-get update && apt-get install -y procps && rm -rf /var/lib/apt/lists/*\n```",
+  "link": "https://stackoverflow.com/questions/26982274/ps-command-doesnt-work-in-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "如何在已存在的 Docker 容器上运行命令？",
+  "answer": "2014 年 10 月，Docker 团队引入了 `docker exec` 命令：https://docs.docker.com/engine/reference/commandline/exec/\n\n因此，现在只需知道容器的 ID（或名称），就可以在正在运行的容器中执行任何命令：\n\n```docker exec -it <container_id_or_name> echo \"Hello from container!\"\n```\n\n请注意，`exec` 命令仅适用于已处于运行状态的容器。如果容器当前已停止，需要先用以下命令启动它：\n\n```docker run -it -d shykes/pybuilder /bin/bash\n```\n\n这里最关键的是 `-d` 选项，它代表 `detached`（分离模式）。这意味着最初提供给容器的命令（`/bin/bash`）将在后台运行，容器不会立即停止。",
+  "link": "https://stackoverflow.com/questions/26153686/how-do-i-run-a-command-on-an-already-existing-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "Docker 无法连接到 docker daemon",
+  "answer": "Linux\n\nLinux 安装后步骤文档中给出了以下步骤：\n\n\n\n\n创建 `docker` 组。\n```\nsudo groupadd docker```\n\n\n将用户添加到 `docker` 组。\n```\nsudo usermod -aG docker $(whoami)```\n\n\n注销并重新登录，以确保 docker 以正确的权限运行，或者执行\n```\nnewgrp docker\n```\n\n\n启动 docker。\n```\nsudo service docker start```\n\n\n\n\nMac OS X\n\n\n正如 Dayel Ostraco 所说，需要添加环境变量：\n\n\n```docker-machine start # 启动 docker 虚拟机\ndocker-machine env  # 帮助获取环境变量\neval \"$(docker-machine env default)\" # 设置环境变量\n```\n\n\n`docker-machine start` 命令会输出注释来指导操作流程。",
+  "link": "https://stackoverflow.com/questions/21871479/docker-cant-connect-to-docker-daemon"
+ },
+ {
+  "category": "docker",
+  "question": "Docker：尝试连接到位于 unix:///var/run/docker.sock 的 Docker 守护进程套接字时遇到权限拒绝",
+  "answer": "如果使用 jenkins\n\n\n用户 \n```jenkins```\n 需要被添加到组 \n```docker```\n 中：\n\n\n```sudo usermod -a -G docker jenkins\n```\n\n\n然后重启 Jenkins。\n\n\n否则\n\n\n如果你是因为从 docker 收到这条消息而来到 stack overflow 寻找答案，但你并没有使用 jenkins，那么很可能错误原因相同：你的非特权用户不属于 docker 组。\n\n\n你可以执行：\n\n\n```sudo usermod -a -G docker $USER\n```\n\n\n你可以通过执行 \n```grep docker /etc/group```\n 来检查是否成功，并看到类似这样的内容：\n\n\n```docker:x:998:[user]\n```\n\n\n在其中的一行中。\n\n\n然后更改你的用户组 ID 为 \n```docker```\n（以避免需要注销并重新登录）：\n\n\n```newgrp docker\n```",
+  "link": "https://stackoverflow.com/questions/47854463/docker-got-permission-denied-while-trying-to-connect-to-the-docker-daemon-socke"
+ },
+ {
+  "category": "docker",
+  "question": "如何使用 docker-compose 重启单个容器",
+  "answer": "非常简单：使用命令：\n\n\n```docker-compose restart worker\n```\n\n\n你可以设置等待停止容器的时间（以秒为单位）\n\n\n```docker-compose restart -t 30 worker\n```\n\n\n请注意，这将重启容器但不会重新构建它。如果你想应用更改然后重启，请查看其他答案。",
+  "link": "https://stackoverflow.com/questions/31466428/how-to-restart-a-single-container-with-docker-compose"
+ },
+ {
+  "category": "docker",
+  "question": "如何在卷中挂载单个文件",
+  "answer": "TL;DR/注意：\n\n\n如果你遇到在尝试挂载文件的位置创建了一个目录，可能是因为你没有提供\n有效\n且\n绝对\n的路径。这是一个常见的错误，其失败模式是静默且令人困惑的。\n\n\n\n\n在 Docker 中，文件卷的挂载方式如下（绝对路径示例（可以使用环境变量），并且需要提及文件名）：\n\n\n```volumes:\n  - /src/docker/myapp/upload:/var/www/html/upload\n  - /src/docker/myapp/upload/config.php:/var/www/html/config.php\n```\n\n\n你也可以这样做：\n\n\n```volumes:\n  - ${PWD}/upload:/var/www/html/upload\n  - ${PWD}/upload/config.php:/var/www/html/config.php\n```\n\n\n如果你从\n```/src/docker/myapp```\n文件夹启动 docker-compose",
+  "link": "https://stackoverflow.com/questions/42248198/how-to-mount-a-single-file-in-a-volume"
+ },
+ {
+  "category": "docker",
+  "question": "从外部连接到 Docker 容器中的 PostgreSQL",
+  "answer": "你可以这样运行 PostgreSQL（映射端口）：\n\n\n```docker run --name some-postgres -e POSTGRES_PASSWORD=mysecretpassword -d -p 5432:5432 postgres\n```\n\n\n现在你已经将容器的 5432 端口映射到服务器的 5432 端口。\n```-p <host_port>:<container_port>```\n  。所以现在你的 PostgreSQL 可以通过\n```public-server-ip:5432```\n访问。\n\n\n测试方法：\n运行 PostgreSQL 数据库（上述命令）\n\n\n```docker ps\nCONTAINER ID        IMAGE               COMMAND                  CREATED             STATUS              PORTS                     NAMES\n05b3a3471f6f        postgres            \"/docker-entrypoint.s\"   1 seconds ago       Up 1 seconds        0.0.0.0:5432->5432/tcp    some-postgres\n```\n\n\n进入容器并创建数据库：\n\n\n```docker exec -it 05b3a3471f6f bash\nroot@05b3a3471f6f:/# psql -U postgres\npostgres-# CREATE DATABASE mytest;\npostgres-# \\q\n```\n\n\n转到你的本地主机（那里有某些工具或 psql 客户端）。\n\n\n```psql -h public-ip-server -p 5432 -U postgres\n```\n\n\n（密码 mysecretpassword）\n\n\n```postgres=# \\l\n\n                             List of databases\n   Name    |  Owner   | Encoding |  Collate   |   Ctype    |   Access privileges\n-----------+----------+----------+------------+------------+-----------------------\n mytest    | postgres | UTF8     | en_US.utf8 | en_US.utf8 |\n postgres  | postgres | UTF8     | en_US.utf8 | en_US.utf8 |\n template0 | postgres | UTF8     | en_US.utf8 | en_US.utf8 | =c/postgres   \n```\n\n\n因此，你正在从本地主机访问（运行在服务器上的 Docker 中的）数据库。\n\n\n在\n这篇文章\n中有详细解释。",
+  "link": "https://stackoverflow.com/questions/37694987/connecting-to-postgresql-in-a-docker-container-from-outside"
+ },
+ {
+  "category": "docker",
+  "question": "使用 ADD 命令将目录复制到另一个目录",
+  "answer": "```ADD go /usr/local/\n```\n\n\n这会将本地 \n```go```\n 目录的\n内容\n复制到 Docker 镜像的 \n```/usr/local/```\n 目录中。\n\n\n要将 \n```go```\n 目录本身复制到 \n```/usr/local/```\n 中，请使用：\n\n\n```ADD go /usr/local/go\n```\n\n\n或者\n\n\n```COPY go /usr/local/go\n```",
+  "link": "https://stackoverflow.com/questions/26504846/copy-directory-to-another-directory-using-add-command"
+ },
+ {
+  "category": "docker",
+  "question": "Docker：如何正确清理 Docker 容器的日志？",
+  "answer": "首先说一个不太好的方法。来自\n这个问题\n有一个可以运行的单行命令：\n\n\n```echo \"\" > $(docker inspect --format='{{.LogPath}}' <container_name_or_id>)\n```\n\n\n除了 echo，还有更简单的：\n\n\n```: > $(docker inspect --format='{{.LogPath}}' <container_name_or_id>)\n```\n\n\n或者使用 truncate 命令：\n\n\n```truncate -s 0 $(docker inspect --format='{{.LogPath}}' <container_name_or_id>)\n```\n\n\n\n\n我不太喜欢这两种方法，因为它们直接修改了 Docker 的文件。外部删除日志可能发生在 Docker 正在向文件写入 JSON 格式数据的时候，导致出现不完整的行，并破坏从 \n```docker logs```\n CLI 读取任何日志的能力。关于这种情况的一个示例，请参见 \n对 duketwo 回答的这条评论\n：\n\n\n\n\n清空日志文件后，我遇到了这个错误：\n```error from daemon in stream: Error grabbing logs: invalid character '\\x00' looking for beginning of value```\n\n\n\n\n相反，你可以让 Docker 自动为你轮转日志。如果你使用的是默认的 \nJSON 日志驱动\n，可以通过向 dockerd 添加额外参数来实现：\n\n\n```dockerd ... --log-opt max-size=10m --log-opt max-file=3\n```\n\n\n你也可以将其设置为 \ndaemon.json\n 文件的一部分，而不是修改启动脚本：\n\n\n```{\n  \"log-driver\": \"json-file\",\n  \"log-opts\": {\"max-size\": \"10m\", \"max-file\": \"3\"}\n}\n```\n\n\n这些选项需要以 root 权限进行配置。更改此文件后，请确保运行 \n```systemctl reload docker```\n 以使设置生效。此设置将成为任何新创建容器的默认设置。注意，现有容器需要删除并重新创建才能获得新的日志限制。\n\n\n\n\n类似的日志选项可以传递给单个容器以覆盖这些默认值，允许你在单个容器上保存更多或更少的日志。从 \n```docker run```\n 来看，这类似于：\n\n\n```docker run --log-driver json-file --log-opt max-size=10m --log-opt max-file=3 ...\n```\n\n\n或者在 compose 文件中：\n\n\n```version: '3.7'\nservices:\n  app:\n    image: ...\n    logging:\n      options:\n        max-size: \"10m\"\n        max-file: \"3\"\n```\n\n\n\n\n为了进一步节省空间，你可以从 json 日志驱动切换到 \"local\" 日志驱动。它采用相同的 max-size 和 max-file 选项，但不是以 JSON 存储，而是使用更快、更小的二进制语法。这允许你在相同大小的文件中存储更多日志。对应的 daemon.json 条目如下：\n\n\n```{\n  \"log-driver\": \"local\",\n  \"log-opts\": {\"max-size\": \"10m\", \"max-file\": \"3\"}\n}\n```\n\n\nlocal 驱动的缺点是，依赖直接访问 JSON 日志的外部日志解析器/转发器将不再工作。因此，如果你使用 filebeat 发送到 Elastic，或 Splunk 的通用转发器，我建议避免使用 \"local\" 驱动。\n\n\n我在我的 \n技巧和窍门演示\n中对此有更多介绍。",
+  "link": "https://stackoverflow.com/questions/42510002/docker-how-to-clear-the-logs-properly-for-a-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "在 macOS 上无法连接到 Docker 守护进程",
+  "answer": "在支持的 Mac 上，运行：\n\n\n```brew install --cask docker\n```\n\n\n然后启动 Docker 应用。点击下一步。它会要求特权访问。确认。顶部栏应出现一个鲸鱼图标。点击它并等待出现“Docker is running”。\n\n\n现在你应该能够运行 \n```docker```\n 命令了：\n\n\n```docker ps\n```\n\n\n因为 docker 是一个系统级包，你不能使用 \n```brew install```\n 来安装它，而必须使用 \n```--cask```\n。\n\n\n注意：此解决方案仅适用于 CPU 支持虚拟化的 Mac，可能不包括旧款 Mac。\n\n\n2022 年编辑 - 评论区提到 Docker Desktop 的许可发生了变化。请考虑下面的替代方案，并查看评论以获取详细信息。",
+  "link": "https://stackoverflow.com/questions/44084846/cannot-connect-to-the-docker-daemon-on-macos"
+ },
+ {
+  "category": "docker",
+  "question": "Dockerfile 复制保留子目录结构",
+  "answer": "从 COPY 中移除星号，使用此 Dockerfile：\n\n\n```FROM ubuntu\nCOPY files/ /files/\nRUN ls -la /files/*\n```\n\n\n结构保持不变：\n\n\n```$ docker build .\nSending build context to Docker daemon 5.632 kB\nSending build context to Docker daemon \nStep 0 : FROM ubuntu\n ---> d0955f21bf24\nStep 1 : COPY files/ /files/\n ---> 5cc4ae8708a6\nRemoving intermediate container c6f7f7ec8ccf\nStep 2 : RUN ls -la /files/*\n ---> Running in 08ab9a1e042f\n/files/folder1:\ntotal 8\ndrwxr-xr-x 2 root root 4096 May 13 16:04 .\ndrwxr-xr-x 4 root root 4096 May 13 16:05 ..\n-rw-r--r-- 1 root root    0 May 13 16:04 file1\n-rw-r--r-- 1 root root    0 May 13 16:04 file2\n\n/files/folder2:\ntotal 8\ndrwxr-xr-x 2 root root 4096 May 13 16:04 .\ndrwxr-xr-x 4 root root 4096 May 13 16:05 ..\n-rw-r--r-- 1 root root    0 May 13 16:04 file1\n-rw-r--r-- 1 root root    0 May 13 16:04 file2\n ---> 03ff0a5d0e4b\nRemoving intermediate container 08ab9a1e042f\nSuccessfully built 03ff0a5d0e4b\n```",
+  "link": "https://stackoverflow.com/questions/30215830/dockerfile-copy-keep-subdirectory-structure"
+ },
+ {
+  "category": "docker",
+  "question": "如何向现有的 Docker 容器添加卷？",
+  "answer": "你可以提交现有的容器（这会根据容器的更改创建一个新镜像），然后使用新的挂载点运行它。\n\n\n示例：\n\n\n```$ docker ps  -a\n\nCONTAINER ID        IMAGE                 COMMAND                  CREATED              STATUS                          PORTS               NAMES\n5a8f89adeead        ubuntu:14.04          \"/bin/bash\"              About a minute ago   Exited (0) About a minute ago                       agitated_newton\n\n$ docker commit 5a8f89adeead newimagename\n$ docker run -ti -v \"$PWD/somedir\":/somedir newimagename /bin/bash\n```\n\n\n如果一切正常，停止旧容器，并使用这个新容器。\n\n\n你也可以使用容器名称来提交容器，例如：\n\n\n```docker commit agitated_newton newimagename\n```\n\n\n就这样 :)",
+  "link": "https://stackoverflow.com/questions/28302178/how-can-i-add-a-volume-to-an-existing-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "为什么 docker build 没有显示命令的任何输出？",
+  "answer": "你看到的输出来自 buildkit，它是 docker 附带的经典构建引擎的替代品。你可以通过 \n```--progress```\n 选项调整其输出：\n\n\n```  --progress string         Set type of progress output (auto, plain, tty). Use plain to show container output\n                            (default \"auto\")\n```\n\n\n添加 \n```--progress=plain```\n 将显示未从缓存加载的运行命令的输出。这也可以通过设置 \n```BUILDKIT_PROGRESS```\n 变量来实现：\n\n\n```export BUILDKIT_PROGRESS=plain\n```\n\n\n\n\n如果你正在调试构建，并且步骤已经被缓存，请在构建中添加 \n```--no-cache```\n 以重新运行步骤并重新显示输出：\n\n\n```docker build --progress=plain --no-cache ...\n```\n\n\n\n\n如果你不想使用 buildkit，可以通过在 shell 中导出 \n```DOCKER_BUILDKIT=0```\n 来恢复到较旧的构建引擎，例如：\n\n\n```DOCKER_BUILDKIT=0 docker build ...\n```\n\n\n或\n\n\n```export DOCKER_BUILDKIT=0\ndocker build ...\n```",
+  "link": "https://stackoverflow.com/questions/64804749/why-is-docker-build-not-showing-any-output-from-commands"
+ },
+ {
+  "category": "docker",
+  "question": "Docker：从父目录添加文件",
+  "answer": "```cd```\n 切换到父目录\n\n\n从父目录构建镜像，指定 Dockerfile 的路径\n\n\n\n\n```docker build -t <some tag> -f <dir/dir/Dockerfile> .\n```\n\n\n在这种情况下，Docker 的上下文将切换到父目录，并且 ADD 和 COPY 指令可以访问该目录中的文件。",
+  "link": "https://stackoverflow.com/questions/24537340/docker-adding-a-file-from-a-parent-directory"
+ },
+ {
+  "category": "docker",
+  "question": "如何从 Docker 容器内部获取 Docker 宿主机的 IP 地址",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/22944631/how-to-get-the-ip-address-of-the-docker-host-from-inside-a-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "Docker 容器在“docker run -d”后会自动停止",
+  "answer": "centos dockerfile 有一个默认命令 \n```bash```\n。\n\n\n这意味着，当在后台运行时（\n```-d```\n），shell 会立即退出。\n\n\n2017 年更新\n\n\n较新版本的 Docker 允许容器同时在分离模式和前台模式下运行（\n```-t```\n、\n```-i```\n 或 \n```-it```\n）。\n\n\n在这种情况下，你不需要任何额外的命令，这样就足够了：\n\n\n```docker run -t -d centos\n```\n\n\nbash 将在后台等待。\n\n这一点最初由 \nkalyani-chaudhari\n 在其回答中报告，并在 \njersey bean\n 的回答中详细说明。\n\n\n```vonc@voncvb:~$ d ps -a\nCONTAINER ID        IMAGE               COMMAND             CREATED             STATUS              PORTS               NAMES\n4a50fd9e9189        centos              \"/bin/bash\"         8 seconds ago       Up 2 seconds                            wonderful_wright\n```\n\n\n请注意，对于 \nalpine\n，\nMarinos An\n 在评论中报告：\n\n\n\n\n```docker run -t -d alpine/git```\n 并不能保持进程运行。\n\n必须这样做：\n```docker run --entrypoint \"/bin/sh\" -it alpine/git```\n\n\n\n\n\n\n原始回答（2015 年）\n\n\n如 \nthis article\n 中所述：\n\n\n\n\n与其使用 \n```docker run -i -t image your-command```\n 运行，不如推荐使用 \n```-d```\n，因为你可以只用一个命令运行容器，而且不需要通过按 \nCtrl\n + \nP\n + \nQ\n 来分离容器终端。\n\n\n然而，\n```-d```\n 选项存在一个问题。除非命令保持在前台运行，否则你的容器会立即停止。\n\nDocker 要求你的命令保持在前台运行。否则，它会认为你的应用程序停止了并关闭容器。\n\n\n问题在于，有些应用程序不会在前台运行。我们怎样才能让它更容易一些？\n\n\n在这种情况下，你可以在命令中添加 \n```tail -f /dev/null```\n。\n\n这样做后，即使你的主命令在后台运行，你的容器也不会停止，因为 tail 会保持在前台运行。\n\n\n\n\n所以这样可行：\n\n\n```docker run -d centos tail -f /dev/null\n```\n\n\n或者在 Dockerfile 中：\n\n\n```ENTRYPOINT [\"tail\"]\nCMD [\"-f\",\"/dev/null\"]\n```\n\n\n执行 \n```docker ps```\n 会显示 centos 容器仍在运行。\n\n\n从那里，你可以附加到它或从它分离（或者执行 \n```docker exec```\n 一些命令）。\n\n\n\n\n然而，正如 \nbviktor\n 在评论中指出的：\n\n\n\n\n如果 Dockerfile 中指定了任何内容，覆盖 entrypoint 会把它搞乱。\n\n\n```systemd```\n 尤其值得关注。\n\n\nTailing \n```/dev/null```\n 听起来也不太有说服力：本质上，你是在用完全不必要的系统调用轰炸你的系统。\n\n\n另一种使用 sleep 的解决方案看起来要好得多。\n\n\n\n\n那依赖于 \n```sleep infinity```\n，这是 GNU coreutils 的扩展，并未在 \nPOSIX\n 中考虑。",
+  "link": "https://stackoverflow.com/questions/30209776/docker-container-will-automatically-stop-after-docker-run-d"
+ },
+ {
+  "category": "docker",
+  "question": "如何附加到 Docker 进程并从中分离？",
+  "answer": "要在不退出 shell 的情况下分离 tty，请使用转义序列 \nCtrl\n+\nP\n 后跟 \nCtrl\n+\nQ\n。更多详情见 \nhere\n。\n\n\n来自 \nthis source\n 的附加信息：\n\n\n\n\ndocker run -t -i → 可以用 \n```^P^Q```\n 分离，并用 docker attach 重新附加\n\n\ndocker run -i → 不能用 \n```^P^Q```\n 分离；会干扰 stdin\n\n\ndocker run → 不能用 \n```^P^Q```\n 分离；可以向客户端发送 SIGKILL；可以用 docker attach 重新附加",
+  "link": "https://stackoverflow.com/questions/19688314/how-do-you-attach-and-detach-from-dockers-process"
+ },
+ {
+  "category": "docker",
+  "question": "如何在 docker 容器内运行 cron 任务？",
+  "answer": "你可以将你的\n```crontab```\n复制到镜像中，以便从该镜像启动的容器运行该任务。\n\n\n\n\n重要\n：正如 \ndocker-cron issue 3\n 中所述：对于你的 \n```cron```\n 文件，请使用 \nLF，而不是 CRLF\n。\n\n\n\n\n请参阅 \nJulien Boulay\n 在其 \n```Ekito/docker-cron```\n 中的“\nRun a cron job with Docker\n”：\n\n\n\n\n让我们创建一个名为“\n```hello-cron```\n”的新文件来描述我们的任务。\n\n\n```# must be ended with a new line \"LF\" (Unix) and not \"CRLF\" (Windows)\n* * * * * echo \"Hello world\" >> /var/log/cron.log 2>&1\n# An empty line is required at the end of this file for a valid cron file.\n```\n\n\n\n\n如果你想知道 \n```2>&1```\n 是什么，\nAyman Hourieh\n \n对此进行了解释\n。\n\n\n\n\n以下 Dockerfile 描述了构建镜像的所有步骤\n\n\n```FROM ubuntu:latest\nMAINTAINER docker@ekito.fr\n\nRUN apt-get update && apt-get -y install cron\n\n# Copy hello-cron file to the cron.d directory\nCOPY hello-cron /etc/cron.d/hello-cron\n\n# Give execution rights on the cron job\nRUN chmod 0744 /etc/cron.d/hello-cron\n\n# Apply cron job\nRUN crontab /etc/cron.d/hello-cron\n\n# Create the log file to be able to run tail\nRUN touch /var/log/cron.log\n\n# Run the command on container startup\nCMD cron && tail -f /var/log/cron.log\n```\n\n\n\n\n但是：如果 \n```cron```\n 挂掉，\n容器会\n继续运行\n。\n\n\n（请参阅 \nGaafar\n 的 \n评论\n 以及 \nHow do I make \n```apt-get```\n install less noisy?\n：\n\n\n```apt-get -y install -qq --force-yes cron```\n 也可以工作）\n\n\n正如 \nNathan Lloyd\n 在 \n评论\n 中指出的：\n\n\n\n\n关于一个陷阱的快速说明：\n\n如果你添加了一个脚本文件并告诉 cron 运行它，请记住\n\n\n```RUN chmod 0744 /the_script```\n\n\n如果你忘了，Cron 会静默失败\n。\n\n\n\n\n警告\n：正如 \nuser8046323\n 在 \n评论\n 中指出的\n\n\n\n\n这个配置会将任务调度两次。\n\n\n\n\n一次通过 \n```crontab```\n，\n\n\n一次通过 \n```cron.d```\n\n\n\n\n请只使用其中一种方式，以避免将任务调度两次\n\n\n\n\n确实如此：问题出在上面 Dockerfile 中的这两行：\n\n\n```COPY hello-cron /etc/cron.d/hello-cron\nRUN crontab /etc/cron.d/hello-cron\n```\n\n\n\n\n通过将 \n```hello-cron```\n 文件放入 \n```/etc/cron.d```\n 目录，你会自动调度该文件中包含的 cron 任务。cron 守护进程会检查此目录中任何包含 cron 调度信息的文件，并自动加载它们。\n\n\n\n\n带有 \n```/etc/cron.d/hello-cron```\n 的 \n```crontab```\n 命令会获取 \n```hello-cron```\n 文件的内容，并将其加载到主 crontab 中。这意味着相同的任务现在也会直接调度到 crontab 中，实际上造成了重复。\n\n\n\n\n\n\n你应该根据具体需求选择一种方法来管理你的 cron 任务：\n\n\n\n\n如果你更喜欢使用 \n```/etc/cron.d```\n（通常更容易管理多个独立的 cron 任务文件）：\n\n\n```COPY hello-cron /etc/cron.d/hello-cron\nRUN chmod 0744 /etc/cron.d/hello-cron\n```\n\n\n\n\n如果你更喜欢使用 \n```crontab```\n（可以让你统一查看所有 cron 任务，对于单个或少量任务来说可能更容易）：\n\n\n```ADD hello-cron /etc/cronjob\nRUN crontab /etc/cronjob\n```\n\n\n\n\n\n\n\n\n或者，确保你的任务本身直接重定向到 stdout/stderr，而不是日志文件，正如 \nhugoShaka\n 的 \n回答\n 中所述：\n\n\n``` * * * * * root echo hello > /proc/1/fd/1 2>/proc/1/fd/2\n```\n\n\n将最后一行 Dockerfile 替换为\n\n\n```CMD [\"cron\", \"-f\"]\n```\n\n\n但是：如果你想\n以非 root 用户运行任务\n，这就不起作用。\n\n\n另请参阅（关于 \n```cron -f```\n，也就是 cron“前台模式”）“\ndocker ubuntu \n```cron -f```\n is not working\n”\n\n\n\n\n构建并运行它：\n\n\n```sudo docker build --rm -t ekito/cron-example .\nsudo docker run -t -i ekito/cron-example\n```\n\n\n\n\n耐心等待 2 分钟，你的命令行应该会显示：\n\n\n```Hello world\nHello world\n```\n\n\n\n\n\n\nEric\n 在 \n评论中\n 补充道：\n\n\n\n\n请注意，如果文件是在镜像构建期间创建的，\n```tail```\n 可能无法显示正确的文件。\n\n如果是这种情况，你需要在容器运行时创建或 touch 该文件，以便 tail 能获取正确的文件。\n\n\n\n\n请参阅“\nOutput of \n```tail -f```\n at the end of a docker \n```CMD```\n is not showing\n”。\n\n\n\n\n更多内容请参阅 \nJason Kulatunga\n 的“\nRunning Cron in Docker\n”（2021 年 4 月），正如他在 \n下方评论\n 中所述\n\n\n请参阅 Jason 的镜像 \n```AnalogJ/docker-cron```\n，它基于：\n\n\n\n\n根据发行版安装 \n```cronie```\n/\n```crond```\n 的 Dockerfile。\n\n\n\n\n一个 entrypoint，用于初始化 \n```/etc/environment```\n，然后调用\n\n\n```cron -f -l 2\n```",
+  "link": "https://stackoverflow.com/questions/37458287/how-to-run-a-cron-job-inside-a-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "docker-compose up 仅针对某些容器",
+  "answer": "你可以通过以下方式启动容器：\n\n\n```$ docker-compose up -d client\n```\n\n\n这将在后台运行容器，输出可从以下命令获取\n\n\n```$ docker-compose logs\n```\n\n\n并且它将包含你已启动的所有容器",
+  "link": "https://stackoverflow.com/questions/30233105/docker-compose-up-for-only-certain-containers"
+ },
+ {
+  "category": "docker",
+  "question": "Docker (Apple Silicon/M1 Preview) MySQL 出现“no matching manifest for linux/arm64/v8 in the manifest list entries”错误",
+  "answer": "严格来说，这并不能真正解决你的问题（在 ARM 上运行 MySQL），但就目前而言，你可以在 service 中添加 \n```platform```\n，如下所示：\n\n\n```services:\n  db:\n    platform: linux/x86_64\n    image: mysql:5.7\n    ...\n```\n\n\n或者，考虑使用 MariaDB，它应该可以作为直接替代品，例如：\n\n\n```services:\n  db:\n    image: mariadb:10.5.8\n    ...\n```\n\n\n在 M1 上使用 Docker Preview 时，这两种方法对我来说都有效。",
+  "link": "https://stackoverflow.com/questions/65456814/docker-apple-silicon-m1-preview-mysql-no-matching-manifest-for-linux-arm64-v8"
+ },
+ {
+  "category": "docker",
+  "question": "如何在 docker-compose 中使用环境变量？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/29377853/how-can-i-use-environment-variables-in-docker-compose"
+ },
+ {
+  "category": "docker",
+  "question": "\"docker compose\" 和 \"docker-compose\" 有什么区别",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/66514436/difference-between-docker-compose-and-docker-compose"
+ },
+ {
+  "category": "docker",
+  "question": "Docker 容器内的 root 密码",
+  "answer": "使用 `-u` 选项时，你可以使用 root 用户（ID = 0）而不是提供的默认用户登录 Docker 容器。例如：\n\n```docker exec -u 0 -it mycontainer bash```\n\n在容器内，root（id = 0）是默认用户。镜像开发者可以创建额外的用户。这些用户可以通过名称访问。当传递一个数字 ID 时，用户不必存在于容器中。\n\n来自 Docker 文档\n\n更新：当然，你也可以使用 Docker 管理命令来运行容器：\n\n```docker container exec -u 0 -it mycontainer bash```",
+  "link": "https://stackoverflow.com/questions/28721699/root-password-inside-a-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "ImportError: libGL.so.1: cannot open shared object file: No such file or directory",
+  "answer": "在你的 Dockerfile 中添加以下几行：\n\n\n```RUN apt-get update && apt-get install ffmpeg libsm6 libxext6  -y\n```\n\n\n这些命令安装了 cv2 依赖项，这些依赖项通常存在于本地机器上，但在你的 Docker 容器中可能缺失，从而导致该问题。\n\n\n[2022 年 1 月 20 日小更新：正如 Docker 所建议的，切勿单独放置 \n```RUN apt-get update```\n，这会导致缓存问题]",
+  "link": "https://stackoverflow.com/questions/55313610/importerror-libgl-so-1-cannot-open-shared-object-file-no-such-file-or-directo"
+ },
+ {
+  "category": "docker",
+  "question": "如何在 docker 容器内使用 sudo？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/25845538/how-to-use-sudo-inside-a-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "在 Docker 容器内使用 SSH 密钥",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/18136389/using-ssh-keys-inside-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "能否在 Linux Docker 容器中运行 GUI 应用程序？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/16296753/can-you-run-gui-applications-in-a-linux-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "无法在 Docker Ubuntu 镜像中安装软件包",
+  "answer": "这是因为镜像中没有软件包缓存，你需要在安装软件包之前运行：\n\n\n```apt-get update\n```\n\n\n如果你的命令是在 Dockerfile 中，那么你还需要：\n\n\n```apt-get -y install curl\n```\n\n\n要抑制命令的标准输出，可以使用 \n```-qq```\n。例如：\n\n\n```apt-get -qq -y install curl\n```",
+  "link": "https://stackoverflow.com/questions/27273412/cannot-install-packages-inside-docker-ubuntu-image"
+ },
+ {
+  "category": "docker",
+  "question": "在运行中的 Docker 容器上暴露端口",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/19897743/exposing-a-port-on-a-live-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "如何检查失败的 `docker build` 的文件系统？",
+  "answer": "每当 docker 成功执行 Dockerfile 中的 \n```RUN```\n 命令时，\n镜像文件系统中就会提交一个新层。\n方便的是，你可以将这些层的 ID 作为镜像来启动一个新的容器。\n\n\n考虑以下 Dockerfile：\n\n\n```FROM busybox\nRUN echo 'foo' > /tmp/foo.txt\nRUN echo 'bar' >> /tmp/foo.txt\n```\n\n\n并构建它：（当你设置 DOCKER_BUILDKIT=0 时，你可以看到镜像层 ID）\n\n\n```$ DOCKER_BUILDKIT=0 docker build -t so-26220957 .\nSending build context to Docker daemon 47.62 kB\nStep 1/3 : FROM busybox\n ---> 00f017a8c2a6\nStep 2/3 : RUN echo 'foo' > /tmp/foo.txt\n ---> Running in 4dbd01ebf27f\n ---> 044e1532c690\nRemoving intermediate container 4dbd01ebf27f\nStep 3/3 : RUN echo 'bar' >> /tmp/foo.txt\n ---> Running in 74d81cb9d2b1\n ---> 5bd8172529c1\nRemoving intermediate container 74d81cb9d2b1\nSuccessfully built 5bd8172529c1\n```\n\n\n现在你可以从 \n```00f017a8c2a6```\n、\n```044e1532c690```\n 和 \n```5bd8172529c1```\n 启动一个新容器：\n\n\n```$ docker run --rm 00f017a8c2a6 cat /tmp/foo.txt\ncat: /tmp/foo.txt: No such file or directory\n\n$ docker run --rm 044e1532c690 cat /tmp/foo.txt\nfoo\n\n$ docker run --rm 5bd8172529c1 cat /tmp/foo.txt\nfoo\nbar\n```\n\n\n当然，你可能想启动一个 shell 来探索文件系统并尝试命令：\n\n\n```$ docker run --rm -it 044e1532c690 sh      \n/ # ls -l /tmp\ntotal 4\n-rw-r--r--    1 root     root             4 Mar  9 19:09 foo.txt\n/ # cat /tmp/foo.txt \nfoo\n```\n\n\n\n\n当 Dockerfile 中的某个命令失败时，你需要做的是查找 \n前一个层的 ID\n，并在从该 ID 创建的容器中运行 shell：\n\n\n```docker run --rm -it <id_last_working_layer> bash -il\n```\n\n\n进入容器后：\n\n\n\n\n尝试失败的命令，并重现问题\n\n\n然后修复命令并测试它\n\n\n最后用修复后的命令更新你的 Dockerfile\n\n\n\n\n\n\n如果你真的需要在失败的实际层中进行实验，而不是从最后一个工作层开始，请参阅 \nDrew 的回答\n。\n\n\n\n\n更新\n\n从 Docker 版本 20.10 开始，不再支持中间容器哈希。请参阅 \nJannis Schönleber 的回答。",
+  "link": "https://stackoverflow.com/questions/26220957/how-can-i-inspect-the-file-system-of-a-failed-docker-build"
+ },
+ {
+  "category": "docker",
+  "question": "如何在不停止容器的情况下正确地从容器中分离",
+  "answer": "输入 \nCtrl\n+\np\n 然后 \nCtrl\n+\nq\n。这将帮助你从交互模式切换到守护进程模式。\n\n\n请参阅 \n从容器分离的默认按键序列\n 部分，其中指出：\n\n\n\n\n一旦附加到容器，用户可以使用 \n```CTRL-p CTRL-q```\n 按键序列从容器中分离并让其继续运行。这个分离按键序列可以通过 \n```detachKeys```\n 属性进行自定义。[...]",
+  "link": "https://stackoverflow.com/questions/25267372/correct-way-to-detach-from-a-container-without-stopping-it"
+ },
+ {
+  "category": "docker",
+  "question": "清理 docker/overlay2/ 是否安全？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/46672001/is-it-safe-to-clean-docker-overlay2"
+ },
+ {
+  "category": "docker",
+  "question": "Docker 在 Windows 上无法启动",
+  "answer": "该错误与以下部分有关：\n\n\n\n\n在 Windows 上的默认守护进程配置中，docker 客户端必须以提升的权限运行才能连接\n\n\n\n\n\n\n首先，确认 \n```Docker Desktop```\n 应用程序正在运行。如果没有，请启动它：这将启动 docker 守护进程（只需等待几分钟）。\n\n\n\n\n然后，如果错误仍然存在，您可以尝试切换 Docker 守护进程类型，如下所述：\n\n\n\n\n\n\n使用 Powershell\n：\n\n\n\n\n以管理员身份打开 Powershell\n\n\n运行命令：\n```& 'C:\\Program Files\\Docker\\Docker\\DockerCli.exe' -SwitchDaemon```\n\n\n\n\n或者，使用 cmd\n：\n\n\n\n\n以管理员身份打开 cmd\n\n\n运行命令：\n```\"C:\\Program Files\\Docker\\Docker\\DockerCli.exe\" -SwitchDaemon```",
+  "link": "https://stackoverflow.com/questions/40459280/docker-cannot-start-on-windows"
+ },
+ {
+  "category": "docker",
+  "question": "docker: \"build\" 需要 1 个参数。请参阅 'docker build --help'",
+  "answer": "你需要添加一个点，表示使用本地目录中的 Dockerfile。\n\n\n例如：\n\n\n```docker build -t mytag .```\n\n\n这意味着你使用本地目录中的 Dockerfile，如果你使用 docker 1.5，你可以指定其他位置的 Dockerfile。从 docker build 的帮助输出中摘录：\n\n\n```-f, --file=\"\"        Dockerfile 的名称（默认为上下文根目录下的 'Dockerfile'）```",
+  "link": "https://stackoverflow.com/questions/28996907/docker-build-requires-1-argument-see-docker-build-help"
+ },
+ {
+  "category": "docker",
+  "question": "运行和启动 Docker 容器的区别",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/34782678/difference-between-running-and-starting-a-docker-container"
+ },
+ {
+  "category": "docker",
+  "question": "如何使用不同的命令启动已停止的 Docker 容器？",
+  "answer": "找到已停止的容器 ID\n\n\n```docker ps -a\n```\n\n\n提交已停止的容器：\n\n\n此命令将修改后的容器状态保存到一个名为 \n```user/test_image```\n 的新镜像中：\n\n\n```docker commit $CONTAINER_ID user/test_image\n```\n\n\n使用不同的入口点启动/运行：\n\n\n```docker run -ti --entrypoint=sh user/test_image\n```\n\n\n入口点参数说明：\n\n\nhttps://docs.docker.com/engine/reference/run/#/entrypoint-default-command-to-execute-at-runtime\n\n\n注意：\n\n\n上述步骤只是以相同的文件系统状态启动一个已停止的容器。这对于快速排查问题非常有用；但环境变量、网络配置、挂载的卷以及其他内容不会被继承。你应该显式指定所有这些参数。\n\n\n启动已停止容器的步骤借用自这里：（最后一条评论） \nhttps://github.com/docker/docker/issues/18078",
+  "link": "https://stackoverflow.com/questions/32353055/how-to-start-a-stopped-docker-container-with-a-different-command"
+ },
+ {
+  "category": "docker",
+  "question": "在 Dockerfile 中使用带有 'source' 的 RUN 指令不起作用",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/20635472/using-the-run-instruction-in-a-dockerfile-with-source-does-not-work"
+ },
+ {
+  "category": "docker",
+  "question": "如何让 Docker Compose 总是从最新的镜像重新创建容器？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/32612650/how-can-i-get-docker-compose-to-always-recreate-containers-from-fresh-images"
+ },
+ {
+  "category": "docker",
+  "question": "如何在基于 Alpine 的 Docker 镜像中使用 bash？",
+  "answer": "Alpine Docker 镜像默认没有安装 bash。你需要添加以下命令来获取\n```bash```\n：\n\n\n```RUN apk update && apk add bash\n```\n\n\n如果你使用的是\n```Alpine 3.3+```\n，那么只需执行：\n\n\n```RUN apk add --no-cache bash\n```\n\n\n以保持 Docker 镜像体积较小。（感谢 @sprkysnrky 的评论）\n\n\n如果你只是想连接到容器而不需要 bash，可以使用：\n\n\n```docker run --rm -i -t alpine /bin/sh --login\n```",
+  "link": "https://stackoverflow.com/questions/40944479/how-to-use-bash-with-an-alpine-based-docker-image"
+ },
+ {
+  "category": "docker",
+  "question": "Docker 守护进程日志在哪里？",
+  "answer": "这取决于你的操作系统：\nhttps://docs.docker.com/config/daemon/logs/\n\n\n以下是几个位置，以及针对几个操作系统的命令：\n\n\n\n\nUbuntu（旧版，使用 upstart）- \n```/var/log/upstart/docker.log```\n\n\nUbuntu（新版，使用 systemd）- \n```sudo journalctl -fu docker.service```\n\n\nAmazon Linux AMI - \n```/var/log/docker```\n\n\nBoot2Docker - \n```/var/log/docker.log```\n\n\nDebian GNU/Linux - \n```/var/log/daemon.log```\n\n\nCentOS - \n```cat /var/log/message | grep docker```\n\n\nCoreOS - \n```journalctl -u docker.service```\n\n\nFedora - \n```journalctl -u docker.service```\n\n\nRed Hat Enterprise Linux Server - \n```/var/log/messages | grep docker```\n\n\nOpenSuSE - \n```journalctl -u docker.service```\n\n\nmacOS - \n```~/Library/Containers/com.docker.docker/Data/log/vm/d‌ocker.log```\n\n\nWindows - \n```Get-EventLog -LogName Application -Source Docker -After (Get-Date).AddMinutes(-5) | Sort-Object Time```\n，如\n此处\n所述。",
+  "link": "https://stackoverflow.com/questions/30969435/where-is-the-docker-daemon-log"
+ },
+ {
+  "category": "docker",
+  "question": "使用 --build-arg 传递多个参数的 docker build",
+  "answer": "为每个参数使用 \n```--build-arg```\n。\n\n\n如果要传递两个参数，则为每个参数添加 \n```--build-arg```\n，如下所示：\n\n\n```docker build \\\n-t essearch/ess-elasticsearch:1.7.6 \\\n--build-arg number_of_shards=5 \\\n--build-arg number_of_replicas=2 \\\n--no-cache .\n```",
+  "link": "https://stackoverflow.com/questions/42297387/docker-build-with-build-arg-with-multiple-arguments"
+ },
+ {
+  "category": "docker",
+  "question": "为什么 Docker 容器会立即退出？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/28212380/why-docker-container-exits-immediately"
+ },
+ {
+  "category": "docker",
+  "question": "如何列出 Docker 容器中的卷？",
+  "answer": "使用\n```docker ps```\n获取容器 ID。\n\n\n然后使用该容器 ID 在\n```docker inspect```\n命令中查找该容器的挂载点：\n\n\n```docker inspect -f '{{ .Mounts }}' containerid\n```\n\n\n示例：\n\n\n终端 1\n\n\n```docker run -it -v /tmp:/tmp ubuntu:14.04 /bin/bash\n```\n\n\n终端 2\n\n\n```$ docker ps\nCONTAINER ID        IMAGE               COMMAND             CREATED              STATUS              PORTS               NAMES\nddb7b55902cc        ubuntu:14.04        \"/bin/bash\"         About a minute ago   Up About a minute                       distracted_banach   \n\n$ docker inspect -f \"{{ .Mounts }}\" ddb7\nmap[/tmp:/tmp]\n```\n\n\n输出\n\n\n```map[/tmp:/tmp] \n```\n\n\n显然是由于 Docker 命令行工具使用\nGo\n语言实现所致。\n\n\n不带\n```-f format```\n的\n```docker inspect```\n命令输出相当冗长。由于它是 JSON，你可以将其管道传递给 python 或 nodejs 并提取所需的任何内容。\n\n\n```paul@home:~$ docker inspect ddb7\n[{\n    \"AppArmorProfile\": \"\",\n    \"Args\": [],\n    \"Config\": {\n        \"AttachStderr\": true,\n        \"AttachStdin\": true,\n        \"AttachStdout\": true,\n        \"Cmd\": [\n            \"/bin/bash\"\n        ],\n        \"CpuShares\": 0,\n        \"Cpuset\": \"\",\n        \"Domainname\": \"\",\n        \"Entrypoint\": null,\n        \"Env\": [\n            \"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"\n        ],\n        \"ExposedPorts\": null,\n        \"Hostname\": \"ddb7b55902cc\",\n        \"Image\": \"ubuntu:14.04\",\n        \"MacAddress\": \"\",\n        \"Memory\": 0,\n        \"MemorySwap\": 0,\n        \"NetworkDisabled\": false,\n        \"OnBuild\": null,\n        \"OpenStdin\": true,\n        \"PortSpecs\": null,\n        \"StdinOnce\": true,\n        \"Tty\": true,\n        \"User\": \"\",\n        \"Volumes\": null,\n        \"WorkingDir\": \"\"\n    },\n    \"Created\": \"2015-05-08T22:41:44.74862921Z\",\n    \"Driver\": \"devicemapper\",\n    \"ExecDriver\": \"native-0.2\",\n    \"ExecIDs\": null,\n    \"HostConfig\": {\n        \"Binds\": [\n            \"/tmp:/tmp\"\n        ],\n        \"CapAdd\": null,\n        \"CapDrop\": null,\n        \"ContainerIDFile\": \"\",\n        \"Devices\": [],\n        \"Dns\": null,\n        \"DnsSearch\": null,\n        \"ExtraHosts\": null,\n        \"IpcMode\": \"\",\n        \"Links\": null,\n        \"LxcConf\": [],\n        \"NetworkMode\": \"bridge\",\n        \"PidMode\": \"\",\n        \"PortBindings\": {},\n        \"Privileged\": false,\n        \"PublishAllPorts\": false,\n        \"ReadonlyRootfs\": false,\n        \"RestartPolicy\": {\n            \"MaximumRetryCount\": 0,\n            \"Name\": \"\"\n        },\n        \"SecurityOpt\": null,\n        \"VolumesFrom\": null\n    },\n    \"HostnamePath\": \"/var/lib/docker/containers/ddb7b55902cc328612d794570fe9a936d96a9644411e89c4ea116a5fef4c311a/hostname\",\n    \"HostsPath\": \"/var/lib/docker/containers/ddb7b55902cc328612d794570fe9a936d96a9644411e89c4ea116a5fef4c311a/hosts\",\n    \"Id\": \"ddb7b55902cc328612d794570fe9a936d96a9644411e89c4ea116a5fef4c311a\",\n    \"Image\": \"ed5a78b7b42bde1e3e4c2996e02da778882dca78f8919cbd0deb6694803edec3\",\n    \"MountLabel\": \"\",\n    \"Name\": \"/distracted_banach\",\n    \"NetworkSettings\": {\n        \"Bridge\": \"docker0\",\n        \"Gateway\": \"172.17.42.1\",\n        \"GlobalIPv6Address\": \"\",\n        \"GlobalIPv6PrefixLen\": 0,\n        \"IPAddress\": \"172.17.0.4\",\n        \"IPPrefixLen\": 16,\n        \"IPv6Gateway\": \"\",\n        \"LinkLocalIPv6Address\": \"fe80::42:acff:fe11:4\",\n        \"LinkLocalIPv6PrefixLen\": 64,\n        \"MacAddress\": \"02:42:ac:11:00:04\",\n        \"PortMapping\": null,\n        \"Ports\": {}\n    },\n    \"Path\": \"/bin/bash\",\n    \"ProcessLabel\": \"\",\n    \"ResolvConfPath\": \"/var/lib/docker/containers/ddb7b55902cc328612d794570fe9a936d96a9644411e89c4ea116a5fef4c311a/resolv.conf\",\n    \"RestartCount\": 0,\n    \"State\": {\n        \"Error\": \"\",\n        \"ExitCode\": 0,\n        \"FinishedAt\": \"0001-01-01T00:00:00Z\",\n        \"OOMKilled\": false,\n        \"Paused\": false,\n        \"Pid\": 6115,\n        \"Restarting\": false,\n        \"Running\": true,\n        \"StartedAt\": \"2015-05-08T22:41:45.367432585Z\"\n    },\n    \"Volumes\": {\n        \"/tmp\": \"/tmp\"\n    },\n    \"VolumesRW\": {\n        \"/tmp\": true\n    }\n}\n]\n```\n\n\n```docker history <image name>```\n将显示镜像中烘焙的层。不幸的是，\n```docker history```\n似乎受限于其格式化方式以及缺乏选择显示内容的选项。\n\n\n你可以通过 --no-trunc 标志选择简洁和详细格式。\n\n\n```$ docker history drpaulbrewer/spark-worker\nIMAGE               CREATED             CREATED BY                                      SIZE\n438ff4e1753a        2 weeks ago         /bin/sh -c #(nop) CMD [/bin/sh -c /spark/my-s   0 B\n6b664e299724        2 weeks ago         /bin/sh -c #(nop) ADD file:09da603c5f0dca7cc6   296 B\nf6ae126ae124        2 weeks ago         /bin/sh -c #(nop) MAINTAINER drpaulbrewer@eaf   0 B\n70bcb3ffaec9        2 weeks ago         /bin/sh -c #(nop) EXPOSE 2222/tcp 4040/tcp 60   0 B\n1332ac203849        2 weeks ago         /bin/sh -c apt-get update && apt-get --yes up   1.481 GB\n8e6f1e0bb1b0        2 weeks ago         /bin/sh -c sed -e 's/archive.ubuntu.com/www.g   1.975 kB\nb3d242776b1f        2 weeks ago         /bin/sh -c #(nop) WORKDIR /spark/spark-1.3.1    0 B\nac0d6cc5aa3f        2 weeks ago         /bin/sh -c #(nop) ADD file:b6549e3d28e2d149c0   25.89 MB\n6ee404a44b3f        5 weeks ago         /bin/sh -c #(nop) WORKDIR /spark                0 B\nc167faff18cf        5 weeks ago         /bin/sh -c adduser --disabled-password --home   335.1 kB\nf55d468318a4        5 weeks ago         /bin/sh -c #(nop) MAINTAINER drpaulbrewer@eaf   0 B\n19c8c047d0fe        8 weeks ago         /bin/sh -c #(nop) CMD [/bin/bash]               0 B\nc44d976a473f        8 weeks ago         /bin/sh -c sed -i 's/^#\\s*\\(deb.*universe\\)$/   1.879 kB\n14dbf1d35e28        8 weeks ago         /bin/sh -c echo '#!/bin/sh' > /usr/sbin/polic   701 B\nafa7a164a0d2        8 weeks ago         /bin/sh -c #(nop) ADD file:57f97478006b988c0c   131.5 MB\n511136ea3c5a        23 months ago                                                       0 B\n```\n\n\n这是一个详细示例。\n\n\n```$ docker history --no-trunc=true drpaulbrewer/spark-worker\nIMAGE                                                              CREATED             CREATED BY                                                                                                                                                                                                                                                                                                                                                                                                                        SIZE\n438ff4e1753a60779f389a3de593d41f7d24a61da6e1df76dded74a688febd64   2 weeks ago         /bin/sh -c #(nop) CMD [/bin/sh -c /spark/my-spark-worker.sh]                                                                                                                                                                                                                                                                                                                                                                      0 B\n6b664e29972481b8d6d47f98167f110609d9599f48001c3ca11c22364196c98a   2 weeks ago         /bin/sh -c #(nop) ADD file:09da603c5f0dca7cc60f1911caf30c3c70df5e4783f7eb10468e70df66e2109f in /spark/                                                                                                                                                                                                                                                                                                                            296 B\nf6ae126ae124ca211c04a1257510930b37ea78425e31a273ea0b1495fa176c57   2 weeks ago         /bin/sh -c #(nop) MAINTAINER drpaulbrewer@eaftc.com                                                                                                                                                                                                                                                                                                                                                                               0 B\n70bcb3ffaec97a0d14e93b170ed70cc7d68c3c9dfb0222c1d360a300d6e05255   2 weeks ago         /bin/sh -c #(nop) EXPOSE 2222/tcp 4040/tcp 6066/tcp 7077/tcp 7777/tcp 8080/tcp 8081/tcp                                                                                                                                                                                                                                                                                                                                           0 B\n1332ac20384947fe1f15107213b675e5be36a68d72f0e81153d6d5a21acf35af   2 weeks ago         /bin/sh -c apt-get update && apt-get --yes upgrade     && apt-get --yes install sed nano curl wget openjdk-8-jdk scala     && echo \"JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64\" >>/etc/environment     && export MAVEN_OPTS=\"-Xmx2g -XX:MaxPermSize=512M -XX:ReservedCodeCacheSize=512m\"     && ./build/mvn -Phive -Phive-thriftserver -DskipTests clean package     && chown -R spark:spark /spark     && mkdir /var/run/sshd   1.481 GB\n8e6f1e0bb1b0b9286947d3a4b443cc8099b00f9670aab1d58654051e06f62e51   2 weeks ago         /bin/sh -c sed -e 's/archive.ubuntu.com/www.gtlib.gatech.edu\\/pub/' /etc/apt/sources.list > /tmp/sources.list && mv /tmp/sources.list /etc/apt/sources.list                                                                                                                                                                                                                                                                       1.975 kB\nb3d242776b1f1f1ae5685471d06a91a68f92845ef6fc6445d831835cd55e5d0b   2 weeks ago         /bin/sh -c #(nop) WORKDIR /spark/spark-1.3.1                                                                                                                                                                                                                                                                                                                                                                                      0 B\nac0d6cc5aa3fdc3b65fc0173f6775af283c3c395c8dae945cf23940435f2785d   2 weeks ago         /bin/sh -c #(nop) ADD file:b6549e3d28e2d149c0bc84f69eb0beab16f62780fc4889bcc64cfc9ce9f762d6 in /spark/                                                                                                                                                                                                                                                                                                                            25.89 MB\n6ee404a44b3fdd3ef3318dc10f3d002f1995eea238c78f4eeb9733d00bb29404   5 weeks ago         /bin/sh -c #(nop) WORKDIR /spark                                                                                                                                                                                                                                                                                                                                                                                                  0 B\nc167faff18cfecedef30343ef1cb54aca45f4ef0478a3f6296746683f69d601b   5 weeks ago         /bin/sh -c adduser --disabled-password --home /spark spark                                                                                                                                                                                                                                                                                                                                                                        335.1 kB\nf55d468318a4778733160d377c5d350dc8f593683009699c2af85244471b15a3   5 weeks ago         /bin/sh -c #(nop) MAINTAINER drpaulbrewer@eaftc.com                                                                                                                                                                                                                                                                                                                                                                               0 B\n19c8c047d0fe2de7239120f2b5c1a20bbbcb4d3eb9cbf0efa59ab27ab047377a   8 weeks ago         /bin/sh -c #(nop) CMD [/bin/bash]                                                                                                                                                                                                                                                                                                                                                                                                 0 B\nc44d976a473f143937ef91449c73f2cabd109b540f6edf54facb9bc2b4fff136   8 weeks ago         /bin/sh -c sed -i 's/^#\\s*\\(deb.*universe\\)$/\\1/g' /etc/apt/sources.list                                                                                                                                                                                                                                                                                                                                                          1.879 kB\n14dbf1d35e2849a00c6c2628055030fa84b4fb55eaadbe0ecad8b82df65cc0db   8 weeks ago         /bin/sh -c echo '#!/bin/sh' > /usr/sbin/policy-rc.d                                                                                                                                                                                                                                                                                                                                                                               && echo 'exit 101' >> /usr/sbin/policy-rc.d    && chmod +x /usr/sbin/policy-rc.d                        && dpkg-divert --local --rename --add /sbin/initctl    && cp -a /usr/sbin/policy-rc.d /sbin/initctl    && sed -i 's/^exit.*/exit 0/' /sbin/initctl                        && echo 'force-unsafe-io' > /etc/dpkg/dpkg.cfg.d/docker-apt-speedup                        && echo 'DPkg::Post-Invoke { \"rm -f /var/cache/apt/archives/*.deb /var/cache/apt/archives/partial/*.deb /var/cache/apt/*.bin || true\"; };' > /etc/apt/apt.conf.d/docker-clean    && echo 'APT::Update::Post-Invoke { \"rm -f /var/cache/apt/archives/*.deb /var/cache/apt/archives/partial/*.deb /var/cache/apt/*.bin || true\"; };' >> /etc/apt/apt.conf.d/docker-clean    && echo 'Dir::Cache::pkgcache \"\"; Dir::Cache::srcpkgcache \"\";' >> /etc/apt/apt.conf.d/docker-clean                        && echo 'Acquire::Languages \"none\";' > /etc/apt/apt.conf.d/docker-no-languages                        && echo 'Acquire::GzipIndexes \"true\"; Acquire::CompressionTypes::Order:: \"gz\";' > /etc/apt/apt.conf.d/docker-gzip-indexes   701 B\nafa7a164a0d215dbf45cd1aadad2a4d12b8e33fc890064568cc2ea6d42ef9b3c   8 weeks ago         /bin/sh -c #(nop) ADD file:57f97478006b988c0c68e5bf82684372e427fd45f21cd7baf5d974d2cfb29e65 in /                                                                                                                                                                                                                                                                                                                                  131.5 MB\n511136ea3c5a64f264b78b5433614aec563103b4d4702f3ba7d4d2698e22c158   23 months ago                                                                                                                                                                                                                                                                                                                                                                                                                                         0 B\n```",
+  "link": "https://stackoverflow.com/questions/30133664/how-do-you-list-volumes-in-docker-containers"
+ },
+ {
+  "category": "docker",
+  "question": "容器退出时我会丢失数据",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/19585028/i-lose-my-data-when-the-container-exits"
+ },
+ {
+  "category": "docker",
+  "question": "docker_compose.yml 中 links 和 depends_on 的区别",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/35832095/difference-between-links-and-depends-on-in-docker-compose-yml"
+ }
+]

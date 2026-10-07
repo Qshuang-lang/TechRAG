@@ -1,0 +1,602 @@
+[
+ {
+  "category": "mysql",
+  "question": "在 MySQL 中，我应该使用 datetime 还是 timestamp 数据类型？",
+  "answer": "MySQL 中的 timestamp 通常用于跟踪记录的更改，并且每次记录更改时都会更新。如果你想存储特定的值，应该使用 datetime 字段。\n\n\n如果你的意思是在使用 UNIX timestamp 还是原生 MySQL datetime 字段之间做决定，那就选择原生的 \n```DATETIME```\n 格式。这样你可以在 MySQL 内部进行计算\n\n```(\"SELECT DATE_ADD(my_datetime, INTERVAL 1 DAY)\")```\n 并且在查询记录时，如果需要用 PHP 操作，可以轻松地将值的格式转换为 UNIX timestamp \n```(\"SELECT UNIX_TIMESTAMP(my_datetime)\")```\n。\n\n\n此外，从 MySQL 8.0.19 开始，\n```DATETIME```\n \n支持时区偏移\n，所以现在使用 \n```TIMESTAMP```\n 的理由更少了。",
+  "link": "https://stackoverflow.com/questions/409286/should-i-use-the-datetime-or-timestamp-data-type-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中使用命令行导入 SQL 文件？",
+  "answer": "试试：\n\n\n```mysql -u username -p database_name < file.sql\n```\n\n\n查看 \nMySQL Options\n。\n\n\n注意 1：\n最好使用 SQL 文件 \n```file.sql```\n 的完整路径。\n\n\n注意 2：\n在使用 \n```mysqldump```\n 时，使用 \n```-R```\n 和 \n```--triggers```\n 来保留原始数据库的存储过程和触发器。默认情况下它们不会被复制。\n\n\n注意 3：\n如果数据库不存在，并且导出的 SQL 不包含 \n```CREATE DATABASE```\n（使用 \n```--no-create-db```\n 或 \n```-n```\n 选项导出），你可能需要先从 MySQL 创建（空）数据库，然后才能导入。",
+  "link": "https://stackoverflow.com/questions/17666249/how-can-i-import-an-sql-file-using-the-command-line-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 PHP 中防止 SQL 注入？",
+  "answer": "无论使用哪种数据库，避免 SQL 注入攻击的\n正确\n方法都是\n将数据与 SQL 分离\n，这样数据就始终是数据，\n永远不会被\n SQL 解析器解释为命令。虽然可以创建带有正确格式化数据部分的 SQL 语句，但如果你没有\n完全\n理解其中的细节，就应该始终\n使用预处理语句和参数化查询。\n 这些 SQL 语句会与任何参数分开发送到数据库服务器并由其解析。这样攻击者就无法注入恶意 SQL。\n\n\n基本上有两种方法可以实现这一点：\n\n\n\n\n使用 \nPDO\n（适用于任何支持的数据库驱动）：\n\n\n```$stmt = $pdo->prepare('SELECT * FROM users WHERE name = :name');\n$stmt->execute([ 'name' => $name ]);\n\nforeach ($stmt as $row) {\n    // Do something with $row\n}\n```\n\n\n\n\n使用 \nMySQLi\n（适用于 MySQL）：\n\n\n自 PHP 8.2+ 起\n，我们可以使用 \n```execute_query()```\n，它在一个方法中完成准备、绑定参数和执行 SQL 语句：\n\n\n```$result = $db->execute_query('SELECT * FROM users WHERE name = ?', [$name]);\nwhile ($row = $result->fetch_assoc()) {\n    // Do something with $row\n}\n```\n\n\n在 PHP 8.1 及之前：\n\n\n```$stmt = $db->prepare('SELECT * FROM employees WHERE name = ?');\n$stmt->bind_param('s', $name); // 's' specifies variable type 'string'\n$stmt->execute();\n$result = $stmt->get_result();\nwhile ($row = $result->fetch_assoc()) {\n    // Do something with $row\n}\n```\n\n\n\n\n\n\n如果你连接的不是 MySQL 数据库，还有驱动特定的第二种选择可供参考（例如，PostgreSQL 的 \n```pg_prepare()```\n 和 \n```pg_execute()```\n）。PDO 是通用选择。\n\n\n\n\n正确设置连接\n\n\nPDO\n\n\n请注意，使用 \nPDO\n 访问 MySQL 数据库时，默认情况下\n不会使用\n真正的预处理语句。要解决这个问题，必须禁用预处理语句的模拟。使用 \nPDO\n 创建连接的示例如下：\n\n\n```$dsn = 'mysql:dbname=dbtest;host=127.0.0.1;charset=utf8mb4';\n$dbConnection = new PDO($dsn, 'user', 'password');\n\n$dbConnection->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);\n$dbConnection->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);\n```\n\n\n在上面的示例中，错误模式并非严格必需，\n但建议添加\n。这样 PDO 会通过抛出 \n```PDOException```\n 来通知你所有 MySQL 错误。\n\n\n然而，\n必须\n添加的是第一行 \n```setAttribute()```\n，它告诉 PDO 禁用模拟预处理语句并使用\n真正的\n预处理语句。这确保语句和值在发送到 MySQL 服务器之前不会被 PHP 解析（让潜在攻击者没有机会注入恶意 SQL）。\n\n\n虽然你可以在构造函数的选项中设置 \n```charset```\n，但需要注意的是，'较旧'的 PHP 版本（5.3.6 之前）会\n静默忽略 DSN 中的 charset 参数\n。\n\n\nMysqli\n\n\n对于 mysqli，我们必须遵循同样的流程：\n\n\n```mysqli_report(MYSQLI_REPORT_ERROR | MYSQLI_REPORT_STRICT); // error reporting\n$dbConnection = new mysqli('127.0.0.1', 'username', 'password', 'test');\n$dbConnection->set_charset('utf8mb4'); // charset\n```\n\n\n\n\n解释\n\n\n你传递给 \n```prepare```\n 的 SQL 语句由数据库服务器解析和编译。通过指定参数（可以是 \n```?```\n 或上面示例中的命名参数 \n```:name```\n），你告诉数据库引擎你想在哪里进行过滤。然后当你调用 \n```execute```\n 时，预处理语句会与你指定的参数值组合。\n\n\n这里重要的是，参数值与编译后的语句组合，而不是与 SQL 字符串组合。SQL 注入的原理是诱使脚本在创建发送到数据库的 SQL 时包含恶意字符串。因此，通过将实际 SQL 与参数分开发送，你降低了最终得到非预期结果的风险。\n\n\n使用预处理语句时发送的任何参数都会被当作字符串处理（当然，数据库引擎可能会进行一些优化，因此参数最终也可能变成数字）。在上面的示例中，如果 \n```$name```\n 变量包含 \n```'Sarah'; DELETE FROM employees```\n，结果就只是搜索字符串 \n```\"'Sarah'; DELETE FROM employees\"```\n，你不会最终得到一个空表。\n\n\n使用预处理语句的另一个好处是，如果你在同一会话中多次执行同一条语句，它只会被解析和编译一次，从而获得一些速度提升。\n\n\n哦，既然你问到了插入操作该怎么做，这里有一个示例（使用 PDO）：\n\n\n```$stmt = $db->prepare('INSERT INTO table (column) VALUES (:column)');\n$stmt->execute(['column' => $value]);\n```\n\n\n\n\n预处理语句可以用于动态查询吗？\n\n\n虽然你仍然可以对查询参数使用预处理语句，但动态查询本身的结构无法参数化，某些查询特性也无法参数化。\n\n\n对于这些特定场景，最好的做法是使用白名单过滤器来限制可能的值。\n\n\n```// Value whitelist\n// $dir can only be 'DESC', otherwise it will be 'ASC'\nif (empty($dir) || $dir !== 'DESC') {\n   $dir = 'ASC';\n}\n```",
+  "link": "https://stackoverflow.com/questions/60174/how-can-i-prevent-sql-injection-in-php"
+ },
+ {
+  "category": "mysql",
+  "question": "为什么我不应该在 PHP 中使用 mysql_* 函数？",
+  "answer": "MySQL 扩展：\n\n\n\n\n已不再积极开发\n\n\n自 PHP 5.5（2013 年 6 月发布）起被\n正式\n弃用。\n\n\n自 PHP 7.0（2015 年 12 月发布）起已被\n完全移除\n\n\n\n\n这意味着截至 \n2018 年 12 月 31 日\n，它不存在于任何受支持的 PHP 版本中。如果你使用的 PHP 版本支持它，那么你使用的版本不会修复安全问题。\n\n\n\n\n缺少面向对象接口\n\n\n不支持：\n\n\n\n\n非阻塞、异步查询\n\n\n预处理语句\n或参数化查询\n\n\n存储过程\n\n\n多语句\n\n\n事务\n\n\n\"新\"密码认证方式（MySQL 5.6 中默认开启；MySQL 5.7 中必需）\n\n\nMySQL 5.1 或更高版本中的任何新功能\n\n\n\n\n\n\n由于它已被弃用，使用它会使你的代码缺乏前瞻性。\n\n\n不支持预处理语句这一点尤其重要，因为与使用单独的函数调用手动转义相比，预处理语句提供了一种更清晰、更不易出错的方式来转义和引用外部数据。\n\n\n参见\nSQL 扩展比较\n。",
+  "link": "https://stackoverflow.com/questions/12859942/why-shouldnt-i-use-mysql-functions-in-php"
+ },
+ {
+  "category": "mysql",
+  "question": "INNER JOIN、LEFT JOIN、RIGHT JOIN 和 FULL JOIN 之间有什么区别？",
+  "answer": "SQL JOIN 子句用于基于两个或多个表之间的共同字段来合并它们的行。\n\n\n\n\nSQL 中有不同类型的连接：\n\n\nINNER JOIN\n：当两个表中都有匹配时返回行。\n\n\nLEFT JOIN\n：返回左表中的所有行，即使右表中没有匹配。\n\n\nRIGHT JOIN\n：返回右表中的所有行，即使左表中没有匹配。\n\n\nFULL JOIN\n：结合左外连接和右外连接的结果。\n\n\n连接后的表将包含两个表中的所有记录，并为任一侧缺失的匹配填充 NULL。\n\n\nSELF JOIN\n：将表与自身连接，就像该表是两个表一样，在 SQL 语句中临时重命名至少一个表。\n\n\nCARTESIAN JOIN\n：返回两个或多个连接表中记录集的笛卡尔积。\n\n\n我们可以详细讨论前四种连接：\n\n\n我们有两个具有以下值的表。\n\n\nTableA\n\n\n```id  firstName                  lastName\n.......................................\n1   arun                        prasanth                 \n2   ann                         antony                   \n3   sruthy                      abc                      \n6   new                         abc                                           \n```\n\n\nTableB\n\n\n```id2 age Place\n................\n1   24  kerala\n2   24  usa\n3   25  ekm\n5   24  chennai\n```\n\n\n....................................................................\n\n\nINNER JOIN\n\n\n注意\n：给出两个表的交集，即 TableA 和 TableB 共有的行。\n\n\n语法\n\n\n```SELECT table1.column1, table2.column2...\n  FROM table1\n INNER JOIN table2\n    ON table1.common_field = table2.common_field;\n```\n\n\n在我们的示例表中应用它：\n\n\n```SELECT TableA.firstName,TableA.lastName,TableB.age,TableB.Place\n  FROM TableA\n INNER JOIN TableB\n    ON TableA.id = TableB.id2;\n```\n\n\n结果\n\n\n```firstName       lastName       age  Place\n..............................................\narun            prasanth        24  kerala\nann             antony          24  usa\nsruthy          abc             25  ekm\n```\n\n\nLEFT JOIN\n\n\n注意\n：给出 TableA 中所有选定的行，加上 TableB 中任何共有的选定行。\n\n\n语法\n\n\n```SELECT table1.column1, table2.column2...\n  FROM table1\n  LEFT JOIN table2\n    ON table1.common_field = table2.common_field;\n```\n\n\n在我们的示例表中应用它：\n\n\n```SELECT TableA.firstName,TableA.lastName,TableB.age,TableB.Place\n  FROM TableA\n  LEFT JOIN TableB\n    ON TableA.id = TableB.id2;\n```\n\n\n结果\n\n\n```firstName                   lastName                    age   Place\n...............................................................................\narun                        prasanth                    24    kerala\nann                         antony                      24    usa\nsruthy                      abc                         25    ekm\nnew                         abc                         NULL  NULL\n```\n\n\nRIGHT JOIN\n\n\n注意\n：给出 TableB 中所有选定的行，加上 TableA 中任何共有的选定行。\n\n\n语法\n\n\n```SELECT table1.column1, table2.column2...\n  FROM table1\n RIGHT JOIN table2\n    ON table1.common_field = table2.common_field;\n```\n\n\n在我们的示例表中应用它：\n\n\n```SELECT TableA.firstName,TableA.lastName,TableB.age,TableB.Place\n  FROM TableA\n RIGHT JOIN TableB\n    ON TableA.id = TableB.id2;\n```\n\n\n结果\n\n\n```firstName                   lastName                    age     Place\n...............................................................................\narun                        prasanth                    24     kerala\nann                         antony                      24     usa\nsruthy                      abc                         25     ekm\nNULL                        NULL                        24     chennai\n```\n\n\nFULL JOIN\n\n\n注意\n：返回两个表中所有选定的值。\n\n\n语法\n\n\n```SELECT table1.column1, table2.column2...\n  FROM table1\n  FULL JOIN table2\n    ON table1.common_field = table2.common_field;\n```\n\n\n在我们的示例表中应用它：\n\n\n```SELECT TableA.firstName,TableA.lastName,TableB.age,TableB.Place\n  FROM TableA\n  FULL JOIN TableB\n    ON TableA.id = TableB.id2;\n```\n\n\n结果\n\n\n```firstName                   lastName                    age    Place\n...............................................................................\narun                        prasanth                    24    kerala\nann                         antony                      24    usa\nsruthy                      abc                         25    ekm\nnew                         abc                         NULL  NULL\nNULL                        NULL                        24    chennai\n```\n\n\n有趣的事实\n\n\n\n\n对于 INNER 连接，顺序无关紧要。\n\n\n对于（LEFT、RIGHT 或 FULL）OUTER 连接，顺序很重要。\n\n\n\n\n最好查看这个 \n链接\n，它会给你关于连接顺序的有趣细节。",
+  "link": "https://stackoverflow.com/questions/5706437/whats-the-difference-between-inner-join-left-join-right-join-and-full-join"
+ },
+ {
+  "category": "mysql",
+  "question": "使用 pip 安装特定包版本",
+  "answer": "TL;DR\n：\n\n\n截至 2022-12-28 的更新\n：\n\n\n```pip install --force-reinstall -v```\n\n\n例如： \n```pip install --force-reinstall -v \"MySQL_python==1.2.2\"```\n\n\n这些选项的含义：\n\n\n\n\n```--force-reinstall```\n 是一个选项，用于重新安装所有包，即使它们已经是最新的。\n\n\n```-v```\n 表示详细模式。你可以组合使用以获得更高的详细程度（即 \n```-vv```\n），最多 3 次（例如 \n```--force-reinstall -vvv```\n）。\n\n\n\n\n感谢 \n@Peter\n 指出这一点（而且随着问题首次提出时间的推移，问题的上下文似乎已经扩展了！），Python 的文档\n 讨论了使用 \n```-I```\n 的一个注意事项，即如果你的包是用不同的包管理器安装的，或者如果你的包是/曾经是不同的版本，它可能会破坏你的安装。\n\n\n\n\n原始答案：\n\n\n\n\n```pip install -Iv```\n（即 \n```pip install -Iv MySQL_python==1.2.2```\n）\n\n\n\n\n\n\n这些选项的含义：\n\n\n\n\n```-I```\n 代表 \n```--ignore-installed```\n，它将忽略已安装的包并覆盖它们。\n\n\n```-v```\n 表示详细模式。你可以组合使用以获得更高的详细程度（即 \n```-vv```\n），最多 3 次（例如 \n```-Ivvv```\n）。\n\n\n\n\n有关更多信息，请参阅 \n```pip install --help```\n\n\n首先，我看到你尝试做的事情有两个问题。由于你已经安装了一个版本，你应该卸载当前现有的驱动程序，或者使用 \n```pip install -I MySQL_python==1.2.2```\n\n\n然而，你很快会发现这不起作用。如果你查看 pip 的安装日志，或者执行 \n```pip install -Iv MySQL_python==1.2.2```\n，你会发现 PyPI URL 链接对 MySQL_python v1.2.2 不起作用。你可以在这里验证： \nhttp://pypi.python.org/pypi/MySQL-python/1.2.2\n\n\n下载链接返回 404，并且由于 sourceforge.net 最近的升级和 PyPI 的过期 URL，备用 URL 链接正在无限重定向。\n\n\n因此，要正确安装驱动程序，你可以按照以下步骤操作：\n\n\n```pip uninstall MySQL_python\npip install -Iv http://sourceforge.net/projects/mysql-python/files/mysql-python/1.2.2/MySQL-python-1.2.2.tar.gz/download\n```",
+  "link": "https://stackoverflow.com/questions/5226311/installing-specific-package-version-with-pip"
+ },
+ {
+  "category": "mysql",
+  "question": "SQL 只选择某列具有最大值的行",
+  "answer": "乍一看...\n\n\n你只需要一个带有 \n```MAX```\n 聚合函数的 \n```GROUP BY```\n 子句：\n\n\n```SELECT id, MAX(rev)\nFROM YourTable\nGROUP BY id\n```\n\n\n但事情从来没那么简单，对吧？\n\n\n我注意到你还需要 \n```content```\n 列。\n\n\n这是 SQL 中一个非常常见的问题：按某个分组标识符，找出某列具有最大值的整行数据。在我的职业生涯中经常听到这个问题。实际上，这也是我在当前工作的技术面试中回答过的问题之一。\n\n\n事实上，这个问题如此常见，以至于 Stack Overflow 社区专门创建了一个标签来处理这类问题：\n greatest-n-per-group\n。\n\n\n基本上，有两种方法可以解决这个问题：\n\n\n使用简单的 \n```group-identifier, max-value-in-group```\n 子查询进行连接\n\n\n在这种方法中，你首先在子查询中找到 \n```group-identifier, max-value-in-group```\n（上面已经解决）。然后，将你的表与子查询在 \n```group-identifier```\n 和 \n```max-value-in-group```\n 上做等值连接：\n\n\n```SELECT a.id, a.rev, a.contents\nFROM YourTable a\nINNER JOIN (\n    SELECT id, MAX(rev) rev\n    FROM YourTable\n    GROUP BY id\n) b ON a.id = b.id AND a.rev = b.rev\n```\n\n\n使用自连接，调整连接条件和过滤条件\n\n\n在这种方法中，你将表与自身进行左连接。等值条件放在 \n```group-identifier```\n 上。然后，有两个巧妙的操作：\n\n\n\n\n第二个连接条件是左侧值小于右侧值\n\n\n当你执行第 1 步时，实际具有最大值的行在右侧会有 \n```NULL```\n（记住，这是 \n```LEFT JOIN```\n）。然后，我们过滤连接结果，只显示右侧为 \n```NULL```\n 的行。\n\n\n\n\n最终得到：\n\n\n```SELECT a.*\nFROM YourTable a\nLEFT OUTER JOIN YourTable b\n    ON a.id = b.id AND a.rev < b.rev\nWHERE b.id IS NULL;\n```\n\n\n结论\n\n\n两种方法得到的结果完全相同。\n\n\n如果对于某个 \n```group-identifier```\n 存在两行具有 \n```max-value-in-group```\n，那么在两种方法中这两行都会出现在结果中。\n\n\n两种方法都兼容 SQL ANSI 标准，因此无论你使用哪种 RDBMS（无论其“流派”如何），都能正常工作。\n\n\n两种方法在性能上都很友好，但实际效果可能因情况而异（RDBMS、数据库结构、索引等）。因此，当你选择其中一种方法时，请进行\n基准测试\n。并确保选择对你来说最有意义的那一种。",
+  "link": "https://stackoverflow.com/questions/7745609/sql-select-only-rows-with-max-value-on-a-column"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中重置 AUTO_INCREMENT",
+  "answer": "你可以用以下命令重置计数器：\n\n\n```ALTER TABLE tablename AUTO_INCREMENT = 1\n```\n\n\nInnoDB\n\n\n对于 \nInnoDB\n，你不能将 \n```auto_increment```\n 值设置为小于或等于当前最高索引的值。（引用自 \nViralPatel\n）：\n\n\n\n\n注意，你不能将计数器重置为小于或等于任何已使用值的值。对于 MyISAM，如果该值小于或等于 AUTO_INCREMENT 列中当前的最大值，则该值会被重置为当前最大值加一。对于 InnoDB，如果该值小于列中的当前最大值，不会发生错误，且当前序列值不会改变。\n\n\n\n\nAria\n\n\n在使用 \nAria\n 存储引擎的表中，\nauto_increment\n 值可以设置为任意值，甚至可以低于当前最大值。然而，下一次插入 \n将\n 使用下一个可用值（最大值 + 1），忽略所设置的值。如果设置为更高的值，它将从该值继续使用并递增。文档对此并不特别清楚，但这是在 Mariadb 10.11.3 中观察到的。\n\n\n另请参阅\n\n\n请参阅 \nHow can I reset an MySQL AutoIncrement using a MAX value from another table?\n 了解如何动态获取一个可接受的值。",
+  "link": "https://stackoverflow.com/questions/8923114/how-to-reset-auto-increment-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "我可以将多个 MySQL 行连接到一个字段中吗？",
+  "answer": "你可以使用\n```GROUP_CONCAT```\n：\n\n\n```SELECT person_id,\n   GROUP_CONCAT(hobbies SEPARATOR ', ')\nFROM peoples_hobbies\nGROUP BY person_id;\n```\n\n\n正如 Ludwig 在\n他的评论中\n所说，你可以添加\n```DISTINCT```\n运算符来避免重复：\n\n\n```SELECT person_id,\n   GROUP_CONCAT(DISTINCT hobbies SEPARATOR ', ')\nFROM peoples_hobbies\nGROUP BY person_id;\n```\n\n\n正如 Jan 在\n他们的评论中\n所说，你还可以在合并之前使用\n```ORDER BY```\n对值进行排序：\n\n\n```SELECT person_id, \n       GROUP_CONCAT(hobbies ORDER BY hobbies ASC SEPARATOR ', ')\nFROM peoples_hobbies\nGROUP BY person_id;\n```\n\n\n正如 Dag 在\n他的评论中\n所说，结果有 1024 字节的限制。要解决这个问题，请在查询之前运行以下查询：\n\n\n```SET group_concat_max_len = 2048;\n```\n\n\n当然，你可以根据需要更改\n```2048```\n。要计算并赋值：\n\n\n```SET group_concat_max_len = CAST(\n                     (SELECT SUM(LENGTH(hobbies)) + COUNT(*) * LENGTH(', ')\n                           FROM peoples_hobbies\n                           GROUP BY person_id) AS UNSIGNED);\n```",
+  "link": "https://stackoverflow.com/questions/276927/can-i-concatenate-multiple-mysql-rows-into-one-field"
+ },
+ {
+  "category": "mysql",
+  "question": "如何以 CSV 格式输出 MySQL 查询结果？",
+  "answer": "来自\n将 MySQL 查询结果保存到文本或 CSV 文件\n：\n\n\n```SELECT order_id,product_name,qty\nFROM orders\nWHERE foo = 'bar'\nINTO OUTFILE '/var/lib/mysql-files/orders.csv'\nFIELDS TERMINATED BY ','\nENCLOSED BY '\"'\nLINES TERMINATED BY '\\n';\n```\n\n\n注意：在较新版本的 MySQL 中，该语法可能需要重新排序为\n\n\n```SELECT order_id,product_name,qty\nINTO OUTFILE '/var/lib/mysql-files/orders.csv'\nFIELDS TERMINATED BY ','\nENCLOSED BY '\"'\nLINES TERMINATED BY '\\n'\nFROM orders\nWHERE foo = 'bar';\n```\n\n\n使用此命令时，列名不会被导出。\n\n\n另请注意，\n```/var/lib/mysql-files/orders.csv```\n将位于运行 MySQL 的\n服务器\n上。运行 MySQL 进程的用户必须具有写入所选目录的权限，否则该命令将失败。\n\n\n如果你想从远程服务器（尤其是托管或虚拟化机器，例如\nHeroku\n或\nAmazon RDS\n）将输出写入本地机器，则此解决方案不适用。",
+  "link": "https://stackoverflow.com/questions/356578/how-can-i-output-mysql-query-results-in-csv-format"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 命令行中获取用户账户列表？",
+  "answer": "使用以下查询：\n\n\n```SELECT User FROM mysql.user;\n```\n\n\n这将输出如下表格：\n\n\n```+-------+\n| User  |\n+-------+\n| root  |\n+-------+\n| user2 |\n+-------+\n```\n\n\n一个更高级且高效的答案是使用存储过程来检索 MySQL 用户，因为它简化了这种重复查询，提高了可读性，并使以安全、可重用的方式管理访问权限变得更加容易。你只需输入一次，之后只需输入：\n```CALL mysql.users();```\n即可检索你的 MySQL 用户。\n\n\n```USE mysql;\nDELIMITER $$\nCREATE PROCEDURE users()\nBEGIN\n  SELECT CONCAT(QUOTE(user), '@', QUOTE(host)) AS Users\n  FROM mysql.user\n  ORDER BY user, host;\nEND $$\nDELIMITER ;\nCALL mysql.users();\n```",
+  "link": "https://stackoverflow.com/questions/1135245/how-can-i-get-a-list-of-user-accounts-using-the-command-line-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "存储布尔值时应该使用哪种 MySQL 数据类型？",
+  "answer": "对于 MySQL 5.0.3 及更高版本，你可以使用\n```BIT```\n。手册中写道：\n\n\n\n\n从 MySQL 5.0.3 开始，BIT 数据类型用于存储位字段值。BIT(M) 类型可以存储 M 位的值。M 的范围从 1 到 64。\n\n\n\n\n否则，根据 MySQL 手册，你可以使用\n```BOOL```\n或\n```BOOLEAN```\n，它们目前是\ntinyint\n(1) 的别名：\n\n\n\n\nBool、Boolean：这些类型是\nTINYINT\n(1) 的同义词。零值被视为假。非零值被视为真。\n\n\n\n\nMySQL 还指出：\n\n\n\n\n我们打算在未来的 MySQL 版本中，按照标准 SQL 实现完整的布尔类型处理。\n\n\n\n\n参考资料：\nhttp://dev.mysql.com/doc/refman/5.5/en/numeric-type-overview.html",
+  "link": "https://stackoverflow.com/questions/289727/which-mysql-data-type-to-use-for-storing-boolean-values"
+ },
+ {
+  "category": "mysql",
+  "question": "全程使用 UTF-8",
+  "answer": "数据存储：\n\n在数据库的所有表和文本列上指定 ```utf8mb4``` 字符集。这样 MySQL 会以原生 UTF-8 编码物理存储和检索值。\n\n注意，仅仅更改表的字符集（```alter table test charset utf8mb4;```）不会更改表列的字符集。必须改用 ```alter table test CONVERT TO charset utf8mb4;```。\n\n注意，如果指定了 ```utf8mb4_*``` 排序规则（未显式指定字符集），MySQL 会隐式使用 ```utf8mb4``` 编码。\n\n在较旧版本的 MySQL（< 5.5.3）中，不幸的是你只能使用 ```utf8```，它仅支持 Unicode 字符的一个子集。我希望我是在开玩笑。\n\n数据访问：\n\n在你的应用程序代码（例如 PHP）中，无论使用哪种数据库访问方法，都需要将连接字符集设置为 ```utf8mb4```。这样，MySQL 在将数据交给你的应用程序时不会从其原生 UTF-8 进行转换，反之亦然。\n\n某些驱动提供了自己的机制来配置连接字符集，这既会更新其内部状态，也会告知 MySQL 连接上要使用的编码——这通常是首选方法。在 PHP 中：\n\n如果你使用 PHP ≥ 5.3.6 的 PDO 抽象层，可以在 DSN 中指定 ```charset```：\n\n``` $dbh = new PDO('mysql:charset=utf8mb4');\n```\n\n如果你使用 mysqli，可以调用 ```set_charset()```：\n\n```  $mysqli->set_charset('utf8mb4');       // 面向对象风格\n  mysqli_set_charset($link, 'utf8mb4');  // 过程化风格\n```\n\n如果你只能使用普通的 mysql，但恰好运行 PHP ≥ 5.2.3，可以调用 ```mysql_set_charset```。\n\n如果驱动没有提供自己的机制来设置连接字符集，你可能需要发出查询来告诉 MySQL 你的应用程序期望连接上的数据如何编码：```SET NAMES 'utf8mb4'```。\n\n关于 ```utf8mb4```/```utf8``` 的相同考虑也适用于上述内容。\n\n输出：\n\n应在 HTTP 头中设置 UTF-8，例如 ```Content-Type: text/html; charset=utf-8```。你可以通过在 php.ini 中设置 ```default_charset```（首选）或手动使用 ```header()``` 函数来实现。\n\n如果你的应用程序将文本传输到其他系统，也需要告知它们字符编码。对于 Web 应用程序，必须告知浏览器数据发送时使用的编码（通过 HTTP 响应头或 HTML 元数据）。\n\n使用 ```json_encode()``` 编码输出时，你可能希望添加 ```JSON_UNESCAPED_UNICODE``` 作为第二个参数，以避免使用 JSON Unicode 转义。\n\n输入：\n\n浏览器会以文档指定的字符集提交数据，因此输入方面无需特别处理。\n\n如果你对请求编码有疑问（以防被篡改），可以在尝试存储或使用任何接收到的字符串之前，验证每个字符串是否为有效的 UTF-8。PHP 的 ```mb_check_encoding()``` 可以做到这一点，但你必须严格使用它。这确实无法避免，因为恶意客户端可以以任何他们想要的编码提交数据，而我还没有找到让 PHP 可靠地为你做到这一点的技巧。\n\n其他代码考虑：\n\n显然，你将提供的所有文件（PHP、HTML、JavaScript 等）都应以有效的 UTF-8 编码。\n\n你需要确保每次处理 UTF-8 字符串时都安全地进行。不幸的是，这是困难的部分。你可能希望广泛使用 PHP 的 ```mbstring``` 扩展。\n\nPHP 的内置字符串操作默认不是 UTF-8 安全的。有些操作你可以安全地使用普通 PHP 字符串操作（如连接），但对于大多数操作，你应该使用等效的 ```mbstring``` 函数。\n\n要了解你在做什么（即不要搞砸），你真的需要了解 UTF-8 及其在最底层的工作原理。查看 utf8.com 上的任何链接，获取学习所需一切的良好资源。",
+  "link": "https://stackoverflow.com/questions/279170/utf-8-all-the-way-through"
+ },
+ {
+  "category": "mysql",
+  "question": "检索每组中的最后一条记录 - MySQL",
+  "answer": "MySQL 8.0 现在支持窗口函数，就像几乎所有流行的 SQL 实现一样。使用这种标准语法，我们可以编写 greatest-n-per-group 查询：\n\n```WITH ranked_messages AS (\n  SELECT m.*, ROW_NUMBER() OVER (PARTITION BY name ORDER BY id DESC) AS rn\n  FROM messages AS m\n)\nSELECT * FROM ranked_messages WHERE rn = 1;\n```\n\n这种以及其他查找组内最大行的方法在 MySQL 手册中有说明。\n\n以下是我在 2009 年为这个问题写的原始答案：\n\n我这样写解决方案：\n\n```SELECT m1.*\nFROM messages m1 LEFT JOIN messages m2\n ON (m1.name = m2.name AND m1.id < m2.id)\nWHERE m2.id IS NULL;\n```\n\n关于性能，根据数据的性质，一种解决方案或另一种可能更好。因此，你应该测试两种查询，并根据你的数据库选择性能更好的那个。\n\n例如，我有一份 StackOverflow 八月数据转储的副本。我将用它来进行基准测试。```Posts``` 表中有 1,114,357 行。这在我的 Macbook Pro 2.40GHz 上运行 MySQL 5.0.75。\n\n我将编写一个查询来查找给定用户 ID（我的）的最新帖子。\n\n首先使用 @Eric 展示的技术，在子查询中使用 ```GROUP BY```：\n\n```SELECT p1.postid\nFROM Posts p1\nINNER JOIN (SELECT pi.owneruserid, MAX(pi.postid) AS maxpostid\n            FROM Posts pi GROUP BY pi.owneruserid) p2\n  ON (p1.postid = p2.maxpostid)\nWHERE p1.owneruserid = 20860;\n\n1 row in set (1 min 17.89 sec)\n```\n\n甚至 ```EXPLAIN``` 分析也需要超过 16 秒：\n\n```+----+-------------+------------+--------+----------------------------+-------------+---------+--------------+---------+-------------+\n| id | select_type | table      | type   | possible_keys              | key         | key_len | ref          | rows    | Extra       |\n+----+-------------+------------+--------+----------------------------+-------------+---------+--------------+---------+-------------+\n|  1 | PRIMARY     | <derived2> | ALL    | NULL                       | NULL        | NULL    | NULL         |   76756 |             | \n|  1 | PRIMARY     | p1         | eq_ref | PRIMARY,PostId,OwnerUserId | PRIMARY     | 8       | p2.maxpostid |       1 | Using where | \n|  2 | DERIVED     | pi         | index  | NULL                       | OwnerUserId | 8       | NULL         | 1151268 | Using index | \n+----+-------------+------------+--------+----------------------------+-------------+---------+--------------+---------+-------------+\n3 rows in set (16.09 sec)\n```\n\n现在使用我的技术，通过 ```LEFT JOIN``` 产生相同的查询结果：\n\n```SELECT p1.postid\nFROM Posts p1 LEFT JOIN posts p2\n  ON (p1.owneruserid = p2.owneruserid AND p1.postid < p2.postid)\nWHERE p2.postid IS NULL AND p1.owneruserid = 20860;\n\n1 row in set (0.28 sec)\n```\n\n```EXPLAIN``` 分析显示两个表都能够使用它们的索引：\n\n```+----+-------------+-------+------+----------------------------+-------------+---------+-------+------+--------------------------------------+\n| id | select_type | table | type | possible_keys              | key         | key_len | ref   | rows | Extra                                |\n+----+-------------+-------+------+----------------------------+-------------+---------+-------+------+--------------------------------------+\n|  1 | SIMPLE      | p1    | ref  | OwnerUserId                | OwnerUserId | 8       | const | 1384 | Using index                          | \n|  1 | SIMPLE      | p2    | ref  | PRIMARY,PostId,OwnerUserId | OwnerUserId | 8       | const | 1384 | Using where; Using index; Not exists | \n+----+-------------+-------+------+----------------------------+-------------+---------+-------+------+--------------------------------------+\n2 rows in set (0.00 sec)\n```\n\n这是我的 ```Posts``` 表的 DDL：\n\n```CREATE TABLE `posts` (\n  `PostId` bigint(20) unsigned NOT NULL auto_increment,\n  `PostTypeId` bigint(20) unsigned NOT NULL,\n  `AcceptedAnswerId` bigint(20) unsigned default NULL,\n  `ParentId` bigint(20) unsigned default NULL,\n  `CreationDate` datetime NOT NULL,\n  `Score` int(11) NOT NULL default '0',\n  `ViewCount` int(11) NOT NULL default '0',\n  `Body` text NOT NULL,\n  `OwnerUserId` bigint(20) unsigned NOT NULL,\n  `OwnerDisplayName` varchar(40) default NULL,\n  `LastEditorUserId` bigint(20) unsigned default NULL,\n  `LastEditDate` datetime default NULL,\n  `LastActivityDate` datetime default NULL,\n  `Title` varchar(250) NOT NULL default '',\n  `Tags` varchar(150) NOT NULL default '',\n  `AnswerCount` int(11) NOT NULL default '0',\n  `CommentCount` int(11) NOT NULL default '0',\n  `FavoriteCount` int(11) NOT NULL default '0',\n  `ClosedDate` datetime default NULL,\n  PRIMARY KEY  (`PostId`),\n  UNIQUE KEY `PostId` (`PostId`),\n  KEY `PostTypeId` (`PostTypeId`),\n  KEY `AcceptedAnswerId` (`AcceptedAnswerId`),\n  KEY `OwnerUserId` (`OwnerUserId`),\n  KEY `LastEditorUserId` (`LastEditorUserId`),\n  KEY `ParentId` (`ParentId`),\n  CONSTRAINT `posts_ibfk_1` FOREIGN KEY (`PostTypeId`) REFERENCES `posttypes` (`PostTypeId`)\n) ENGINE=InnoDB;\n```\n\n给评论者的说明：如果你想用不同版本的 MySQL、不同的数据集或不同的表设计进行另一个基准测试，请随意自己进行。我已经展示了上述技术。Stack Overflow 是来向你展示如何进行软件开发工作的，而不是为你完成所有工作。",
+  "link": "https://stackoverflow.com/questions/1313120/retrieving-the-last-record-in-each-group-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "utf8_general_ci 和 utf8_unicode_ci 有什么区别？",
+  "answer": "对于在 2020 年或之后仍然看到这个问题的朋友，现在有比这两个都更好的新选项。例如，\n```utf8mb4_unicode_520_ci```\n。\n\n\n所有这些排序规则都是针对 UTF-8 字符编码的。区别在于文本的排序和比较方式。\n\n\n```_unicode_ci```\n 和 \n```_general_ci```\n 是两套不同的规则，用于按照我们期望的方式对文本进行排序和比较。较新版本的 MySQL 也引入了新的规则集，例如基于 Unicode 5.2 的等效规则的 \n```_unicode_520_ci```\n，或者 MySQL 8.x 特有的基于 Unicode 9.0 的等效规则的 \n```_0900_ai_ci```\n（并且没有等效的 \n```_general_ci```\n 变体）。此外还有针对特定语言的规则集。现在读到这篇文章的人可能应该使用这些较新的排序规则之一，而不是 \n```_unicode_ci```\n 或 \n```_general_ci```\n。下面对这些旧排序规则的描述对于任何考虑使用它们的人仍然适用。\n\n\n旧版本的 MySQL 使用了有缺陷的 UTF-8 实现。因此，在字符编码部分你需要使用 \n```utf8mb4```\n 而不是 \n```utf8```\n，以确保你获得的是修复后的版本。有缺陷的版本仍然出于向后兼容的原因而保留可用。\n\n\n主要区别\n\n\n\n\n```utf8mb4_unicode_ci```\n 基于官方的 Unicode 通用排序和比较规则，能够在多种语言中准确排序。\n\n\n\n\n```utf8mb4_general_ci```\n 是一套简化的排序规则，旨在尽可能做好，同时采用许多旨在提高速度的捷径。它不遵循 Unicode 规则，在某些情况下会导致不理想的排序或比较，例如使用特定语言或字符时。\n\n\n在现代服务器上，这种性能提升几乎可以忽略不计。它是在服务器的 CPU 性能只有今天计算机一小部分的时代设计的。\n\n\n\n\n\n\n```utf8mb4_unicode_ci```\n 相对于 \n```utf8mb4_general_ci```\n 的优势\n\n\n```utf8mb4_unicode_ci```\n 使用 Unicode 的排序和比较规则，采用相当复杂的算法，以便在多种语言和多种特殊字符的情况下正确排序。这些规则需要考虑语言特定的惯例；并不是每个人都按照我们所说的“字母顺序”来排序字符。\n\n\n就拉丁语系（即“欧洲”）语言而言，MySQL 中 Unicode 排序与简化的 \n```utf8mb4_general_ci```\n 排序之间没有太大区别，但仍有一些差异：\n\n\n\n\n例如，Unicode 排序规则将“ß”排序为“ss”，将“Œ”排序为“OE”，这符合使用这些字符的人通常的期望，而 \n```utf8mb4_general_ci```\n 则将它们作为单个字符排序（大概分别类似于“s”和“e”）。\n\n\n\n\n某些 Unicode 字符被定义为可忽略的，这意味着它们不应计入排序顺序，比较应转而进行到下一个字符。\n```utf8mb4_unicode_ci```\n 能正确处理这些情况。\n\n\n\n\n\n\n在非拉丁语言中，例如亚洲语言或使用不同字母表的语言，Unicode 排序与简化的 \n```utf8mb4_general_ci```\n 排序之间可能有更多差异。\n```utf8mb4_general_ci```\n 的适用性在很大程度上取决于所使用的语言。对于某些语言，它将相当不够用。\n\n\n你应该使用哪个？\n\n\n几乎可以肯定，现在没有理由再使用 \n```utf8mb4_general_ci```\n，因为我们已经过了 CPU 速度低到性能差异很重要的阶段。你的数据库几乎肯定会受到其他瓶颈的限制，而不是这个。\n\n\n过去，有些人建议使用 \n```utf8mb4_general_ci```\n，除非准确排序重要到足以证明性能成本是合理的。如今，这种性能成本几乎已经消失，开发人员也更加认真地对待国际化。\n\n\n有一种观点认为，如果速度对你来说比准确性更重要，那你干脆完全不做排序算了。如果你不需要算法准确，让它变快是轻而易举的。所以，\n```utf8mb4_general_ci```\n 是一种折衷方案，可能出于速度原因并不需要，也可能出于准确性原因并不合适。\n\n\n我还要补充一点：即使你知道你的应用只支持英语，它可能仍然需要处理人名，而人名中常常包含其他语言的字符，在这些情况下正确排序同样重要。对所有内容都使用 Unicode 规则有助于让人安心，因为非常聪明的 Unicode 人员已经非常努力地让排序正常工作。\n\n\n各部分含义\n\n\n首先，\n```ci```\n 代表 \n不区分大小写\n 的排序和比较。这意味着它适用于文本数据，且大小写不重要。其他类型的排序规则有 \n```cs```\n（区分大小写），用于大小写重要的文本数据；以及 \n```bin```\n，用于编码需要逐位匹配的情况，适用于真正编码的二进制数据（例如包括 Base64）。区分大小写的排序会导致一些奇怪的结果，而区分大小写的比较可能导致仅在字母大小写上不同的重复值，因此区分大小写的排序规则在文本数据中正逐渐失宠——如果大小写对你很重要，那么原本可忽略的标点符号等可能也很重要，二进制排序规则可能更合适。\n\n\n接下来，\n```unicode```\n 或 \n```general```\n 指的是具体的排序和比较规则——特别是文本规范化或比较的方式。utf8mb4 字符编码有许多不同的规则集，其中 \n```unicode```\n 和 \n```general```\n 是试图在所有可能的语言中都能良好工作、而不是只针对某一种特定语言的两种。这两套规则之间的差异就是本回答的主题。请注意，\n```unicode```\n 使用 Unicode 4.0 的规则。较新版本的 MySQL 和 MariaDB 添加了使用 Unicode 5.2 规则的规则集 \n```unicode_520```\n，而 MySQL 8.x 添加了使用 Unicode 9.0 规则的 \n```0900```\n（去掉了“unicode_”部分）。\n\n\n最后，\n```utf8mb4```\n 当然是内部使用的字符编码。在本回答中，我只讨论基于 Unicode 的编码。",
+  "link": "https://stackoverflow.com/questions/766809/whats-the-difference-between-utf8-general-ci-and-utf8-unicode-ci"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 Python 中连接到 MySQL 数据库？",
+  "answer": "在 Python 2 中连接 MySQL 的三个步骤\n\n\n1 - 设置\n\n\n在做任何事情之前，你必须安装一个 MySQL 驱动。与 PHP 不同，Python 默认只安装了 SQLite 驱动。最常用的包是 \nMySQLdb\n，但用 easy_install 安装它很困难。请注意 MySQLdb 只支持 Python 2。\n\n\n对于 Windows 用户，你可以获取一个 \nMySQLdb 的 exe\n。\n\n\n对于 Linux，这是一个常见的软件包（python-mysqldb）。（你可以在命令行中使用 \n```sudo apt-get install python-mysqldb```\n（适用于基于 debian 的发行版）、\n```yum install MySQL-python```\n（适用于基于 rpm 的发行版），或 \n```dnf install python-mysql```\n（适用于现代 fedora 发行版）来下载。）\n\n\n对于 Mac，你可以 \n使用 Macport 安装 MySQLdb\n。\n\n\n2 - 使用\n\n\n安装后，重启。这不是强制性的，但如果出了问题，这能避免我在这篇文章中再回答 3 到 4 个其他问题。所以请重启。\n\n\n然后就像使用任何其他包一样：\n\n\n```#!/usr/bin/python\nimport MySQLdb\n\ndb = MySQLdb.connect(host=\"localhost\",    # your host, usually localhost\n                     user=\"john\",         # your username\n                     passwd=\"megajonhy\",  # your password\n                     db=\"jonhydb\")        # name of the data base\n\n# you must create a Cursor object. It will let\n#  you execute all the queries you need\ncur = db.cursor()\n\n# Use all the SQL you like\ncur.execute(\"SELECT * FROM YOUR_TABLE_NAME\")\n\n# print all the first cell of all the rows\nfor row in cur.fetchall():\n    print row[0]\n\ndb.close()\n```\n\n\n当然，有成千上万种可能性和选项；这只是一个非常基本的示例。你需要查看文档。\n一个很好的起点\n。\n\n\n3 - 更高级的用法\n\n\n一旦你了解了它的工作原理，你可能想使用 \nORM\n 来避免手动编写 SQL，并像操作 Python 对象一样操作你的表。Python 社区中最著名的 ORM 是 \nSQLAlchemy\n。\n\n\n我强烈建议你使用它：你的生活会轻松得多。\n\n\n我最近发现了 Python 世界中的另一颗明珠：\npeewee\n。它是一个非常轻量的 ORM，设置和使用都非常简单快捷。对于小项目或独立应用来说，它让我很省心，在这些场景下使用像 SQLAlchemy 或 Django 这样的大工具就有点杀鸡用牛刀了：\n\n\n```import peewee\nfrom peewee import *\n\ndb = MySQLDatabase('jonhydb', user='john', passwd='megajonhy')\n\nclass Book(peewee.Model):\n    author = peewee.CharField()\n    title = peewee.TextField()\n\n    class Meta:\n        database = db\n\nBook.create_table()\nbook = Book(author=\"me\", title='Peewee is cool')\nbook.save()\nfor book in Book.filter(author=\"me\"):\n    print book.title\n```\n\n\n这个示例开箱即用。除了安装 peewee（\n```pip install peewee```\n）之外，不需要其他任何东西。",
+  "link": "https://stackoverflow.com/questions/372885/how-do-i-connect-to-a-mysql-database-in-python"
+ },
+ {
+  "category": "mysql",
+  "question": "在 MySQL Workbench 中执行 UPDATE 时出现 MySQL 错误代码 1175",
+  "answer": "看起来你的 MySQL 会话设置了 safe-updates 选项。这意味着在 where 子句中未指定键（例如 ```primary key```）时，你无法更新或删除记录。\n\n\n尝试：\n\n\n```SET SQL_SAFE_UPDATES = 0;\n```\n\n\n或者你可以修改查询以遵循规则（在 ```where clause``` 中使用 ```primary key```）。",
+  "link": "https://stackoverflow.com/questions/11448068/mysql-error-code-1175-during-update-in-mysql-workbench"
+ },
+ {
+  "category": "mysql",
+  "question": "如何获取 MySQL 数据库中表的大小？",
+  "answer": "你可以使用此查询来显示表的大小（不过需要先替换变量）：\n\n\n```SELECT \n    table_name AS `Table`, \n    round(((data_length + index_length) / 1024 / 1024), 2) `Size in MB` \nFROM information_schema.TABLES \nWHERE table_schema = \"$DB_NAME\"\n    AND table_name = \"$TABLE_NAME\";\n```\n\n\n或者使用此查询列出每个数据库中每个表的大小，按从大到小排序：\n\n\n```SELECT \n     table_schema as `Database`, \n     table_name AS `Table`, \n     round(((data_length + index_length) / 1024 / 1024), 2) `Size in MB` \nFROM information_schema.TABLES \nORDER BY (data_length + index_length) DESC;\n```",
+  "link": "https://stackoverflow.com/questions/9620198/how-can-i-get-the-sizes-of-the-tables-of-a-mysql-database"
+ },
+ {
+  "category": "mysql",
+  "question": "向 MySQL 表中插入数据，如果存在则更新",
+  "answer": "使用\n```INSERT ... ON DUPLICATE KEY UPDATE```\n\n\n查询语句：\n\n\n```INSERT INTO table (id, name, age) VALUES(1, \"A\", 19) ON DUPLICATE KEY UPDATE    \nname=\"A\", age=19\n```",
+  "link": "https://stackoverflow.com/questions/4205181/insert-into-a-mysql-table-or-update-if-exists"
+ },
+ {
+  "category": "mysql",
+  "question": "如何重命名 MySQL 数据库（更改 schema 名称）？",
+  "answer": "对于\nInnoDB\n，以下方法似乎可行：先创建新的空数据库，然后依次将每个表重命名到新数据库中：\n\n\n```RENAME TABLE old_db.table TO new_db.table;\n```\n\n\n之后你需要调整权限。\n\n\n在 shell 中编写脚本时，可以使用以下任一方法：\n\n\n```mysql -u username -ppassword old_db -sNe 'show tables' | while read table; \\ \n    do mysql -u username -ppassword -sNe \"rename table old_db.$table to new_db.$table\"; done\n```\n\n\n或者\n\n\n```for table in `mysql -u root -ppassword -s -N -e \"use old_db;show tables from old_db;\"`; do mysql -u root -ppassword -s -N -e \"use old_db;rename table old_db.$table to new_db.$table;\"; done;\n```\n\n\n\n\n注意事项：\n\n\n\n\n选项\n```-p```\n和密码之间没有空格。如果你的数据库没有密码，请移除\n```-u username -ppassword```\n部分。\n\n\n如果某些表有触发器，则无法使用上述方法将其移动到另一个数据库（会导致\n```Trigger in wrong schema```\n错误）。如果是这种情况，请使用传统方式克隆数据库，然后删除旧数据库：\n\n\n```mysqldump old_db | mysql new_db```\n\n\n如果你有存储过程，可以之后复制它们：\n\n\n```mysqldump -R old_db | mysql new_db```",
+  "link": "https://stackoverflow.com/questions/67093/how-do-i-rename-a-mysql-database-change-schema-name"
+ },
+ {
+  "category": "mysql",
+  "question": "Join 与子查询",
+  "answer": "子查询是解决“从 A 获取事实，以 B 的事实为条件”这类问题的逻辑上正确的方式。在这种情况下，将 B 放在子查询中比进行 join 更符合逻辑。从实际角度来看，这也更安全，因为你不必担心由于与 B 的多次匹配而导致从 A 获取重复的事实。\n\n\n然而，实际上，答案通常归结为性能。有些优化器在处理 join 与子查询时表现不佳，有些则相反，这取决于优化器、DBMS 版本和具体查询。\n\n\n历史上，显式 join 通常胜出，因此形成了 join 更好的既定智慧，但优化器一直在改进，所以我更倾向于首先以逻辑连贯的方式编写查询，然后在性能约束需要时进行重构。",
+  "link": "https://stackoverflow.com/questions/2577174/join-vs-sub-query"
+ },
+ {
+  "category": "mysql",
+  "question": "INNER JOIN ON 与 WHERE 子句",
+  "answer": "```INNER JOIN```\n 是 ANSI 语法，你应该使用它。\n\n\n它通常被认为更具可读性，尤其是在连接多个表时。\n\n\n它也可以在任何需要时轻松替换为 \n```OUTER JOIN```\n。\n\n\n```WHERE```\n 语法更面向关系模型。\n\n\n两个表 \n```JOIN```\n 的结果是表的笛卡尔积，然后应用过滤器，只选择连接列匹配的行。\n\n\n使用 \n```WHERE```\n 语法更容易看到这一点。\n\n\n至于你的例子，在 MySQL（以及一般 SQL）中，这两个查询是同义词。\n\n\n另外，注意 MySQL 也有一个 \n```STRAIGHT_JOIN```\n 子句。\n\n\n使用这个子句，你可以控制 \n```JOIN```\n 的顺序：哪个表在外循环中扫描，哪个在内循环中。\n\n\n在 MySQL 中，你无法使用 \n```WHERE```\n 语法来控制这一点。",
+  "link": "https://stackoverflow.com/questions/1018822/inner-join-on-vs-where-clause"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中实现“如果不存在则插入”？",
+  "answer": "使用\n```INSERT IGNORE INTO table```\n。\n\n\n还有\n```INSERT … ON DUPLICATE KEY UPDATE```\n语法，你可以在\n13.2.6.2 INSERT ... ON DUPLICATE KEY UPDATE Statement\n中找到解释。\n\n\n\n\n来自\nbogdan.org.ua\n的帖子，根据\nGoogle 的网页缓存\n：\n\n\n\n\n2007年10月18日\n\n\n首先：截至最新的 MySQL，标题中展示的语法是不可能的。但使用现有功能有几种非常简单的方法可以实现预期效果。\n\n\n有三种可能的解决方案：使用 INSERT IGNORE、REPLACE 或\nINSERT … ON DUPLICATE KEY UPDATE。\n\n\n假设我们有一个表：\n\n\n```CREATE TABLE `transcripts` (\n`ensembl_transcript_id` varchar(20) NOT NULL,\n`transcript_chrom_start` int(10) unsigned NOT NULL,\n`transcript_chrom_end` int(10) unsigned NOT NULL,\nPRIMARY KEY (`ensembl_transcript_id`)\n) ENGINE=InnoDB DEFAULT CHARSET=latin1;\n```\n\n\n现在假设我们有一个自动管道从 Ensembl 导入转录本元数据，并且由于各种原因，管道在执行任何步骤时都可能中断。因此，我们需要确保两件事：\n\n\n\n\n\n\n\n\n重复执行管道不会破坏我们的\n> 数据库\n\n\n\n\n\n\n\n\n\n\n重复执行不会因‘重复主键’错误而失败。\n\n\n\n\n方法1：使用 REPLACE\n\n\n非常简单：\n\n\n```REPLACE INTO `transcripts`\nSET `ensembl_transcript_id` = 'ENSORGT00000000001',\n`transcript_chrom_start` = 12345,\n`transcript_chrom_end` = 12678;\n```\n\n\n如果记录存在，它将被覆盖；如果尚不存在，它将被创建。然而，对于我们的情况，使用这种方法效率不高：我们不需要覆盖现有记录，跳过它们即可。\n\n\n方法2：使用 INSERT IGNORE 也非常简单：\n\n\n```INSERT IGNORE INTO `transcripts`\nSET `ensembl_transcript_id` = 'ENSORGT00000000001',\n`transcript_chrom_start` = 12345,\n`transcript_chrom_end` = 12678;\n```\n\n\n这里，如果‘ensembl_transcript_id’已经存在于数据库中，它将被静默跳过（忽略）。（更准确地说，这里引用 MySQL 参考手册：“如果使用 IGNORE 关键字，执行 INSERT 语句时发生的错误将被视为警告。例如，没有 IGNORE 时，一行重复表中现有 UNIQUE 索引或 PRIMARY KEY 值会导致重复键错误，语句被中止。”）如果记录尚不存在，它将被创建。\n\n\n第二种方法有几个潜在弱点，包括在任何其他问题发生时不会中止查询（见手册）。因此，如果之前在没有 IGNORE 关键字的情况下测试过，则应使用它。\n\n\n方法3：使用 INSERT … ON DUPLICATE KEY UPDATE：\n\n\n第三种选择是使用\n```INSERT … ON DUPLICATE KEY UPDATE```\n\n语法，在 UPDATE 部分什么都不做，进行一些无意义的（空）操作，比如计算 0+0（Geoffray 建议进行 id=id 赋值，以便 MySQL 优化引擎忽略此操作）。这种方法的优点是它只忽略重复键事件，并且仍然在其他错误时中止。\n\n\n最后说明：这篇帖子受 Xaprb 启发。我还建议查阅他关于编写灵活 SQL 查询的另一篇帖子。",
+  "link": "https://stackoverflow.com/questions/1361340/how-can-i-do-insert-if-not-exists-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中找到所有包含特定列名的表？",
+  "answer": "要获取数据库\n```YourDatabase```\n中所有包含列\n```columnA```\n或\n```ColumnB```\n的表：\n\n\n```SELECT DISTINCT TABLE_NAME \n    FROM INFORMATION_SCHEMA.COLUMNS\n    WHERE COLUMN_NAME IN ('columnA','ColumnB')\n        AND TABLE_SCHEMA='YourDatabase';\n```",
+  "link": "https://stackoverflow.com/questions/193780/how-can-i-find-all-the-tables-in-mysql-with-specific-column-names-in-them"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中为多列指定唯一约束？",
+  "answer": "要添加唯一约束，你需要使用两个组件：\n\n\n```ALTER TABLE```\n - 用于更改表结构，以及\n\n\n```ADD UNIQUE```\n - 用于添加唯一约束。\n\n\n然后，你可以按照格式\n```'name'('column1', 'column2'...)```\n定义新的唯一键。\n\n\n因此，针对你的具体问题，你可以使用以下命令：\n\n\n```ALTER TABLE `votes` ADD UNIQUE `unique_index`(`user`, `email`, `address`);\n```",
+  "link": "https://stackoverflow.com/questions/635937/how-do-i-specify-unique-constraint-for-multiple-columns-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "如何为 MySQL Datetime 列设置默认值？",
+  "answer": "重要编辑：\n\n自 MySQL 5.6.5 起，现在可以使用 DATETIME 字段实现这一点，请查看下面的另一篇帖子...\n\n\n之前的版本无法使用 DATETIME 做到这一点...\n\n\n但你可以使用 TIMESTAMP 来实现：\n\n\n```mysql> create table test (str varchar(32), ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);\nQuery OK, 0 rows affected (0.00 sec)\n\nmysql> desc test;\n+-------+-------------+------+-----+-------------------+-------+\n| Field | Type        | Null | Key | Default           | Extra |\n+-------+-------------+------+-----+-------------------+-------+\n| str   | varchar(32) | YES  |     | NULL              |       | \n| ts    | timestamp   | NO   |     | CURRENT_TIMESTAMP |       | \n+-------+-------------+------+-----+-------------------+-------+\n2 rows in set (0.00 sec)\n\nmysql> insert into test (str) values (\"demo\");\nQuery OK, 1 row affected (0.00 sec)\n\nmysql> select * from test;\n+------+---------------------+\n| str  | ts                  |\n+------+---------------------+\n| demo | 2008-10-03 22:59:52 | \n+------+---------------------+\n1 row in set (0.00 sec)\n\nmysql>\n```\n\n\n注意事项：\n \n如果你定义了一个列，其默认值为 CURRENT_TIMESTAMP ON，那么你将需要始终为该列指定一个值，否则在更新时该值会自动重置为 \"now()\"。这意味着，如果你不希望该值发生变化，你的 UPDATE 语句必须包含 \"[你的列名] = [你的列名]\"（或其他值），否则该值将变为 \"now()\"。虽然奇怪，但确实如此。我使用的是 5.5.56-MariaDB",
+  "link": "https://stackoverflow.com/questions/168736/how-do-you-set-a-default-value-for-a-mysql-datetime-column"
+ },
+ {
+  "category": "mysql",
+  "question": "mysql_fetch_array()/mysql_fetch_assoc()/mysql_fetch_row()/mysql_num_rows 等... 期望参数 1 为资源类型",
+  "answer": "查询可能因各种原因失败，此时 mysql_* 和 mysqli 扩展的查询函数/方法都会返回\n```false```\n。你需要检测这种错误情况并相应地处理。\n\n\nmysql_ 扩展\n：\n\n\n\n\n注意\n \nmysql_ 函数已弃用\n，并在 PHP 7 版本中被移除。\n\n\n\n\n在将 \n```$result```\n 传递给 \n```mysql_fetch_array```\n 之前，先检查它。你会发现它是 \n```false```\n，因为查询失败了。有关可能的返回值以及如何处理它们的建议，请参阅 [\n```mysql_query```\n][1] 文档。\n\n\n```$username = mysql_real_escape_string($_POST['username']);\n$password = $_POST['password'];\n$result = mysql_query(\"SELECT * FROM Users WHERE UserName LIKE '$username'\");\n\nif($result === FALSE) { \n    trigger_error(mysql_error(), E_USER_ERROR);\n}\n\nwhile($row = mysql_fetch_array($result))\n{\n    echo $row['FirstName'];\n}\n```",
+  "link": "https://stackoverflow.com/questions/2973202/mysql-fetch-array-mysql-fetch-assoc-mysql-fetch-row-mysql-num-rows-etc"
+ },
+ {
+  "category": "mysql",
+  "question": "TINYTEXT、TEXT、MEDIUMTEXT 和 LONGTEXT 的最大存储大小",
+  "answer": "根据\n文档（MySQL 8）\n：\n\n\n```\n      Type | Maximum length\n-----------+-------------------------------------\n  TINYTEXT |           255 (2 8−1) bytes\n      TEXT |        65,535 (216−1) bytes = 64 KiB\nMEDIUMTEXT |    16,777,215 (224−1) bytes = 16 MiB\n  LONGTEXT | 4,294,967,295 (232−1) bytes =  4 GiB\n```\n\n\n请注意，你的列中可存储的\n字符\n数量将取决于\n字符编码\n。",
+  "link": "https://stackoverflow.com/questions/13932750/tinytext-text-mediumtext-and-longtext-maximum-storage-sizes"
+ },
+ {
+  "category": "mysql",
+  "question": "&quot;INSERT IGNORE&quot; 与 &quot;INSERT ... ON DUPLICATE KEY UPDATE&quot; 的对比",
+  "answer": "我建议使用 \n```INSERT...ON DUPLICATE KEY UPDATE```\n。\n\n\n如果你使用 \n```INSERT IGNORE```\n，那么如果插入导致重复键，该行实际上不会被插入。但语句不会产生错误，而是生成一个警告。这些情况包括：\n\n\n\n\n在具有 \n```PRIMARY KEY```\n 或 \n```UNIQUE```\n 约束的列中插入重复键。\n\n\n向具有 \n```NOT NULL```\n 约束的列中插入 NULL。\n\n\n向分区表中插入一行，但插入的值不映射到任何分区。\n\n\n\n\n如果你使用 \n```REPLACE```\n，MySQL 实际上在内部执行 \n```DELETE```\n 后跟 \n```INSERT```\n，这会产生一些意外的副作用：\n\n\n\n\n分配一个新的自增 ID。\n\n\n具有外键的依赖行可能会被删除（如果你使用级联外键），否则会阻止 \n```REPLACE```\n。\n\n\n在 \n```DELETE```\n 上触发的触发器会被不必要地执行。\n\n\n副作用也会传播到副本。\n\n\n\n\n更正：\n```REPLACE```\n 和 \n```INSERT...ON DUPLICATE KEY UPDATE```\n 都是非标准的，是 MySQL 特有的专有发明。ANSI SQL 2003 定义了一个 \n```MERGE```\n 语句，可以解决相同的需求（甚至更多）。\nMySQL 不支持 \n```MERGE```\n 语句，尽管这个功能自 2005 年以来就被 \n请求\n。\n\n\n\n\n一位用户试图编辑此帖子（编辑被版主拒绝）。该编辑试图添加一个声明，称 \n```INSERT...ON DUPLICATE KEY UPDATE```\n 会导致分配一个新的自增 ID。确实，新 ID 会被 \n生成\n，但不会用于更改的行。\n\n\n参见下面的演示，使用 Percona Server 5.5.28 测试。配置变量 \n```innodb_autoinc_lock_mode=1```\n（默认值）：\n\n\n```mysql> create table foo (id serial primary key, u int, unique key (u));\nmysql> insert into foo (u) values (10);\nmysql> select * from foo;\n+----+------+\n| id | u    |\n+----+------+\n|  1 |   10 |\n+----+------+\n\nmysql> show create table foo\\G\nCREATE TABLE `foo` (\n  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,\n  `u` int(11) DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `u` (`u`)\n) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=latin1\n\nmysql> insert into foo (u) values (10) on duplicate key update u = 20;\nmysql> select * from foo;\n+----+------+\n| id | u    |\n+----+------+\n|  1 |   20 |\n+----+------+\n\nmysql> show create table foo\\G\nCREATE TABLE `foo` (\n  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,\n  `u` int(11) DEFAULT NULL,\n  PRIMARY KEY (`id`),\n  UNIQUE KEY `u` (`u`)\n) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=latin1\n```\n\n\n上述演示表明，IODKU 语句检测到重复，并调用更新来更改 \n```u```\n 的值。注意 \n```AUTO_INCREMENT=3```\n 表示生成了一个 ID，但未用于该行。\n\n\n而 \n```REPLACE```\n 会删除原始行并插入新行，生成 \n并\n 存储新的自增 ID：\n\n\n```mysql> select * from foo;\n+----+------+\n| id | u    |\n+----+------+\n|  1 |   20 |\n+----+------+\nmysql> replace into foo (u) values (20);\nmysql> select * from foo;\n+----+------+\n| id | u    |\n+----+------+\n|  3 |   20 |\n+----+------+\n```",
+  "link": "https://stackoverflow.com/questions/548541/insert-ignore-vs-insert-on-duplicate-key-update"
+ },
+ {
+  "category": "mysql",
+  "question": "在 MySQL 中查找重复值",
+  "answer": "使用带有 \n```GROUP BY```\n 子句的 \n```SELECT```\n。假设 \nname\n 是你要查找重复项的列：\n\n\n```SELECT name, COUNT(*) c FROM table GROUP BY name HAVING c > 1;\n```\n\n\n这将返回一个结果，第一列是 \nname\n 值，第二列是该值出现的次数。",
+  "link": "https://stackoverflow.com/questions/688549/finding-duplicate-values-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "在 MySQL 中，如何按另一列分区并选取具有最大列值的行？",
+  "answer": "你已经非常接近了！你只需要同时选择 home 和其最大 datetime，然后基于这两个字段连接回 \n```topten```\n 表：\n\n\n```SELECT tt.*\nFROM topten tt\nINNER JOIN\n    (SELECT home, MAX(datetime) AS MaxDateTime\n    FROM topten\n    GROUP BY home) groupedtt \nON tt.home = groupedtt.home \nAND tt.datetime = groupedtt.MaxDateTime\n```",
+  "link": "https://stackoverflow.com/questions/612231/how-can-i-select-rows-with-maxcolumn-value-partition-by-another-column-in-mys"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL：大 VARCHAR 与 TEXT 的比较？",
+  "answer": "```TEXT```\n 和 \n```BLOB```\n 可能存储在表外，表中仅保留指向实际存储位置的指针。具体存储位置取决于多种因素，如数据大小、列大小、行格式以及 MySQL 版本。\n\n\n```VARCHAR```\n 则直接存储在表内。当大小适当时，\n```VARCHAR```\n 更快，但哪种方式更快取决于你的数据和硬件，建议针对你的实际场景进行基准测试。",
+  "link": "https://stackoverflow.com/questions/2023481/mysql-large-varchar-vs-text"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中执行 FULL OUTER JOIN？",
+  "answer": "MySQL 中没有\nfull join\n，但你可以\n模拟实现\n。\n\n\n以下代码\n示例\n摘自\n这个 Stack Overflow 问题\n：\n\n\n假设有两张表 t1、t2：\n\n\n```SELECT * FROM t1\nLEFT JOIN t2 ON t1.id = t2.id\nUNION\nSELECT * FROM t1\nRIGHT JOIN t2 ON t1.id = t2.id\n```\n\n\n\n\n上述查询适用于\nfull outer join\n操作不会产生重复行的特殊情况。该查询依赖\n```UNION```\n集合操作符来去除查询模式引入的重复行。我们可以通过对第二个查询使用\n反连接（anti-join）\n模式来避免引入重复行，然后使用 UNION ALL 集合操作符合并两个结果集。在更一般的情况下，即 full outer join 会返回重复行时，可以这样做：\n\n\n```SELECT * FROM t1\nLEFT JOIN t2 ON t1.id = t2.id\nUNION ALL\nSELECT * FROM t1\nRIGHT JOIN t2 ON t1.id = t2.id\nWHERE t1.id IS NULL\n```",
+  "link": "https://stackoverflow.com/questions/4796872/how-can-i-do-a-full-outer-join-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "禁用 ONLY_FULL_GROUP_BY",
+  "answer": "方案 1：\n\n从 mysql 控制台移除\nONLY_FULL_GROUP_BY\n\n\n```mysql > SET GLOBAL sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));\n```\n\n\n你可以阅读更多内容\n这里\n\n\n请注意，此设置在重启后不会持久化，因此请使用\n\n\n```mysql > SET PERSIST sql_mode=(SELECT REPLACE(@@sql_mode,'ONLY_FULL_GROUP_BY',''));\n```\n\n\n方案 2：\n 从 phpmyadmin 中移除\nONLY_FULL_GROUP_BY\n\n\n\n\n打开 phpmyadmin 并选择 localhost\n\n\n点击菜单中的 Variables 并向下滚动找到 sql mode\n\n\n点击编辑按钮修改值，移除\nONLY_FULL_GROUP_BY\n，然后点击保存。",
+  "link": "https://stackoverflow.com/questions/23921117/disable-only-full-group-by"
+ },
+ {
+  "category": "mysql",
+  "question": "主机 'xxx.xx.xxx.xxx' 不允许连接到该 MySQL 服务器",
+  "answer": "可能是出于安全预防措施。你可以尝试添加一个新的管理员账户：\n\n\n```mysql> CREATE USER 'monty'@'localhost' IDENTIFIED BY 'some_pass';\nmysql> GRANT ALL PRIVILEGES ON *.* TO 'monty'@'localhost'\n    ->     WITH GRANT OPTION;\nmysql> CREATE USER 'monty'@'%' IDENTIFIED BY 'some_pass';\nmysql> GRANT ALL PRIVILEGES ON *.* TO 'monty'@'%'\n    ->     WITH GRANT OPTION;\n```\n\n\n不过正如 Pascal 和其他人指出的那样，让一个拥有这种权限的用户对任意 IP 开放并不是一个好主意。如果你需要一个管理用户，请使用 root，并将其限制在 localhost。对于任何其他操作，请明确指定你需要的权限，并像 Pascal 下面建议的那样限制该用户的可访问性。\n\n\n来自 MySQL FAQ：\n\n\n\n\n如果你无法弄清楚为什么会出现\nAccess denied，请从 user\n表中删除所有 Host\n值包含通配符的条目（即\n包含 '%' 或 '_' 字符的条目）。一个\n非常常见的错误是插入一个\nHost='%' 且\nUser='some_user' 的新条目，以为这样\n就允许你指定 localhost 从同一台机器连接。\n这样做不生效的原因是，\n默认权限中包含一个\nHost='localhost' 且\nUser='' 的条目。由于该条目的 Host\n值 'localhost' 比 '%' 更具体，\n因此从 localhost 连接时，它会优先于新条目被使用！正确的\n做法是插入第二个条目，\n其 Host='localhost' 且\nUser='some_user'，或者删除\nHost='localhost' 且\nUser='' 的条目。删除该条目后，\n记得执行 FLUSH PRIVILEGES\n语句以重新加载授权表。\n另请参见第 5.4.4 节，“访问\n控制，第 1 阶段：连接\n验证”。",
+  "link": "https://stackoverflow.com/questions/1559955/host-xxx-xx-xxx-xxx-is-not-allowed-to-connect-to-this-mysql-server"
+ },
+ {
+  "category": "mysql",
+  "question": "MyISAM 与 InnoDB 的对比",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/20148/myisam-versus-innodb"
+ },
+ {
+  "category": "mysql",
+  "question": "如何截断一个带有外键约束的表？",
+  "answer": "可以这样做：\n\n\n```SET FOREIGN_KEY_CHECKS = 0;\n\nTRUNCATE table1;\nTRUNCATE table2;\n\nSET FOREIGN_KEY_CHECKS = 1;\n```\n\n\n使用这些语句时，你可能会让不符合\n```FOREIGN KEY```\n约束的行进入表中。",
+  "link": "https://stackoverflow.com/questions/5452760/how-to-truncate-a-foreign-key-constrained-table"
+ },
+ {
+  "category": "mysql",
+  "question": "如何复制一个 MySQL 表、索引和数据？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/3280006/how-to-duplicate-a-mysql-table-indices-and-data"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中临时禁用外键约束？",
+  "answer": "尝试\n```DISABLE KEYS```\n或\n\n\n```SET FOREIGN_KEY_CHECKS=0;\n```\n\n\n之后确保执行\n\n\n```SET FOREIGN_KEY_CHECKS=1;\n```",
+  "link": "https://stackoverflow.com/questions/15501673/how-can-i-temporarily-disable-a-foreign-key-constraint-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 错误 1093 - 无法在 FROM 子句中指定用于更新的目标表",
+  "answer": "更新：此答案涵盖了错误的一般分类。关于如何最好地处理提问者的具体查询，请参阅此问题的其他答案\n\n\n在 MySQL 中，你不能修改在 SELECT 部分中使用的同一张表。\n\n此行为在以下文档中有说明：\n\nhttp://dev.mysql.com/doc/refman/5.6/en/update.html\n\n\n也许你可以直接将表与自身连接\n\n\n如果逻辑足够简单，可以重新构造查询，去掉子查询并将表与自身连接，采用适当的选择条件。这将使 MySQL 将表视为两个不同的实体，从而允许执行破坏性更改。\n\n\n```UPDATE tbl AS a\nINNER JOIN tbl AS b ON ....\nSET a.col = b.col\n```\n\n\n或者，尝试将子查询嵌套到 from 子句的更深处...\n\n\n如果你确实需要子查询，有一个变通方法，但由于多种原因（包括性能），它很丑陋：\n\n\n```UPDATE tbl SET col = (\n  SELECT ... FROM (SELECT.... FROM) AS x);\n```\n\n\nFROM 子句中的嵌套子查询会创建一个隐式临时表，因此它不会被视为你正在更新的同一张表。\n\n\n...但要小心查询优化器\n\n\n然而，请注意，从 MySQL 5.7.6 开始，优化器可能会优化掉子查询，仍然会给你报错。幸运的是，可以使用\n```optimizer_switch```\n变量来关闭此行为；尽管我不建议将此作为任何长期修复措施，或仅用于小型一次性任务。\n\n\n```SET optimizer_switch = 'derived_merge=off';\n```\n\n\n感谢 Peter V. Mørch 在评论中提供的建议。\n\n\n示例技术来自 Baron Schwartz，最初发表在 Nabble 上，此处进行了改写和扩展。",
+  "link": "https://stackoverflow.com/questions/45494/mysql-error-1093-cant-specify-target-table-for-update-in-from-clause"
+ },
+ {
+  "category": "mysql",
+  "question": "如何获取 MySQL 数据库的大小？",
+  "answer": "运行以下查询，你很可能就能得到想要的结果：\n\n\n```SELECT table_schema \"DB Name\",\n        ROUND(SUM(data_length + index_length) / 1024 / 1024, 1) \"DB Size in MB\"\nFROM information_schema.tables\nGROUP BY table_schema;\n```\n\n\n这个查询来自 MySQL 论坛，那里有更详细的说明可供参考。",
+  "link": "https://stackoverflow.com/questions/1733507/how-can-i-get-the-size-of-a-mysql-database"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL：如何获取数据库、表或列的字符集？",
+  "answer": "我是这样做的——\n\n\n对于 Schema（或数据库——它们是同义词）：\n\n\n```SELECT default_character_set_name FROM information_schema.SCHEMATA \nWHERE schema_name = \"mydatabasename\";\n```\n\n\n对于表：\n\n\n```SELECT CCSA.character_set_name FROM information_schema.`TABLES` T,\n       information_schema.`COLLATION_CHARACTER_SET_APPLICABILITY` CCSA\nWHERE CCSA.collation_name = T.table_collation\n  AND T.table_schema = \"mydatabasename\"\n  AND T.table_name = \"tablename\";\n```\n\n\n对于列：\n\n\n```SELECT character_set_name FROM information_schema.`COLUMNS` \nWHERE table_schema = \"mydatabasename\"\n  AND table_name = \"tablename\"\n  AND column_name = \"columnname\";\n```",
+  "link": "https://stackoverflow.com/questions/1049728/mysql-get-character-set-of-database-or-table-or-column"
+ },
+ {
+  "category": "mysql",
+  "question": "如何查看指向某个表或列的所有外键？",
+  "answer": "对于表：\n\n\n```SELECT \n  TABLE_NAME,COLUMN_NAME,CONSTRAINT_NAME, REFERENCED_TABLE_NAME,REFERENCED_COLUMN_NAME\nFROM\n  INFORMATION_SCHEMA.KEY_COLUMN_USAGE\nWHERE\n  REFERENCED_TABLE_SCHEMA = (SELECT DATABASE()) AND\n  REFERENCED_TABLE_NAME = '<table>' \\G\n```\n\n\n对于列：\n\n\n```SELECT \n  TABLE_NAME,COLUMN_NAME,CONSTRAINT_NAME, REFERENCED_TABLE_NAME,REFERENCED_COLUMN_NAME\nFROM\n  INFORMATION_SCHEMA.KEY_COLUMN_USAGE\nWHERE\n  REFERENCED_TABLE_SCHEMA = (SELECT DATABASE()) AND\n  REFERENCED_TABLE_NAME = '<table>' AND\n  REFERENCED_COLUMN_NAME = '<column>' \\G\n```\n\n\n基本上，就是在 \n```WHERE```\n 子句中，将 \n```REFERENCED_TABLE_NAME```\n 替换为 \n```REFERENCED_COLUMN_NAME```。",
+  "link": "https://stackoverflow.com/questions/201621/how-do-i-see-all-foreign-keys-to-a-table-or-column"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 查询按天/月/年进行 GROUP BY",
+  "answer": "```GROUP BY YEAR(record_date), MONTH(record_date)\n```\n\n\n请查看 MySQL 中的 \n日期和时间函数。",
+  "link": "https://stackoverflow.com/questions/508791/mysql-query-group-by-day-month-year"
+ },
+ {
+  "category": "mysql",
+  "question": "在 MySQL 中何时使用单引号、双引号和反引号",
+  "answer": "反引号用于表和列标识符，但仅在标识符是 MySQL 保留关键字，或标识符包含空白字符或超出有限字符集的字符（见下文）时才需要使用。通常建议尽可能避免将保留关键字用作列或表标识符，以避免引号问题。\n\n\n单引号应用于字符串值，例如在 \n```VALUES()```\n 列表中。MySQL 也支持双引号用于字符串值，但单引号被其他 RDBMS 更广泛地接受，因此养成使用单引号而非双引号的习惯是好的。\n\n\nMySQL 还期望 \n```DATE```\n 和 \n```DATETIME```\n 字面值像字符串一样用单引号括起来，例如 \n```'2001-01-01 00:00:00'```\n。请查阅 \n日期和时间字面值\n 文档以了解更多细节，特别是关于在日期字符串中使用连字符 \n```-```\n 作为分段分隔符的替代方案。\n\n\n因此，以你的示例为例，我会对 PHP 字符串使用双引号，对值 \n```'val1', 'val2'```\n 使用单引号。  \n```NULL```\n 是 MySQL 关键字，也是一个特殊的（非）值，因此不加引号。\n\n\n这些表或列标识符都不是保留字，也没有使用需要引号的字符，但我还是用反引号将它们括起来了（稍后会详细说明……）。\n\n\nRDBMS 原生的函数（例如 MySQL 中的 \n```NOW()```\n）不应加引号，尽管它们的参数遵循前面提到的相同字符串或标识符引号规则。\n\n\n```Backtick (`)\ntable & column ───────┬─────┬──┬──┬──┬────┬──┬────┬──┬────┬──┬───────┐\n                      ↓     ↓  ↓  ↓  ↓    ↓  ↓    ↓  ↓    ↓  ↓       ↓\n$query = \"INSERT INTO `table` (`id`, `col1`, `col2`, `date`, `updated`) \n                       VALUES (NULL, 'val1', 'val2', '2001-01-01', NOW())\";\n                               ↑↑↑↑  ↑    ↑  ↑    ↑  ↑          ↑  ↑↑↑↑↑ \nUnquoted keyword          ─────┴┴┴┘  │    │  │    │  │          │  │││││\nSingle-quoted (') strings ───────────┴────┴──┴────┘  │          │  │││││\nSingle-quoted (') DATE    ───────────────────────────┴──────────┘  │││││\nUnquoted function         ─────────────────────────────────────────┴┴┴┴┘    \n```\n\n\n变量插值\n\n\n变量的引号模式不会改变，但如果你打算直接在字符串中插值变量，则该字符串在 PHP 中必须使用双引号。只需确保已正确转义变量以便在 SQL 中使用。（\n建议使用支持预处理语句的 API 代替，以防止 SQL 注入\n）。\n\n\n```// Same thing with some variable replacements\n// Here, a variable table name $table is backtick-quoted, and variables\n// in the VALUES list are single-quoted \n$query = \"INSERT INTO `$table` (`id`, `col1`, `col2`, `date`) VALUES (NULL, '$val1', '$val2', '$date')\";\n```\n\n\n预处理语句\n\n\n使用预处理语句时，请查阅文档以确定语句的占位符是否需要加引号。PHP 中最流行的 API，PDO 和 MySQLi，期望\n不加引号\n的占位符，其他语言中的大多数预处理语句 API 也是如此：\n\n\n```// PDO example with named parameters, unquoted\n$query = \"INSERT INTO `table` (`id`, `col1`, `col2`, `date`) VALUES (:id, :col1, :col2, :date)\";\n    \n// MySQLi example with ? parameters, unquoted\n$query = \"INSERT INTO `table` (`id`, `col1`, `col2`, `date`) VALUES (?, ?, ?, ?)\";\n```\n\n\n标识符中需要使用反引号引用的字符：\n\n\n根据 MySQL 文档\n，你不需要对使用以下字符集的标识符加引号（反引号）：\n\n\n\n\nASCII：\n```[0-9,a-z,A-Z$_]```\n（基本拉丁字母、数字 0-9、美元符号、下划线）\n\n\n\n\n你可以使用该字符集之外的字符作为表或列标识符，例如包括空白字符，但此时你\n必须\n对它们加引号（反引号）。\n\n\n此外，尽管数字是标识符的有效字符，但标识符不能仅由数字组成。如果仅由数字组成，则必须用反引号括起来。",
+  "link": "https://stackoverflow.com/questions/11321491/when-to-use-single-quotes-double-quotes-and-backticks-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 8.0 - 客户端不支持服务器请求的身份验证协议；请考虑升级 MySQL 客户端",
+  "answer": "在 MYSQL Workbench 中执行以下查询\n\n\n```ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'password';```\n\n\n其中 \n```root```\n 是你的用户\n\n```localhost```\n 是你的 URL\n而 \n```password```\n 是你的密码\n\n\n然后运行此查询以刷新权限：\n\n\n```flush privileges;```\n\n\n完成上述操作后，尝试使用 node 连接。\n\n\n如果这不起作用，请尝试去掉 \n```@'localhost'```\n 部分。",
+  "link": "https://stackoverflow.com/questions/50093144/mysql-8-0-client-does-not-support-authentication-protocol-requested-by-server"
+ },
+ {
+  "category": "mysql",
+  "question": "绕过 mysql_real_escape_string() 的 SQL 注入",
+  "answer": "简短的回答是：\n是的，确实存在绕过\n```mysql_real_escape_string()```\n的方法。\n#针对非常罕见的边缘情况！！！\n\n\n详细的回答就没那么简单了。它基于\n这里演示的\n一种攻击方式。\n\n\n攻击方式\n\n\n那么，我们先来展示这个攻击……\n\n\n```mysql_query('SET NAMES gbk');\n$var = mysql_real_escape_string(\"\\xbf\\x27 OR 1=1 /*\");\nmysql_query(\"SELECT * FROM test WHERE name = '$var' LIMIT 1\");\n```\n\n\n在某些情况下，这会返回多于 1 行。让我们剖析一下这里发生了什么：\n\n\n\n\n选择字符集\n\n\n```mysql_query('SET NAMES gbk');\n```\n\n\n要让这个攻击生效，我们需要服务器在连接上期望的编码既能将\n```'```\n编码为 ASCII 即\n```0x27```\n，\n又\n拥有某个最后一个字节是 ASCII\n```\\```\n即\n```0x5c```\n的字符。事实证明，MySQL 5.6 默认支持 5 种这样的编码：\n```big5```\n、\n```cp932```\n、\n```gb2312```\n、\n```gbk```\n和\n```sjis```\n。我们这里选择\n```gbk```\n。\n\n\n现在，非常重要的一点是要注意这里使用了\n```SET NAMES```\n。这会在\n服务器端\n设置字符集。如果我们使用 C API 函数\n```mysql_set_charset()```\n，就不会有问题（在 2006 年之后的 MySQL 版本上）。但稍后会详细说明原因……\n\n\n\n\nPayload\n\n\n我们将用于此注入的 payload 以字节序列\n```0xbf27```\n开头。在\n```gbk```\n中，这是一个无效的多字节字符；在\n```latin1```\n中，它是字符串\n```¿'```\n。注意，在\n```latin1```\n\n和\n\n```gbk```\n中，单独的\n```0x27```\n就是一个字面量\n```'```\n字符。\n\n\n我们选择这个 payload 是因为，如果我们对它调用\n```addslashes()```\n，就会在\n```'```\n字符之前插入一个 ASCII\n```\\```\n即\n```0x5c```\n。这样我们最终会得到\n```0xbf5c27```\n，而在\n```gbk```\n中这是一个两字符序列：\n```0xbf5c```\n后跟\n```0x27```\n。换句话说，一个\n有效\n字符后跟一个未转义的\n```'```\n。但我们并没有使用\n```addslashes()```\n。所以进入下一步……\n\n\n\n\nmysql_real_escape_string()\n\n\n对\n```mysql_real_escape_string()```\n的 C API 调用与\n```addslashes()```\n的不同之处在于，它知道连接的字符集。因此它可以针对服务器期望的字符集正确执行转义。然而，到目前为止，客户端认为我们仍然在使用\n```latin1```\n作为连接字符集，因为我们从未告诉它其他情况。我们确实告诉了\n服务器\n我们在使用\n```gbk```\n，但\n客户端\n仍然认为是\n```latin1```\n。\n\n\n因此，对\n```mysql_real_escape_string()```\n的调用插入了反斜杠，而我们的“已转义”内容中就留下了一个悬空的\n```'```\n字符！事实上，如果我们以\n```gbk```\n字符集查看\n```$var```\n，会看到：\n\n\n```縗' OR 1=1 /*```\n\n\n这正是\n攻击所需要的。\n\n\n\n\n查询\n\n\n这部分只是形式上的，但以下是渲染后的查询：\n\n\n```SELECT * FROM test WHERE name = '縗' OR 1=1 /*' LIMIT 1\n```\n\n\n\n\n\n\n恭喜，你刚刚成功攻击了一个使用\n```mysql_real_escape_string()```\n的程序……\n\n\n糟糕的部分\n\n\n情况更糟。\n```PDO```\n默认对 MySQL 使用\n模拟的\n预处理语句。这意味着在客户端，它基本上通过\n```mysql_real_escape_string()```\n（在 C 库中）执行 sprintf，这意味着以下代码会导致成功的注入：\n\n\n```$pdo->query('SET NAMES gbk');\n$stmt = $pdo->prepare('SELECT * FROM test WHERE name = ? LIMIT 1');\n$stmt->execute(array(\"\\xbf\\x27 OR 1=1 /*\"));\n```\n\n\n现在，值得注意的是，你可以通过禁用模拟预处理语句来防止这种情况：\n\n\n```$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);\n```\n\n\n这\n通常\n会得到真正的预处理语句（即数据在与查询分开的数据包中发送）。但是，请注意 PDO 会静默地\n回退\n到模拟那些 MySQL 无法原生预处理的语句：那些可以预处理的语句在手册中\n列出\n了，但要注意选择适当的服务器版本）。\n\n\n丑陋的部分\n\n\n我在最开始说过，如果我们使用\n```mysql_set_charset('gbk')```\n而不是\n```SET NAMES gbk```\n，就可以防止这一切。这是真的，前提是你使用的是 2006 年之后的 MySQL 版本。\n\n\n如果你使用的是更早的 MySQL 版本，那么\n```mysql_real_escape_string()```\n中的一个\nbug\n意味着，像我们 payload 中那样的无效多字节字符在转义时会被当作单字节处理，\n即使客户端已经被正确告知了连接编码\n，因此这个攻击仍然会成功。该 bug 在 MySQL\n4.1.20\n、\n5.0.22\n和\n5.1.11\n中已修复。\n\n\n但最糟糕的是，\n```PDO```\n直到 5.3.6 才暴露\n```mysql_set_charset()```\n的 C API，所以在之前的版本中它\n无法\n对每个可能的命令防止此攻击！\n现在它已作为\nDSN 参数\n暴露出来。\n\n\n救命稻草\n\n\n正如我们一开始所说，要让这个攻击生效，数据库连接必须使用有漏洞的字符集进行编码。\n```utf8mb4```\n\n不易受攻击\n，而且还能支持\n每一个\nUnicode 字符：所以你可以选择使用它——但它仅从 MySQL 5.5.3 起才可用。另一种选择是\n```utf8```\n，它同样\n不易受攻击\n，并且可以支持整个 Unicode\n基本多文种平面\n。\n\n\n或者，你可以启用\n```NO_BACKSLASH_ESCAPES```\nSQL 模式，它（除其他作用外）会改变\n```mysql_real_escape_string()```\n的操作。启用此模式后，\n```0x27```\n将被替换为\n```0x2727```\n而不是\n```0x5c27```\n，因此转义过程\n无法\n在任何易受攻击的编码中创建出原本不存在的有效字符（即\n```0xbf27```\n仍然是\n```0xbf27```\n等）——所以服务器仍会拒绝该字符串为无效。但是，关于使用此 SQL 模式可能引发的另一种漏洞，请参见\n@eggyal 的回答\n。\n\n\n安全示例\n\n\n以下示例是安全的：\n\n\n```mysql_query('SET NAMES utf8');\n$var = mysql_real_escape_string(\"\\xbf\\x27 OR 1=1 /*\");\nmysql_query(\"SELECT * FROM test WHERE name = '$var' LIMIT 1\");\n```\n\n\n因为服务器期望的是\n```utf8```\n……\n\n\n```mysql_set_charset('gbk');\n$var = mysql_real_escape_string(\"\\xbf\\x27 OR 1=1 /*\");\nmysql_query(\"SELECT * FROM test WHERE name = '$var' LIMIT 1\");\n```\n\n\n因为我们已经正确设置了字符集，使客户端和服务器匹配。\n\n\n```$pdo->setAttribute(PDO::ATTR_EMULATE_PREPARES, false);\n$pdo->query('SET NAMES gbk');\n$stmt = $pdo->prepare('SELECT * FROM test WHERE name = ? LIMIT 1');\n$stmt->execute(array(\"\\xbf\\x27 OR 1=1 /*\"));\n```\n\n\n因为我们已经关闭了模拟预处理语句。\n\n\n```$pdo = new PDO('mysql:host=localhost;dbname=testdb;charset=gbk', $user, $password);\n$stmt = $pdo->prepare('SELECT * FROM test WHERE name = ? LIMIT 1');\n$stmt->execute(array(\"\\xbf\\x27 OR 1=1 /*\"));\n```\n\n\n因为我们已经正确设置了字符集。\n\n\n```$mysqli->query('SET NAMES gbk');\n$stmt = $mysqli->prepare('SELECT * FROM test WHERE name = ? LIMIT 1');\n$param = \"\\xbf\\x27 OR 1=1 /*\";\n$stmt->bind_param('s', $param);\n$stmt->execute();\n```\n\n\n因为 MySQLi 始终执行真正的预处理语句。\n\n\n总结\n\n\n如果你：\n\n\n\n\n使用现代版本的 MySQL（5.1 后期、所有 5.5、5.6 等）\n并且\n使用\n```mysql_set_charset()```\n/ \n```$mysqli->set_charset()```\n/ PDO 的 DSN charset 参数（在 PHP ≥ 5.3.6 中）\n\n\n\n\n或者\n\n\n\n\n不要为连接编码使用有漏洞的字符集（你只使用\n```utf8```\n/ \n```latin1```\n/ \n```ascii```\n/ 等）\n\n\n\n\n那么你是 100% 安全的。\n\n\n否则，即使你使用了\n```mysql_real_escape_string()```\n，你也是易受攻击的……",
+  "link": "https://stackoverflow.com/questions/5741187/sql-injection-that-gets-around-mysql-real-escape-string"
+ },
+ {
+  "category": "mysql",
+  "question": "在 PHP 中使用 MySQL 时，最好使用哪种排序规则？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/367711/what-is-the-best-collation-to-use-for-mysql-with-php"
+ },
+ {
+  "category": "mysql",
+  "question": "在 SELECT 语句中使用 IF 根据列值选择输出值",
+  "answer": "```SELECT id, \n       IF(type = 'P', amount, amount * -1) as amount\nFROM report\n```\n\n\n参见\nhttps://dev.mysql.com/doc/refman/8.0/en/flow-control-functions.html\n。\n\n\n此外，你还可以处理条件为 null 的情况。例如 amount 为 null 时：\n\n\n```SELECT id, \n       IF(type = 'P', IFNULL(amount,0), IFNULL(amount,0) * -1) as amount\nFROM report\n```\n\n\n其中\n```IFNULL(amount,0)```\n表示\n当 amount 不为 null 时返回 amount，否则返回 0。",
+  "link": "https://stackoverflow.com/questions/5951157/if-in-select-statement-choose-output-value-based-on-column-values"
+ },
+ {
+  "category": "mysql",
+  "question": "在 MySQL 中创建新用户并授予其对单个数据库的完全访问权限",
+  "answer": "尝试以下命令创建用户：\n\n\n```CREATE USER 'user'@'hostname';\n```\n\n\n尝试以下命令授予其对数据库\n```dbTest```\n的访问权限：\n\n\n```GRANT ALL PRIVILEGES ON dbTest.* To 'user'@'hostname' IDENTIFIED BY 'password';\n```\n\n\n如果你在同一台机器上运行访问 MySQL 的代码/站点，hostname 应为 localhost。\n\n\n现在，详细解释如下。\n\n\n```GRANT```\n - 这是用于创建用户并授予数据库、表等权限的命令。\n\n\n```ALL PRIVILEGES```\n - 这表示用户将拥有所有标准权限。但这不包括使用 GRANT 命令的权限。\n\n\n```dbtest.*```\n - 这指示 MySQL 将这些权限应用于整个 dbtest 数据库。你可以根据需要将 * 替换为特定的表名或存储例程。\n\n\n```TO 'user'@'hostname'```\n - 'user' 是你正在创建的用户账户的用户名。注意：必须包含单引号。'hostname' 告诉 MySQL 用户可以从哪些主机连接。如果只希望从同一台机器连接，请使用\n```localhost```\n\n\n```IDENTIFIED BY 'password'```\n - 如你所料，这为该用户设置密码。",
+  "link": "https://stackoverflow.com/questions/1720244/create-new-user-in-mysql-and-give-it-full-access-to-one-database"
+ },
+ {
+  "category": "mysql",
+  "question": "在 MySQL 中查找重复记录",
+  "answer": "关键在于重写这个查询，使其可以作为子查询使用。\n\n\n```SELECT firstname, \n   lastname, \n   list.address \nFROM list\n   INNER JOIN (SELECT address\n               FROM   list\n               GROUP  BY address\n               HAVING COUNT(id) > 1) dup\n           ON list.address = dup.address;\n```",
+  "link": "https://stackoverflow.com/questions/854128/find-duplicate-records-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL：授予数据库的**所有**权限",
+  "answer": "```GRANT ALL PRIVILEGES\nON mydb.*\nTO 'myuser'@'%'\nWITH GRANT OPTION;\n```\n\n\n这是我创建“超级用户”权限的方式（不过我通常会指定主机）。\n\n\n重要提示\n\n\n虽然这个答案可以解决访问问题，\n```WITH GRANT OPTION```\n 会创建一个可以\n编辑其他用户权限\n的 MySQL 用户。\n\n\n\n\nGRANT OPTION 权限使你能够将自己拥有的权限授予其他用户或从其他用户处移除。\n\n\n\n\n出于安全原因，你不应将此类用户账户用于公众可以访问的任何进程（例如网站）。建议为此类用途\n创建一个仅具有数据库权限的用户\n。",
+  "link": "https://stackoverflow.com/questions/5016505/mysql-grant-all-privileges-on-database"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中更改列的数据类型？",
+  "answer": "http://dev.mysql.com/doc/refman/5.1/en/alter-table.html\n\n\n```ALTER TABLE tablename MODIFY columnname INTEGER;\n```\n\n\n这将更改指定列的数据类型。\n\n\n根据你希望修改的列的数量，最好生成一个脚本，或者使用某种 MySQL 客户端 GUI。",
+  "link": "https://stackoverflow.com/questions/1356866/how-do-i-change-the-data-type-for-a-column-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "无法加载身份验证插件 'caching_sha2_password'",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/49194719/authentication-plugin-caching-sha2-password-cannot-be-loaded"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL - 基于 SELECT 查询的 UPDATE 查询",
+  "answer": "实际上，你可以用以下两种方式之一来实现：\n\n\nMySQL 更新连接语法：\n\n\n```UPDATE tableA a\nINNER JOIN tableB b ON a.name_a = b.name_b\nSET validation_check = if(start_dts > end_dts, 'VALID', '')\n-- where 子句可以放在这里\n```\n\n\nANSI SQL 语法：\n\n\n```UPDATE tableA SET validation_check = \n    (SELECT if(start_DTS > end_DTS, 'VALID', '') AS validation_check\n        FROM tableA\n        INNER JOIN tableB ON name_A = name_B\n        WHERE id_A = tableA.id_A)\n```\n\n\n选择你觉得最自然的那一种即可。",
+  "link": "https://stackoverflow.com/questions/1262786/mysql-update-query-based-on-select-query"
+ },
+ {
+  "category": "mysql",
+  "question": "如何从 mysqldump 恢复转储文件？",
+  "answer": "如果要恢复的数据库尚不存在，你需要先创建它。\n\n\n在命令行中，如果你位于包含转储文件的同一目录下，请使用以下命令（替换为适当的值）：\n\n\n```C:\\> mysql -u root -p\n\nmysql> create database mydb;\nmysql> use mydb;\nmysql> source db_backup.dump;\n```",
+  "link": "https://stackoverflow.com/questions/105776/how-do-i-restore-a-dump-file-from-mysqldump"
+ },
+ {
+  "category": "mysql",
+  "question": "如何使用 mysqldump 跳过某些数据库表？",
+  "answer": "你可以使用\n--ignore-table\n选项。因此你可以这样做\n\n\n```mysqldump -u USERNAME -pPASSWORD DATABASE --ignore-table=DATABASE.table1 > database.sql\n```\n\n\n在\n```-p```\n之后没有空格（这不是打字错误）。\n\n\n要忽略多个表，请多次使用此选项，据文档说明，至少从\n5.0 版本\n开始就可以这样使用。\n\n\n如果你想用另一种方法忽略多个表，可以使用如下脚本：\n\n\n```#!/bin/bash\nPASSWORD=XXXXXX\nHOST=XXXXXX\nUSER=XXXXXX\nDATABASE=databasename\nDB_FILE=dump.sql\nEXCLUDED_TABLES=(\ntable1\ntable2\ntable3\ntable4\ntableN   \n)\n \nIGNORED_TABLES_STRING=''\nfor TABLE in \"${EXCLUDED_TABLES[@]}\"\ndo :\n   IGNORED_TABLES_STRING+=\" --ignore-table=${DATABASE}.${TABLE}\"\ndone\n\necho \"Dump structure\"\nmysqldump --host=${HOST} --user=${USER} --password=${PASSWORD} --single-transaction --no-data --routines ${DATABASE} > ${DB_FILE}\n\necho \"Dump content\"\nmysqldump --host=${HOST} --user=${USER} --password=${PASSWORD} ${DATABASE} --no-create-info --skip-triggers ${IGNORED_TABLES_STRING} >> ${DB_FILE}\n```",
+  "link": "https://stackoverflow.com/questions/425158/how-to-skip-certain-database-tables-with-mysqldump"
+ },
+ {
+  "category": "mysql",
+  "question": "导出不含数据的架构",
+  "answer": "你可以使用 mysqldump 命令的\n```--no-data```\n选项来实现\n\n\n```mysqldump -h yourhostnameorIP -u root -p --no-data dbname > schema.sql\n```",
+  "link": "https://stackoverflow.com/questions/6175473/export-schema-without-data"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 错误 #1071 - 指定的键太长；最大键长度为 767 字节",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/1814532/mysql-error-1071-specified-key-was-too-long-max-key-length-is-767-bytes"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 中 INDEX、PRIMARY、UNIQUE、FULLTEXT 之间的区别是什么？",
+  "answer": "区别\n\n\n\n\nKEY 或 INDEX 指的是普通的非唯一索引。索引中允许出现非唯一值，因此索引中可能包含在所有索引列上具有相同值的行。这些索引不对数据施加任何约束，因此它们仅用于访问——快速到达特定范围的记录，而无需扫描所有记录。\n\n\n\n\nUNIQUE 指的是索引中所有行都必须唯一的索引。也就是说，一行不能与另一行在此索引的所有列上具有相同的非 NULL 值。除了用于快速到达特定记录范围外，UNIQUE 索引还可用于对数据施加约束，因为数据库系统在插入或更新数据时不允许违反唯一值规则。\n\n\n您的数据库系统可能允许将 UNIQUE 索引应用于允许 NULL 值的列，在这种情况下，如果两行都包含 NULL 值，则允许它们相同（这里的理由是 NULL 被认为不等于自身）。然而，根据您的应用程序，您可能会发现这是不可取的：如果您希望防止这种情况，应在相关列中禁止 NULL 值。\n\n\n\n\nPRIMARY 的行为与 UNIQUE 索引完全相同，只是它始终命名为 'PRIMARY'，并且一个表上只能有一个（而且应该始终有一个；尽管某些数据库系统不强制这一点）。PRIMARY 索引旨在作为唯一标识表中任何行的主要手段，因此与 UNIQUE 不同，它不应应用于任何允许 NULL 值的列。您的 PRIMARY 索引应建立在足以唯一标识一行的最少列上。通常，这只是一个包含唯一自动递增数字的列，但如果还有其他任何可以唯一标识一行的内容，例如国家列表中的“countrycode”，您可以使用它代替。\n\n\n某些数据库系统（例如 MySQL 的 InnoDB）会在内部将表的实际记录存储在 PRIMARY KEY 的 B 树索引中。\n\n\n\n\nFULLTEXT 索引与上述所有索引不同，其行为在数据库系统之间差异显著。FULLTEXT 索引仅对使用 MATCH() / AGAINST() 子句进行的全文搜索有用，不像上述三种——它们通常在内部使用 B 树（允许从最左列开始进行选择、排序或范围查询）或哈希表（允许从最左列开始进行选择）实现。\n\n\n其他索引类型是通用的，而 FULLTEXT 索引是专门的，因为它服务于一个狭窄的目的：它仅用于“全文搜索”功能。\n\n\n\n\n\n\n相似之处\n\n\n\n\n所有这些索引都可以包含多个列。\n\n\n\n\n除 FULLTEXT 外，列顺序很重要：要使索引在查询中有用，查询必须从左侧开始使用索引中的列——它不能仅使用索引的第二、第三或第四部分，除非它还使用索引中前面的列来匹配静态值。（要使 FULLTEXT 索引对查询有用，查询必须使用索引的所有列。）",
+  "link": "https://stackoverflow.com/questions/707874/differences-between-index-primary-unique-fulltext-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "如何获取 MySQL 数据库管理系统（DBMS）的当前版本？",
+  "answer": "可以尝试使用这个函数——\n\n\n```SELECT VERSION();\n-> '5.7.22-standard'\n```\n\n\nVERSION()\n\n\n或者，若需获取更详细的信息，请使用：\n\n\n```SHOW VARIABLES LIKE \"%version%\";\n+-------------------------+------------------------------------------+\n| Variable_name           | Value                                    |\n+-------------------------+------------------------------------------+\n| protocol_version        | 10                                       |\n| version                 | 5.0.27-standard                          |\n| version_comment         | MySQL Community Edition - Standard (GPL) |\n| version_compile_machine | i686                                     |\n| version_compile_os      | pc-linux-gnu                             |\n+-------------------------+------------------------------------------+\n5 rows in set (0.04 sec)\n```\n\n\nMySQL 5.0 参考手册（PDF）——确定当前 MySQL 版本——第 42 页",
+  "link": "https://stackoverflow.com/questions/8987679/how-to-retrieve-the-current-version-of-a-mysql-database-management-system-dbms"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 字符串替换",
+  "answer": "```UPDATE your_table\nSET your_field = REPLACE(your_field, 'articles/updates/', 'articles/news/')\nWHERE your_field LIKE '%articles/updates/%'\n```\n\n\n现在，原本类似这样的行\n\n\n```http://www.example.com/articles/updates/43```\n\n\n将会变成\n\n\n```http://www.example.com/articles/news/43```\n\n\nhttp://www.electrictoolbox.com/mysql-find-replace-text/",
+  "link": "https://stackoverflow.com/questions/5956993/mysql-string-replace"
+ },
+ {
+  "category": "mysql",
+  "question": "在 MySQL 中，int(11) 列的大小是多少字节？",
+  "answer": "一个 \n```INT```\n 始终占用 4 字节，无论指定的长度是多少。\n\n\n\n\n```TINYINT```\n = 1 字节（8 位）\n\n\n```SMALLINT```\n = 2 字节（16 位）\n\n\n```MEDIUMINT```\n = 3 字节（24 位）\n\n\n```INT```\n = 4 字节（32 位）\n\n\n```BIGINT```\n = 8 字节（64 位）。\n\n\n\n\n长度仅指定在使用 MySQL 命令行客户端选择数据时要填充多少个字符。12345 存储为 \n```int(3)```\n 仍会显示为 12345，但如果存储为 \n```int(10)```\n 它仍会显示为 12345，但你可以选择填充前五位数字。例如，如果你添加了 \n```ZEROFILL```\n 它会显示为 0000012345。\n\n\n... 最大值将是 2147483647（有符号）或 4294967295（无符号）",
+  "link": "https://stackoverflow.com/questions/5634104/what-is-the-size-of-column-of-int11-in-mysql-in-bytes"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中运行 SQL 脚本？",
+  "answer": "如果你在 MySQL 命令行 \n```mysql>```\n 下，你必须使用 \n```source```\n 来声明 SQL 文件。\n\n\n```mysql> source \\home\\user\\Desktop\\test.sql;\n```",
+  "link": "https://stackoverflow.com/questions/8940230/how-to-run-sql-script-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "ERROR 2002 (HY000): 无法通过套接字 '/var/run/mysqld/mysqld.sock' 连接到本地 MySQL 服务器 (2)",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/11657829/error-2002-hy000-cant-connect-to-local-mysql-server-through-socket-var-run"
+ },
+ {
+  "category": "mysql",
+  "question": "如何查看实时的 MySQL 查询？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/568564/how-can-i-view-live-mysql-queries"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中查看数据库或表的索引？",
+  "answer": "要查看特定表的索引，请使用 SHOW INDEX：\n\n\n```SHOW INDEX FROM yourtable;\n```\n\n\n要查看特定 schema 中所有表的索引，可以使用 INFORMATION_SCHEMA 中的 STATISTICS 表：\n\n\n```SELECT DISTINCT\n    TABLE_NAME,\n    INDEX_NAME\nFROM INFORMATION_SCHEMA.STATISTICS\nWHERE TABLE_SCHEMA = 'your_schema';\n```\n\n\n去掉 where 子句将显示所有 schema 中的所有索引。",
+  "link": "https://stackoverflow.com/questions/5213339/how-to-see-indexes-for-a-database-or-table-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中进行正则表达式替换？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/986826/how-to-do-a-regular-expression-replace-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "ERROR 1698 (28000): Access denied for user 'root'@'localhost'",
+  "answer": "在某些系统（如 Ubuntu）上，MySQL 默认使用 Unix auth_socket 插件。\n\n\n基本上这意味着：使用该插件的数据库用户将通过系统用户凭据进行“认证”。你可以通过以下方式查看你的 ```root``` 用户是否是这样设置的：\n\n\n```sudo mysql -u root # 因为是全新安装，我不得不使用 \"sudo\"\n\nmysql> USE mysql;\nmysql> SELECT User, Host, plugin FROM mysql.user;\n\n+------------------+-----------------------+\n| User             | plugin                |\n+------------------+-----------------------+\n| root             | auth_socket           |\n| mysql.sys        | mysql_native_password |\n| debian-sys-maint | mysql_native_password |\n+------------------+-----------------------+\n```\n\n\n从查询结果可以看到，```root``` 用户使用的是 ```auth_socket``` 插件。\n\n\n有两种方法可以解决这个问题：\n\n\n\n\n你可以将 root 用户设置为使用 ```mysql_native_password``` 插件\n\n\n你可以用你的 ```system_user``` 创建一个新的 ```db_user```（推荐）\n\n\n\n\n选项 1：\n\n\n```sudo mysql -u root # 因为是全新安装，我不得不使用 \"sudo\"\n\nmysql> USE mysql;\nmysql> UPDATE user SET plugin='mysql_native_password' WHERE User='root';\nmysql> FLUSH PRIVILEGES;\nmysql> exit;\n\nsudo service mysql restart\n```\n\n\n选项 2：（将 YOUR_SYSTEM_USER 替换为你的用户名）\n\n\n```sudo mysql -u root # 因为是全新安装，我不得不使用 \"sudo\"\n\nmysql> USE mysql;\nmysql> CREATE USER 'YOUR_SYSTEM_USER'@'localhost' IDENTIFIED BY 'YOUR_PASSWD';\nmysql> GRANT ALL PRIVILEGES ON *.* TO 'YOUR_SYSTEM_USER'@'localhost';\nmysql> UPDATE user SET plugin='auth_socket' WHERE User='YOUR_SYSTEM_USER';\nmysql> FLUSH PRIVILEGES;\nmysql> exit;\n\nsudo service mysql restart\n```\n\n\n请记住，如果使用选项 2，你需要以系统用户名连接 MySQL（```mysql -u YOUR_SYSTEM_USER```）。\n\n\n注意：在某些系统（例如 Debian 9 (Stretch)）上，'auth_socket' 插件被称为 'unix_socket'，因此相应的 SQL 命令应为：```UPDATE user SET plugin='unix_socket' WHERE User='YOUR_SYSTEM_USER';```\n\n\n根据 andy 的评论，MySQL 8.x.x 似乎已将 ```auth_socket``` 更新/替换为 ```caching_sha2_password```。我没有 MySQL 8.x.x 的环境来测试这一点。不过，上述步骤应该能帮助你理解这个问题。以下是回复内容：\n\n\n从 MySQL 8.0.4 开始的一个变化是，新的默认认证插件是 'caching_sha2_password'。新的 'YOUR_SYSTEM_USER' 将拥有这个认证插件，你现在可以从 Bash shell 中使用 \"mysql -u YOUR_SYSTEM_USER -p\" 登录，并在提示符处提供该用户的密码。不再需要 \"UPDATE user SET plugin\" 这一步。\n\n\n关于 8.0.4 默认认证插件的更新，请参阅 MySQL 8.0.4: New Default Authentication Plugin: caching_sha2_password。",
+  "link": "https://stackoverflow.com/questions/39281594/error-1698-28000-access-denied-for-user-rootlocalhost"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 中使用 Join 进行删除",
+  "answer": "你只需要指定要从 ```posts``` 表中删除记录：\n\n\n```DELETE posts\nFROM posts\nINNER JOIN projects ON projects.project_id = posts.project_id\nWHERE projects.client_id = :client_id\n```\n\n\n编辑：更多信息请参阅这个替代答案",
+  "link": "https://stackoverflow.com/questions/652770/delete-with-join-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中声明变量？",
+  "answer": "MySQL 中的变量主要有三种类型：\n\n\n\n\n用户定义变量\n（以 \n```@```\n 为前缀）：\n \n\n\n你可以访问任何用户定义变量，而无需声明或初始化它。如果你引用一个未初始化的变量，它的值为 \n```NULL```\n，类型为字符串。\n\n\n```SELECT @var_any_var_name\n```\n\n\n你可以使用 \n```SET```\n 或 \n```SELECT```\n 语句初始化变量：\n\n\n```SET @start = 1, @finish = 10;    \n```\n\n\n或者 \n\n\n```SELECT @start := 1, @finish := 10;\n\nSELECT * FROM places WHERE place BETWEEN @start AND @finish;\n```\n\n\n用户变量可以从有限的数据类型集合中赋值：整数、小数、浮点数、二进制或非二进制字符串，或 NULL 值。\n\n\n用户定义变量是会话特定的。也就是说，一个客户端定义的用户变量无法被其他客户端看到或使用。\n\n\n它们可以在 \n```SELECT```\n 查询中使用，使用 \nAdvanced MySQL user variable techniques\n。\n\n\n局部变量\n（无前缀）：\n\n\n局部变量需要在访问之前使用 \n```DECLARE```\n 声明。\n\n\n它们可以在存储过程中用作局部变量和输入参数：   \n\n\n```DELIMITER //\n\nCREATE PROCEDURE sp_test(var1 INT) \nBEGIN   \n    DECLARE start  INT unsigned DEFAULT 1;  \n    DECLARE finish INT unsigned DEFAULT 10;\n\n    SELECT  var1, start, finish;\n\n    SELECT * FROM places WHERE place BETWEEN start AND finish; \nEND; //\n\nDELIMITER ;\n\nCALL sp_test(5);\n```\n\n\n如果缺少 \n```DEFAULT```\n 子句，初始值为 \n```NULL```\n。 \n\n\n局部变量的作用域是声明它的 \n```BEGIN ... END```\n 块。\n\n\n服务器系统变量\n（以 \n```@@```\n 为前缀）：\n\n\nMySQL 服务器维护许多配置为默认值的 \nsystem variables\n。它们可以是 \n```GLOBAL```\n、\n```SESSION```\n 或 \n```BOTH```\n 类型。\n\n\n全局变量影响服务器的整体运行，而会话变量影响单个客户端连接的运行。\n\n\n要查看运行中的服务器使用的当前值，请使用 \n```SHOW VARIABLES```\n 语句或 \n```SELECT @@var_name```\n。 \n\n\n```SHOW VARIABLES LIKE '%wait_timeout%';\n\nSELECT @@sort_buffer_size;\n```\n\n\n它们可以在服务器启动时通过命令行选项或选项文件设置。 \n大多数可以在服务器运行时使用 \n```SET GLOBAL```\n 或 \n```SET SESSION```\n 动态更改：\n\n\n```-- Syntax to Set value to a Global variable:\nSET GLOBAL sort_buffer_size=1000000;\nSET @@global.sort_buffer_size=1000000;\n\n-- Syntax to Set value to a Session variable:\nSET sort_buffer_size=1000000;\nSET SESSION sort_buffer_size=1000000;\nSET @@sort_buffer_size=1000000;\nSET @@local.sort_buffer_size=10000;\n```",
+  "link": "https://stackoverflow.com/questions/11754781/how-to-declare-a-variable-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "如何解决“Error: MySQL shutdown unexpectedly”？",
+  "answer": "重要\n**：** 不要\n删除 \n```ibdata1```\n 文件。你可能会破坏所有数据库。\n\n\n相反，首先尝试使用 XAMPP 附带的 \nMySQL backup folder\n。因此执行以下步骤：\n\n\n\n\n将文件夹 \n```mysql/data```\n 重命名为 \n```mysql/data_old```\n\n\n复制 \n```mysql/backup```\n 文件夹并将其命名为 \n```mysql/data```\n\n\n将所有数据库文件夹从 \n```mysql/data_old```\n 复制到 \n```mysql/data```\n  （除了 \n```mysql```\n、\n```performance_schema,```\n \n```phpmyadmin,```\n和\n```test```\n 文件夹）\n\n\n将 \n```mysql/data_old/ibdata1```\n 文件复制到 \n```mysql/data```\n 文件夹\n\n\n从 XAMPP 控制面板启动 MySQL\n\n\n\n\n然后，瞧！\n\n\n正如一些用户提到的，这是一种应急解决方案，不是永久性的。恢复数据后，强烈建议\n备份数据并重新安装 XAMPP，因为故障与 XAMPP 某些文件的故障有关，而不是数据库。",
+  "link": "https://stackoverflow.com/questions/18022809/how-can-i-solve-error-mysql-shutdown-unexpectedly"
+ },
+ {
+  "category": "mysql",
+  "question": "Java 连接 MySQL：不允许公钥检索",
+  "answer": "你应该在 mysql-connector 中添加客户端选项\n```allowPublicKeyRetrieval=true```\n以允许客户端自动从服务器请求公钥。请注意，\n```allowPublicKeyRetrieval=True```\n可能允许恶意代理执行 MITM 攻击以获取明文密码，因此默认值为 False，必须显式启用。\n\n\n参见\nMySQL .NET 连接字符串选项\n\n\n你也可以尝试在用于测试/开发目的时添加\n```useSSL=false```\n\n\n示例：\n\n\n```jdbc:mysql://localhost:3306/db?allowPublicKeyRetrieval=true&useSSL=false\n```",
+  "link": "https://stackoverflow.com/questions/50379839/connection-java-mysql-public-key-retrieval-is-not-allowed"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 删除所有表，忽略外键",
+  "answer": "我发现生成的 drop 语句集合很有用，并推荐以下调整：\n\n\n\n\n像这样将生成的 drop 限制到你的数据库：\n\n\n\n\n```SELECT concat('DROP TABLE IF EXISTS `', table_name, '`;')\nFROM information_schema.tables\nWHERE table_schema = 'MyDatabaseName';\n```\n\n\n注意 1：这不会执行 DROP 语句，它只是给你一个列表。\n 你需要将输出剪切并粘贴到你的 SQL 引擎中才能执行它们。\n\n\n注意 2：如果你有 VIEW，你必须手动将每个 \n```DROP TABLE `VIEW_NAME````\n 语句更正为 \n```DROP VIEW `VIEW_NAME````\n。\n\n\n\n\n注意，根据 \nhttp://dev.mysql.com/doc/refman/5.5/en/drop-table.html\n，使用 cascade 删除是无意义/误导性的：\n\n\n\n\n\n\n“允许 RESTRICT 和 CASCADE 是为了让移植更容易。在 MySQL 5.5 中，它们不起作用。”\n\n\n\n\n因此，为了让 drop 语句在需要时正常工作：\n\n\n```SET FOREIGN_KEY_CHECKS = 0\n```\n\n\n这将禁用引用完整性检查——所以当你完成所需的 drop 后，你需要使用以下命令重置键检查：\n\n\n```SET FOREIGN_KEY_CHECKS = 1\n```\n\n\n\n\n最终执行应如下所示：\n\n\n\n\n```SET FOREIGN_KEY_CHECKS = 0;\n-- 你的以分号分隔的 DROP 语句列表放在这里\nSET FOREIGN_KEY_CHECKS = 1;\n```\n\n\n注意：为了更容易使用 SELECT 的输出，mysql -B 选项可能会有帮助。",
+  "link": "https://stackoverflow.com/questions/3476765/mysql-drop-all-tables-ignoring-foreign-keys"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中收缩/清除 ibdata1 文件",
+  "answer": "```ibdata1``` 不收缩是 MySQL 一个特别烦人的特性。除非你删除所有数据库、移除文件并重新导入 dump，否则 ```ibdata1``` 文件实际上无法被收缩。\n\n\n但你可以配置 MySQL，让每个表（包括其索引）都存储为单独的文件。这样 ```ibdata1``` 就不会增长得那么大。根据 Bill Karwin 的评论，从 MySQL 5.6.6 版本开始，这一特性默认启用。\n\n\n我做这件事已经有一段时间了。不过，要让服务器为每个表使用单独的文件，你需要修改 ```my.cnf``` 来启用它：\n\n\n```[mysqld]\ninnodb_file_per_table=1\n```\n\n\nhttps://dev.mysql.com/doc/refman/5.6/en/innodb-file-per-table-tablespaces.html\n\n\n由于你想从 ```ibdata1``` 中回收空间，实际上你必须删除该文件：\n\n\n\n\n对所有数据库、存储过程、触发器等执行 ```mysqldump```，但 ```mysql``` 和 ```performance_schema``` 数据库除外。\n\n\n删除所有数据库，但上述 2 个数据库除外（```mysql``` 和 ```performance_schema```）\n\n\n停止 mysql\n\n\n删除 ```ibdata1``` 和 ```ib_log``` 文件\n\n\n启动 mysql\n\n\n从 dump 恢复\n\n\n\n\n当你在第 5 步启动 MySQL 时，```ibdata1``` 和 ```ib_log``` 文件将被重新创建。\n\n\n现在你就可以继续了。当你为分析创建一个新数据库时，表将位于单独的 ```ibd*``` 文件中，而不是 ```ibdata1``` 中。由于你通常会在不久后删除该数据库，这些 ```ibd*``` 文件也会被删除。\n\n\nhttp://dev.mysql.com/doc/refman/5.1/en/drop-database.html\n\n\n你可能已经见过这个：\n\n\nhttp://bugs.mysql.com/bug.php?id=1341\n\n\n通过使用命令 ```ALTER TABLE <tablename> ENGINE=innodb``` 或 ```OPTIMIZE TABLE <tablename>```，可以将数据和索引页从 ibdata1 提取到单独的文件中。但是，除非你执行上述步骤，否则 ibdata1 不会收缩。\n\n\n关于 ```information_schema```，没有必要也不可能删除它。事实上，它只是一堆只读视图，而不是表。而且它们没有关联的文件，甚至没有数据库目录。```informations_schema``` 使用内存数据库引擎，并在 mysqld 停止/重启时被删除并重新生成。参见 https://dev.mysql.com/doc/refman/5.7/en/information-schema.html。",
+  "link": "https://stackoverflow.com/questions/3456159/how-to-shrink-purge-ibdata1-file-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 错误：'Access denied for user 'root'@'localhost'",
+  "answer": "我找到的所有解决方案都比必要的复杂得多，而且没有一个对我有用。以下是解决我问题的方案。无需重启 mysqld 或以特殊权限启动它。\n\n\n```sudo mysql\n\n-- for MySQL\nALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'root';\n\n-- for MariaDB\nALTER USER 'root'@'localhost' IDENTIFIED VIA mysql_native_password USING PASSWORD('root');\n```\n\n\n通过单个查询，我们将 auth_plugin 更改为 mysql_native_password，并将 root 密码设置为 root（可以在查询中随意更改）。\n\n\n现在你应该能够以 root 身份登录了。更多信息可在 MySQL 文档或 MariaDB 文档中找到。\n\n\n（使用 Ctrl + D 或输入 exit 退出 MySQL 控制台。）",
+  "link": "https://stackoverflow.com/questions/41645309/mysql-error-access-denied-for-user-rootlocalhost"
+ },
+ {
+  "category": "mysql",
+  "question": "在 SELECT 语句中创建临时表，而无需单独的 CREATE TABLE",
+  "answer": "```CREATE TEMPORARY TABLE IF NOT EXISTS table2 AS (SELECT * FROM table1)\n```\n\n\n参考手册：\nhttp://dev.mysql.com/doc/refman/5.7/en/create-table.html\n\n\n\n\n创建表时可以使用 TEMPORARY 关键字。临时表仅对当前会话可见，并在会话关闭时自动删除。这意味着两个不同的会话可以使用相同的临时表名，而不会相互冲突，也不会与同名的现有非临时表冲突。（现有表会被隐藏，直到临时表被删除。）要创建临时表，您必须拥有 CREATE TEMPORARY TABLES 权限。",
+  "link": "https://stackoverflow.com/questions/5859391/create-a-temporary-table-in-a-select-statement-without-a-separate-create-table"
+ },
+ {
+  "category": "mysql",
+  "question": "如何备份 MySQL 数据库中的单个表？",
+  "answer": "从 .sql 文件导出和恢复单个表\n\n\n导出\n\n\n```mysqldump db_name table_name > table_name.sql\n```\n\n\n从远程数据库导出\n\n\n```mysqldump -u <db_username> -h <db_host> -p db_name table_name > table_name.sql\n```\n\n\n更多参考：\n\n\nhttp://www.abbeyworkshop.com/howto/lamp/MySQL_Export_Backup/index.html\n\n\n恢复\n\n\n```mysql -u <user_name> -p db_name\nmysql> source <full_path>/table_name.sql\n```\n\n\n或一行命令\n\n\n```mysql -u username -p db_name < /path/to/table_name.sql```\n\n\n\n\n从压缩（.sql.gz）格式导出和恢复单个表\n\n\n来源：\nJohn McGrath\n \n\n\n导出\n\n\n```mysqldump db_name table_name | gzip > table_name.sql.gz\n```\n\n\n恢复\n\n\n```gunzip < table_name.sql.gz | mysql -u username -p db_name\n```",
+  "link": "https://stackoverflow.com/questions/6682916/how-to-take-backup-of-a-single-table-in-a-mysql-database"
+ },
+ {
+  "category": "mysql",
+  "question": "如何解决 MySQL 中的 --secure-file-priv 问题？",
+  "answer": "这是按预期工作的。你的 MySQL 服务器启动时使用了 --secure-file-priv 选项，该选项限制了你可以使用\n```LOAD DATA INFILE```\n从哪些目录加载文件。\n\n\n使用\n```SHOW VARIABLES LIKE \"secure_file_priv\";```\n查看已配置的目录。\n\n\n你有两个选择：\n\n\n\n\n将你的文件移动到由\n```secure-file-priv```\n指定的目录中。\n\n\n禁用\n```secure-file-priv```\n。这必须从启动参数中移除，不能动态修改。为此，请检查你的 MySQL 启动参数（取决于平台）和 my.ini 文件。",
+  "link": "https://stackoverflow.com/questions/32737478/how-should-i-resolve-secure-file-priv-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 如何从 60 万行中快速随机选择 10 行",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/4329396/mysql-select-10-random-rows-from-600k-rows-fast"
+ },
+ {
+  "category": "mysql",
+  "question": "Docker（Apple Silicon/M1 预览版）MySQL 出现“no matching manifest for linux/arm64/v8 in the manifest list entries”错误",
+  "answer": "严格来说，这并不能真正解决你的问题（在 ARM 上运行 MySQL），但就目前而言，你可以在 service 中添加 \n```platform```\n，例如：\n\n\n```services:\n  db:\n    platform: linux/x86_64\n    image: mysql:5.7\n    ...\n```\n\n\n或者，可以考虑使用 MariaDB，它应该可以作为直接替代品，例如：\n\n\n```services:\n  db:\n    image: mariadb:10.5.8\n    ...\n```\n\n\n在 M1 上使用 Docker 预览版时，这两种方法对我都有效。",
+  "link": "https://stackoverflow.com/questions/65456814/docker-apple-silicon-m1-preview-mysql-no-matching-manifest-for-linux-arm64-v8"
+ },
+ {
+  "category": "mysql",
+  "question": "如何显示 MySQL 上最近执行的查询？",
+  "answer": "对于使用 MySQL >= 5.1.12 的用户，可以在运行时全局控制此选项：\n\n\n\n\n执行 \n```SET GLOBAL log_output = 'TABLE';```\n\n\n执行 \n```SET GLOBAL general_log = 'ON';```\n\n\n查看表 \n```mysql.general_log```\n\n\n\n\n如果你更希望输出到文件而不是表：\n\n\n\n\n```SET GLOBAL log_output = \"FILE\";```\n \n这是默认值\n。\n\n\n```SET GLOBAL general_log_file = \"/path/to/your/logfile.log\";```\n\n\n```SET GLOBAL general_log = 'ON';```\n\n\n\n\n相比编辑 .cnf 文件，我更倾向于这种方法，因为：\n\n\n\n\n你不需要编辑 \n```my.cnf```\n 文件，也不会可能永久开启日志记录\n\n\n你不需要在文件系统中四处寻找查询日志——或者更糟的是，被寻找完美目标位置的需求分散注意力。  \n```/var/log /var/data/log```\n \n```/opt /home/mysql_savior/var```\n\n\n你不必重启服务器并中断当前连接。\n\n\n重启服务器会让你回到起点（日志默认仍然是关闭的）\n\n\n\n\n更多信息，请参见\n\nMySQL 5.1 Reference Manual - Server System Variables - general_log",
+  "link": "https://stackoverflow.com/questions/650238/how-to-show-the-last-queries-executed-on-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL: @variable 与 variable 有什么区别？",
+  "answer": "MySQL 中有\n用户定义变量\n的概念。\n\n\n它们是松散类型的变量，可以在会话的某个地方初始化，并保持其值直到会话结束。\n\n\n它们以\n```@```\n符号为前缀，像这样：\n```@var```\n\n\n你可以使用\n```SET```\n语句或在查询中初始化这个变量：\n\n\n```SET @var = 1\n\nSELECT @var2 := 2\n```\n\n\n当你在 MySQL 中开发存储过程时，你可以传递输入参数并声明局部变量：\n\n\n```DELIMITER //\n\nCREATE PROCEDURE prc_test (var INT)\nBEGIN\n    DECLARE  var2 INT;\n    SET var2 = 1;\n    SELECT  var2;\nEND;\n//\n\nDELIMITER ;\n```\n\n\n这些变量没有任何前缀。\n\n\n过程变量和会话特定的用户定义变量之间的区别在于，过程变量在每次调用过程时都会重新初始化为\n```NULL```\n，而会话特定的变量则不会：\n\n\n```CREATE PROCEDURE prc_test ()\nBEGIN\n    DECLARE var2 INT DEFAULT 1;\n    SET var2 = var2 + 1;\n    SET @var2 = @var2 + 1;\n    SELECT  var2, @var2;\nEND;\n\nSET @var2 = 1;\n\nCALL prc_test();\n\nvar2  @var2\n---   ---\n2     2\n\n\nCALL prc_test();\n\nvar2  @var2\n---   ---\n2     3\n\n\nCALL prc_test();\n\nvar2  @var2\n---   ---\n2     4\n```\n\n\n如你所见，\n```var2```\n（过程变量）在每次调用过程时都会重新初始化，而\n```@var2```\n（会话特定变量）则不会。\n\n\n（除了用户定义变量外，MySQL\n还\n有一些预定义的“系统变量”，它们可以是“全局变量”，如\n```@@global.port```\n，或“会话变量”，如\n```@@session.sql_mode```\n；这些“会话变量”与会话特定的用户定义变量无关。）",
+  "link": "https://stackoverflow.com/questions/1009954/mysql-variable-vs-variable-whats-the-difference"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 类型 text 的最大长度",
+  "answer": "查看最大数值：\n\nhttp://dev.mysql.com/doc/refman/5.0/en/storage-requirements.html\n\n\n```TINYBLOB, TINYTEXT       L + 1 bytes, where L < 2^8    (255 Bytes)\nBLOB, TEXT               L + 2 bytes, where L < 2^16   (64 Kilobytes)\nMEDIUMBLOB, MEDIUMTEXT   L + 3 bytes, where L < 2^24   (16 Megabytes)\nLONGBLOB, LONGTEXT       L + 4 bytes, where L < 2^32   (4 Gigabytes)\n```\n\n\nL 是你的文本字段中的字节数。因此，text 的最大字符数为 2\n16\n-1（使用单字节字符）。这意味着 65 535 个字符（使用单字节字符）。\n\n\nUTF-8/多字节编码\n：使用多字节编码时，每个字符可能占用超过 1 个字节的空间。对于 UTF-8，每个字符的空间消耗在 1 到 4 个字节之间。",
+  "link": "https://stackoverflow.com/questions/6766781/maximum-length-for-mysql-type-text"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL ERROR 1045 (28000): Access denied for user 'bill'@'localhost' (using password: YES)",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/10299148/mysql-error-1045-28000-access-denied-for-user-billlocalhost-using-passw"
+ },
+ {
+  "category": "mysql",
+  "question": "如何将整个 MySQL 数据库的字符集和排序规则转换为 UTF-8？",
+  "answer": "使用\n```ALTER DATABASE```\n和\n```ALTER TABLE```\n命令。\n\n\n```ALTER DATABASE databasename CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\nALTER TABLE tablename CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;\n```\n\n\n或者，如果你仍在使用不支持 4 字节 UTF-8 的 MySQL 5.5.2 或更早版本，请使用\n```utf8```\n而不是\n```utf8mb4```\n：\n\n\n```ALTER DATABASE databasename CHARACTER SET utf8 COLLATE utf8_unicode_ci;\nALTER TABLE tablename CONVERT TO CHARACTER SET utf8 COLLATE utf8_unicode_ci;\n```",
+  "link": "https://stackoverflow.com/questions/6115612/how-to-convert-an-entire-mysql-database-characterset-and-collation-to-utf-8"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 错误 1153 - 收到的数据包大于 'max_allowed_packet' 字节",
+  "answer": "你可能需要同时为客户端（你正在运行以执行导入的客户端）和正在运行并接受导入的 mysqld 守护进程更改此设置。\n\n\n对于客户端，你可以在命令行中指定：\n\n\n```mysql --max_allowed_packet=100M -u root -p database < dump.sql\n```\n\n\n此外，\n修改 my.cnf 或 my.ini 文件\n（通常位于 /etc/mysql/）中的 mysqld 部分，并设置：\n\n\n```max_allowed_packet=100M\n```\n\n\n或者，你可以在连接到同一服务器的 MySQL 控制台中运行以下\n命令：\n\n\n```set global net_buffer_length=1000000; \nset global max_allowed_packet=1000000000;\n```\n\n\n（为数据包大小使用一个非常大的值。）",
+  "link": "https://stackoverflow.com/questions/93128/mysql-error-1153-got-a-packet-bigger-than-max-allowed-packet-bytes"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 中 utf8mb4 和 utf8 字符集有什么区别？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/30074492/what-is-the-difference-between-utf8mb4-and-utf8-charsets-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "将结果限制为每组前 N 行",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/2129693/restrict-results-to-top-n-rows-per-group"
+ },
+ {
+  "category": "mysql",
+  "question": "如何修改 MySQL 列以允许 NULL？",
+  "answer": "你需要执行以下操作：\n\n\n```ALTER TABLE mytable MODIFY mycolumn VARCHAR(255);\n```\n\n\n列默认是可空的。只要该列未声明为\n```UNIQUE```\n或\n```NOT NULL```\n，就不会有任何问题。",
+  "link": "https://stackoverflow.com/questions/212939/how-do-i-modify-a-mysql-column-to-allow-null"
+ },
+ {
+  "category": "mysql",
+  "question": "安装 mysql2 时出错：无法构建 gem 原生扩展",
+  "answer": "在 Ubuntu/Debian 以及其他使用 aptitude 的发行版上：\n\n\n```sudo apt-get install libmysql-ruby libmysqlclient-dev\n```\n\n\n包 \n```libmysql-ruby```\n 已被淘汰，由 \n```ruby-mysql```\n 替代。\n我是在这里找到解决方案的。\n\n\n如果上述命令因为找不到 \n```libmysql-ruby```\n 而无法执行，那么以下命令应该就够了：\n\n\n```sudo apt-get install libmysqlclient-dev\n```\n\n\n在 Red Hat/CentOS 以及其他使用 yum 的发行版上：\n\n\n```sudo yum install mysql-devel\n```\n\n\n在装有 \nHomebrew\n 的 Mac OS X 上：\n\n\n```brew install mysql\n```",
+  "link": "https://stackoverflow.com/questions/3608287/error-installing-mysql2-failed-to-build-gem-native-extension"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 错误：没有键长度的键规格",
+  "answer": "出现这个错误是因为 MySQL 只能对 BLOB 或 \n```TEXT```\n 列的前 N 个字符建立索引。所以这个错误主要发生在当你尝试将 \n```TEXT```\n 或 BLOB 类型的字段/列，或者属于 \n```TEXT```\n 或 \n```BLOB```\n 类型的那些类型（例如 \n```TINYBLOB```\n、\n```MEDIUMBLOB```\n、\n```LONGBLOB```\n、\n```TINYTEXT```\n、\n```MEDIUMTEXT```\n 和 \n```LONGTEXT```\n）设为主键或索引时。对于没有长度值的完整 \n```BLOB```\n 或 \n```TEXT```\n，MySQL 无法保证该列的唯一性，因为它是可变且动态大小的。因此，当使用 \n```BLOB```\n 或 \n```TEXT```\n 类型作为索引时，必须提供 N 的值，以便 MySQL 能够确定键长度。然而，MySQL 不支持对 \n```TEXT```\n 或 \n```BLOB```\n 设置键长度限制。\n```TEXT(88)```\n 根本行不通。\n\n\n当你尝试将表列从 \n```非 TEXT```\n 和 \n```非 BLOB```\n 类型（例如 \n```VARCHAR```\n 和 \n```ENUM```\n）转换为 \n```TEXT```\n 或 \n```BLOB```\n 类型，而该列已经被定义为唯一约束或索引时，也会弹出这个错误。Alter Table SQL 命令将会失败。\n\n\n解决该问题的方法是从索引或唯一约束中移除 \n```TEXT```\n 或 \n```BLOB```\n 列，或者将另一个字段设为主键。如果你无法这样做，并且想对 \n```TEXT```\n 或 \n```BLOB```\n 列施加限制，请尝试使用 \n```VARCHAR```\n 类型并对其设置长度限制。默认情况下，\n```VARCHAR```\n 最大限制为 255 个字符，并且其限制必须在声明后紧跟的括号中隐式指定，即 \n```VARCHAR(200)```\n 只会将其限制为 200 个字符长。\n\n\n有时，即使你的表中没有使用 \n```TEXT```\n 或 \n```BLOB```\n 相关类型，错误 1170 也可能出现。这种情况发生在例如你将 \n```VARCHAR```\n 列指定为主键，但错误地设置了其长度或字符大小时。\n```VARCHAR```\n 最多只能接受 256 个字符，因此像 \n```VARCHAR(512)```\n 这样的设置会迫使 MySQL 自动将 \n```VARCHAR(512)```\n 转换为 \n```SMALLTEXT```\n 数据类型，如果该列被用作主键或唯一或非唯一索引，随后就会因键长度问题而失败并报错误 1170。要解决这个问题，请为 \n```VARCHAR```\n 字段指定一个小于 256 的大小。\n\n\n参考：\nMySQL Error 1170 (42000): BLOB/TEXT Column Used in Key Specification Without a Key Length",
+  "link": "https://stackoverflow.com/questions/1827063/mysql-error-key-specification-without-a-key-length"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 中从表中删除一列",
+  "answer": "```ALTER TABLE tbl_Country DROP COLUMN IsDeleted;\n```\n\n\n这里有一个可用的示例。\n\n\n注意，\n```COLUMN```\n 关键字是可选的，因为 MySQL 也接受仅使用 \n```DROP IsDeleted```\n。此外，要删除多个列，必须用逗号分隔它们，并为每个列包含 \n```DROP```\n。\n\n\n```ALTER TABLE tbl_Country\n  DROP COLUMN IsDeleted,\n  DROP COLUMN CountryName;\n```\n\n\n这允许你在同一条语句中对同一张表执行 \n```DROP```\n、\n```ADD```\n 和 \n```ALTER```\n 多个列。来自 \nMySQL 参考手册\n：\n\n\n\n\n你可以在单条 \n```ALTER TABLE```\n 语句中发出多个 \n```ADD```\n、\n```ALTER```\n、\n```DROP```\n 和 \n```CHANGE```\n 子句，用逗号分隔。这是 MySQL 对标准 SQL 的扩展，标准 SQL 每条 \n```ALTER TABLE```\n 语句只允许每种各一个子句。",
+  "link": "https://stackoverflow.com/questions/13968494/how-to-delete-a-column-from-a-table-in-mysql"
+ },
+ {
+  "category": "mysql",
+  "question": "在不锁定表的情况下运行 MySQLDump",
+  "answer": "```--lock-tables=false```\n 选项是否有效？\n\n\n根据 \nman page\n，如果你转储的是 InnoDB 表，可以使用 \n```--single-transaction```\n 选项：\n\n\n```--lock-tables, -l\n\nLock all tables before dumping them. The tables are locked with READ\nLOCAL to allow concurrent inserts in the case of MyISAM tables. For\ntransactional tables such as InnoDB and BDB, --single-transaction is\na much better option, because it does not need to lock the tables at\nall.\n```\n\n\n对于 \ninnodb DB\n：\n\n\n```mysqldump --single-transaction=TRUE -u username -p DB\n```",
+  "link": "https://stackoverflow.com/questions/104612/run-mysqldump-without-locking-tables"
+ },
+ {
+  "category": "mysql",
+  "question": "何时使用 MongoDB 或其他面向文档的数据库系统？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/1476295/when-to-use-mongodb-or-other-document-oriented-database-systems"
+ },
+ {
+  "category": "mysql",
+  "question": "如何找到 MySQL 的 my.cnf 位置",
+  "answer": "没有内部的 MySQL 命令来追踪这个，它有点太抽象了。该文件可能位于 5 个（或更多？）位置，它们都是有效的，因为它们会级联加载。\n\n\n\n\n/etc/my.cnf\n\n\n/etc/mysql/my.cnf\n\n\n$MYSQL_HOME/my.cnf\n\n\n[datadir]/my.cnf\n\n\n~/.my.cnf\n\n\n\n\n这些是 MySQL 查找的默认位置。如果找到多个，它会加载每个文件，并且值会相互覆盖（按照列出的顺序，我认为）。此外，\n```--defaults-file```\n 参数可以覆盖整个设置，所以……基本上，这非常麻烦。\n\n\n但由于它如此令人困惑，很有可能它就在 /etc/my.cnf 中。\n\n\n（如果你只想查看值：\n```SHOW VARIABLES```\n，但你需要有相应的权限。）\n\n\n\n\n运行 \n```mysql --help```\n，你会看到：\n\n\n```Default options are read from the following files in the given order: /etc/my.cnf /etc/mysql/my.cnf ~/.my.cnf```",
+  "link": "https://stackoverflow.com/questions/2482234/how-do-i-find-the-mysql-my-cnf-location"
+ },
+ {
+  "category": "mysql",
+  "question": "如何在 MySQL 命令行中显示存储过程/函数",
+  "answer": "```SHOW PROCEDURE STATUS;\nSHOW FUNCTION STATUS;\n```",
+  "link": "https://stackoverflow.com/questions/733349/show-procedures-functions-mysql-command-line"
+ },
+ {
+  "category": "mysql",
+  "question": "如何为 MySQL 表添加索引？",
+  "answer": "```ALTER TABLE `table` ADD INDEX `product_id_index` (`product_id`)\n```\n\n\n在 MySQL 中，永远不要将\n```integer```\n与\n```strings```\n进行比较。如果\n```id```\n是\n```int```\n类型，请去掉引号。",
+  "link": "https://stackoverflow.com/questions/3002605/how-do-i-add-indexes-to-mysql-tables"
+ },
+ {
+  "category": "mysql",
+  "question": "SQLite 是否有与 MySQL 的 DESCRIBE [table] 等价的命令？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/3330435/is-there-an-sqlite-equivalent-to-mysqls-describe-table"
+ },
+ {
+  "category": "mysql",
+  "question": "MySQL 中的错误“每个派生表都必须有自己的别名”是什么意思？",
+  "answer": "每个派生表（又称子查询）确实必须有一个别名。也就是说，括号中的每个查询都必须赋予一个别名（\n```AS whatever```\n），然后可以在外层查询的其余部分中使用该别名来引用它。\n\n\n```SELECT ID FROM (\n    SELECT ID, msisdn FROM (\n        SELECT * FROM TT2\n    ) AS T\n) AS T\n```\n\n\n当然，在你的情况下，整个查询可以替换为：\n\n\n```SELECT ID FROM TT2\n```",
+  "link": "https://stackoverflow.com/questions/1888779/what-is-the-error-every-derived-table-must-have-its-own-alias-in-mysql"
+ }
+]

@@ -1,0 +1,602 @@
+[
+  {
+    "category": "nginx",
+    "question": "From inside of a Docker container, how do I connect to the localhost of the machine?",
+    "answer": "If you are using \nDocker-for-mac\n or \nDocker-for-Windows\n 18.03+, connect to your MySQL service using the host \n```host.docker.internal```\n (instead of the \n```127.0.0.1```\n in your connection string).\n\n\nIf you are using \nDocker-for-Linux\n 20.10.0+, you can also use the host \n```host.docker.internal```\n \nif\n you started your Docker container with the \n```--add-host host.docker.internal:host-gateway```\n option, or added the following snippet in your \ndocker-compose.yml\n file:\n\n\n```extra_hosts:\n    - \"host.docker.internal:host-gateway\"\n```\n\n\nOtherwise, read below\n\n\n\n\nTLDR\n\n\nUse \n```--network=\"host\"```\n in your \n```docker run```\n command, then \n```127.0.0.1```\n in your Docker container will point to your Docker host.\n\n\nNote: This mode only works on Docker for Linux, \nper the documentation\n.\n\n\n\n\nNote on Docker container networking modes\n\n\nDocker offers \ndifferent networking modes\n when running containers. Depending on the mode you choose you would connect to your MySQL database running on the Docker host differently.\n\n\ndocker run --network=\"bridge\" (default)\n\n\nDocker creates a bridge named \n```docker0```\n by default. Both the Docker host and the Docker containers have an IP address on that bridge.\n\n\nOn the Docker host, type \n```sudo ip addr show docker0```\n you will have an output looking like:\n\n\n```[vagrant@docker:~] $ sudo ip addr show docker0\n4: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default\n    link/ether 56:84:7a:fe:97:99 brd ff:ff:ff:ff:ff:ff\n    inet 172.17.42.1/16 scope global docker0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::5484:7aff:fefe:9799/64 scope link\n       valid_lft forever preferred_lft forever\n```\n\n\nSo here my Docker host has the IP address \n```172.17.42.1```\n on the \n```docker0```\n network interface.\n\n\nNow start a new container and get a shell on it: \n```docker run --rm -it ubuntu:trusty bash```\n and within the container type \n```ip addr show eth0```\n to discover how its main network interface is set up:\n\n\n```root@e77f6a1b3740:/# ip addr show eth0\n863: eth0: <BROADCAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000\n    link/ether 66:32:13:f0:f1:e3 brd ff:ff:ff:ff:ff:ff\n    inet 172.17.1.192/16 scope global eth0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::6432:13ff:fef0:f1e3/64 scope link\n       valid_lft forever preferred_lft forever\n```\n\n\nHere my container has the IP address \n```172.17.1.192```\n. Now look at the routing table:\n\n\n```root@e77f6a1b3740:/# route\nKernel IP routing table\nDestination     Gateway         Genmask         Flags Metric Ref    Use Iface\ndefault         172.17.42.1     0.0.0.0         UG    0      0        0 eth0\n172.17.0.0      *               255.255.0.0     U     0      0        0 eth0\n```\n\n\nSo the IP address of the Docker host \n```172.17.42.1```\n is set as the default route and is accessible from your container.\n\n\n```root@e77f6a1b3740:/# ping 172.17.42.1\nPING 172.17.42.1 (172.17.42.1) 56(84) bytes of data.\n64 bytes from 172.17.42.1: icmp_seq=1 ttl=64 time=0.070 ms\n64 bytes from 172.17.42.1: icmp_seq=2 ttl=64 time=0.201 ms\n64 bytes from 172.17.42.1: icmp_seq=3 ttl=64 time=0.116 ms\n```\n\n\ndocker run --network=\"host\"\n\n\nAlternatively you can run a Docker container with \nnetwork settings set to \n```host```\n. Such a container will share the network stack with the Docker host and from the container point of view, \n```localhost```\n (or \n```127.0.0.1```\n) will refer to the Docker host.\n\n\nBe aware that any port opened in your Docker container would be opened on the Docker host. And this without requiring the \n```-p```\n or \n```-P```\n \n```docker run```\n option\n.\n\n\nIP configuration on my Docker host:\n\n\n```[vagrant@docker:~] $ ip addr show eth0\n2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000\n    link/ether 08:00:27:98:dc:aa brd ff:ff:ff:ff:ff:ff\n    inet 10.0.2.15/24 brd 10.0.2.255 scope global eth0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a00:27ff:fe98:dcaa/64 scope link\n       valid_lft forever preferred_lft forever\n```\n\n\nAnd from a Docker container in \nhost\n mode:\n\n\n```[vagrant@docker:~] $ docker run --rm -it --network=host ubuntu:trusty ip addr show eth0\n2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000\n    link/ether 08:00:27:98:dc:aa brd ff:ff:ff:ff:ff:ff\n    inet 10.0.2.15/24 brd 10.0.2.255 scope global eth0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a00:27ff:fe98:dcaa/64 scope link\n       valid_lft forever preferred_lft forever\n```\n\n\nAs you can see, both the Docker host and Docker container share the exact same network interface and as such have the same IP address.\n\n\n\n\nConnecting to MySQL from containers\n\n\nBridge mode\n\n\nTo access MySQL running on the Docker host from containers in \nbridge mode\n, you need to make sure the MySQL service is listening for connections on the \n```172.17.42.1```\n IP address.\n\n\nTo do so, make sure you have either \n```bind-address = 172.17.42.1```\n or \n```bind-address = 0.0.0.0```\n in your MySQL configuration file (\nmy.cnf\n).\n\n\nIf you need to set an environment variable with the IP address of the gateway, you can run the following code in a container:\n\n\n```export DOCKER_HOST_IP=$(route -n | awk '/UG[ \\t]/{print $2}')\n```\n\n\nThen in your application, use the \n```DOCKER_HOST_IP```\n environment variable to open the connection to MySQL.\n\n\nNote:\n if you use \n```bind-address = 0.0.0.0```\n, your MySQL server will listen for connections on all network interfaces. That means your MySQL server could be reached from the Internet; make sure to set up firewall rules accordingly.\n\n\nNote 2:\n if you use \n```bind-address = 172.17.42.1```\n your MySQL server won't listen for connections made to \n```127.0.0.1```\n. Processes running on the Docker host that would want to connect to MySQL would have to use the \n```172.17.42.1```\n IP address.\n\n\nHost mode\n\n\nTo access MySQL running on the docker host from containers in \nhost mode\n, you can keep \n```bind-address = 127.0.0.1```\n in your MySQL configuration and connect to \n```127.0.0.1```\n from your containers:\n\n\n```[vagrant@docker:~] $ docker run --rm -it --network=host mysql mysql -h 127.0.0.1 -uroot -p\nEnter password:\nWelcome to the MySQL monitor.  Commands end with ; or \\g.\nYour MySQL connection id is 36\nServer version: 5.5.41-0ubuntu0.14.04.1 (Ubuntu)\n\nCopyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.\n\nOracle is a registered trademark of Oracle Corporation and/or its affiliates. Other names may be trademarks of their respective owners.\n\nType 'help;' or '\\h' for help. Type '\\c' to clear the current input statement.\n\nmysql>\n```\n\n\nNote:\n Do use \n```mysql -h 127.0.0.1```\n and not \n```mysql -h localhost```\n; otherwise the MySQL client would try to connect using a Unix socket.",
+    "link": "https://stackoverflow.com/questions/24319662/from-inside-of-a-docker-container-how-do-i-connect-to-the-localhost-of-the-mach"
+  },
+  {
+    "category": "nginx",
+    "question": "Node.js + Nginx - What now?",
+    "answer": "Nginx works as a front end server, which in this case proxies the requests to a node.js server. Therefore you need to set up an Nginx config file for node.\n\n\nThis is what I have done in my Ubuntu box:\n\n\nCreate the file \n```yourdomain.example```\n at \n```/etc/nginx/sites-available/```\n:\n\n\n```vim /etc/nginx/sites-available/yourdomain.example\n```\n\n\nIn it you should have something like:\n\n\n```# the IP(s) on which your node server is running. I chose port 3000.\nupstream app_yourdomain {\n    server 127.0.0.1:3000;\n    keepalive 8;\n}\n\n# the nginx server instance\nserver {\n    listen 80;\n    listen [::]:80;\n    server_name yourdomain.example www.yourdomain.example;\n    access_log /var/log/nginx/yourdomain.example.log;\n\n    # pass the request to the node.js server with the correct headers\n    # and much more can be added, see nginx config options\n    location / {\n      proxy_set_header X-Real-IP $remote_addr;\n      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n      proxy_set_header Host $http_host;\n      proxy_set_header X-NginX-Proxy true;\n\n      proxy_pass http://app_yourdomain/;\n      proxy_redirect off;\n    }\n }\n```\n\n\nIf you want Nginx (>= 1.3.13) to handle websocket requests as well, add the following lines in the \n```location /```\n section:\n\n\n```proxy_http_version 1.1;\nproxy_set_header Upgrade $http_upgrade;\nproxy_set_header Connection \"upgrade\";\n```\n\n\nOnce you have this setup you must enable the site defined in the config file above:\n\n\n```cd /etc/nginx/sites-enabled/\nln -s /etc/nginx/sites-available/yourdomain.example yourdomain.example\n```\n\n\nCreate your node server app at \n```/var/www/yourdomain/app.js```\n and run it at \n```localhost:3000```\n\n\n```var http = require('http');\n\nhttp.createServer(function (req, res) {\n    res.writeHead(200, {'Content-Type': 'text/plain'});\n    res.end('Hello World\\n');\n}).listen(3000, \"127.0.0.1\");\nconsole.log('Server running at http://127.0.0.1:3000/');\n```\n\n\nTest for syntax mistakes:\n\n\n```nginx -t\n```\n\n\nRestart Nginx:\n\n\n```sudo /etc/init.d/nginx restart\n```\n\n\nLastly start the node server:\n\n\n```cd /var/www/yourdomain/ && node app.js\n```\n\n\nNow you should see \"Hello World\" at \n```yourdomain.example```\n\n\nOne last note with to starting the node server: you should use some kind of monitoring system for the node daemon. There is an awesome \ntutorial on node with upstart and monit\n.",
+    "link": "https://stackoverflow.com/questions/5009324/node-js-nginx-what-now"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx -- static file serving confusion with root &amp; alias",
+    "answer": "There is a very important difference between the \n```root```\n and the \n```alias```\n directives. This difference exists in the way the path specified in the \n```root```\n or the \n```alias```\n is processed.\n\n\n```root```\n\n\n\n\nthe \n```location```\n part is appended to \n```root```\n part\n\n\nfinal path = \n```root```\n + \n```location```\n\n\n\n\n```alias```\n\n\n\n\nthe \n```location```\n part is replaced by the \n```alias```\n part\n\n\nfinal path = \n```alias```\n\n\n\n\nTo illustrate:\n\n\nLet's say we have the config\n\n\n```location /static/ {\n    root /var/www/app/static/;\n    autoindex off;\n}\n```\n\n\nIn this case the final path that Nginx will derive will be\n\n\n```/var/www/app/static/static\n```\n\n\nThis is going to return \n```404```\n since there is no \n```static/```\n within \n```static/```\n\n\nThis is because the location part is appended to the path specified in the \n```root```\n. Hence, with \n```root```\n, the correct way is\n\n\n```location /static/ {\n    root /var/www/app/;\n    autoindex off;\n}\n```\n\n\nOn the other hand, with \n```alias```\n, the location part gets \ndropped\n. So for the config\n\n\n```location /static/ {\n    alias /var/www/app/static/;\n    autoindex off;           ↑\n}                            |\n                             pay attention to this trailing slash\n```\n\n\nthe final path will correctly be formed as\n\n\n```/var/www/app/static\n```\n\n\nIn a way this makes sense. The \n```alias```\n just lets you define a new path to represent an existing \"real\" path. The location part is that new path, and so it gets replaced with the real path. Think of it as a symlink.\n\n\nRoot, on the other hand is not a new path, it contains some information that has to be collated with some other info to make the final path. And so, the location part is used, not dropped.\n\n\nThe case for trailing slash in \n```alias```\n\n\nThere is no definitive guideline about whether a trailing slash is mandatory per \nNginx documentation\n, but a common observation by people here and elsewhere seems to indicate that it is.\n\n\nA few more places have discussed this, not conclusively though.\n\n\nhttps://serverfault.com/questions/376162/how-can-i-create-a-location-in-nginx-that-works-with-and-without-a-trailing-slas\n\n\nhttps://serverfault.com/questions/375602/why-is-my-nginx-alias-not-working",
+    "link": "https://stackoverflow.com/questions/10631933/nginx-static-file-serving-confusion-with-root-alias"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx no-www to www and www to no-www",
+    "answer": "HTTP Solution\n\n\nFrom the \ndocumentation\n, \"the right way is to define a separate server for \n```example.org```\n\":\n\n\n```server {\n    listen       80;\n    server_name  example.com;\n    return       301 http://www.example.com$request_uri;\n}\n\nserver {\n    listen       80;\n    server_name  www.example.com;\n    ...\n}\n```\n\n\nHTTPS Solution\n\n\nFor those who want a solution including \n```https://```\n...\n\n\n```server {\n        listen 80;\n        server_name www.domain.example;\n        # $scheme will get the http protocol\n        # and 301 is best practice for tablet, phone, desktop and seo\n        return 301 $scheme://domain.example$request_uri;\n}\n\nserver {\n        listen 80;\n        server_name domain.example;\n        # here goes the rest of your config file\n        # example\n        location / {\n\n            rewrite ^/cp/login?$ /cp/login.php last;\n            # etc etc...\n\n        }\n}\n```\n\n\nNote: I have not originally included \n```https://```\n in my solution since we use loadbalancers and our https:// server is a high-traffic SSL payment server: we do not mix https:// and http://.\n\n\n\n\nTo check the Nginx version, use \n```nginx -v```\n.\n\n\nStrip www from URL with Nginx redirect\n\n\n```server {\n    server_name  www.domain.example;\n    rewrite ^(.*) http://domain.example$1 permanent;\n}\n\nserver {\n    server_name  domain.example;\n    #The rest of your configuration goes here#\n}\n```\n\n\nSo you need to have TWO server codes.\n\n\nAdd the www to the URL with Nginx redirect\n\n\nIf what you need is the opposite, to redirect from \n```domain.example```\n to \n```www.domain.example```\n, you can use this:\n\n\n```server {\n    server_name  domain.example;\n    rewrite ^(.*) http://www.domain.example$1 permanent;\n}\n\nserver {\n    server_name  www.domain.example;\n    #The rest of your configuration goes here#\n}\n```\n\n\nAs you can imagine, this is just the opposite and works the same way the first example. This way, you don't get SEO marks down, as it is complete perm redirect and move. The no WWW is forced and the directory shown!\n\n\nSome of my code shown below for a better view:\n\n\n```server {\n    server_name  www.google.com;\n    rewrite ^(.*) http://google.com$1 permanent;\n}\nserver {\n       listen 80;\n       server_name google.com;\n       index index.php index.html;\n       ####\n       # now pull the site from one directory #\n       root /var/www/www.google.com/web;\n       # done #\n       location = /favicon.ico {\n                log_not_found off;\n                access_log off;\n       }\n}\n```",
+    "link": "https://stackoverflow.com/questions/7947030/nginx-no-www-to-www-and-www-to-no-www"
+  },
+  {
+    "category": "nginx",
+    "question": "Where can I find the error logs of nginx, using FastCGI and Django?",
+    "answer": "Errors are stored in the nginx log file. You can specify it in the root of the nginx configuration file:\n\n\n```error_log  /var/log/nginx/nginx_error.log  warn;\n```\n\n\nOn Mac OS X with \nHomebrew\n, the log file was found by default at the following location:\n\n\n```/usr/local/var/log/nginx\n```",
+    "link": "https://stackoverflow.com/questions/1706111/where-can-i-find-the-error-logs-of-nginx-using-fastcgi-and-django"
+  },
+  {
+    "category": "nginx",
+    "question": "(13: Permission denied) while connecting to upstream:[nginx]",
+    "answer": "Disclaimer\n\n\nMake sure there are no security implications for your use-case before running this.\n\n\nAnswer\n\n\nI had a similar issue getting Fedora 20, Nginx, Node.js, and Ghost (blog) to work. It turns out my issue was due to \nSELinux\n.\n\n\nThis should solve the problem:\n\n\n```setsebool -P httpd_can_network_connect 1\n```\n\n\nDetails\n\n\nI checked for errors in the SELinux logs:\n\n\n```sudo cat /var/log/audit/audit.log | grep nginx | grep denied\n```\n\n\nAnd found that running the following commands fixed my issue:\n\n\n```sudo cat /var/log/audit/audit.log | grep nginx | grep denied | audit2allow -M mynginx\nsudo semodule -i mynginx.pp\n```\n\n\nOption #2 (probably more secure)\n\n\n```setsebool -P httpd_can_network_relay 1\n```\n\n\nhttps://security.stackexchange.com/questions/152358/difference-between-selinux-booleans-httpd-can-network-relay-and-httpd-can-net\n\n\nReferences\n\n\nhttp://blog.frag-gustav.de/2013/07/21/nginx-selinux-me-mad/\n\n\nhttps://wiki.gentoo.org/wiki/SELinux/Tutorials/Where_to_find_SELinux_permission_denial_details\n\n\nhttp://wiki.gentoo.org/wiki/SELinux/Tutorials/Managing_network_port_labels",
+    "link": "https://stackoverflow.com/questions/23948527/13-permission-denied-while-connecting-to-upstreamnginx"
+  },
+  {
+    "category": "nginx",
+    "question": "NGinx Default public www location?",
+    "answer": "If installing on Ubuntu using apt-get, try \n```/usr/share/nginx/www```\n.\n\n\nEDIT:\n\n\nOn more recent versions the path has changed to:\n\n```/usr/share/nginx/html```\n\n\n2019 EDIT:\n\n\nMight try in \n```/var/www/html/index.nginx-debian.html```\n too.",
+    "link": "https://stackoverflow.com/questions/10674867/nginx-default-public-www-location"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx - nginx: [emerg] bind() to [::]:80 failed (98: Address already in use)",
+    "answer": "I fixed this by running:\n\n\n```sudo apachectl stop\n```\n\n\nIt turns out apache was running in the background and prevented nginx from starting on the desired port.\n\n\nOn Ubuntu, run:\n\n\n```sudo /etc/init.d/apache2 stop\n```",
+    "link": "https://stackoverflow.com/questions/14972792/nginx-nginx-emerg-bind-to-80-failed-98-address-already-in-use"
+  },
+  {
+    "category": "nginx",
+    "question": "upstream sent too big header while reading response header from upstream",
+    "answer": "Add the following to your conf file\n\n\n```fastcgi_buffers 16 16k; \nfastcgi_buffer_size 32k;\n```",
+    "link": "https://stackoverflow.com/questions/23844761/upstream-sent-too-big-header-while-reading-response-header-from-upstream"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx location priority",
+    "answer": "From the \nHTTP core module docs\n:\n\n\n\n\nDirectives with the \"=\" prefix that match the query exactly. If found, searching stops.\n\n\nAll remaining directives with conventional strings. If this match used the \"^~\" prefix, searching stops.\n\n\nRegular expressions, in the order they are defined in the configuration file.\n\n\nIf #3 yielded a match, that result is used. Otherwise, the match from #2 is used.\n\n\n\n\nExample from the documentation:\n\n\n```location  = / {\n  # matches the query / only.\n  [ configuration A ] \n}\nlocation  / {\n  # matches any query, since all queries begin with /, but regular\n  # expressions and any longer conventional blocks will be\n  # matched first.\n  [ configuration B ] \n}\nlocation /documents/ {\n  # matches any query beginning with /documents/ and continues searching,\n  # so regular expressions will be checked. This will be matched only if\n  # regular expressions don't find a match.\n  [ configuration C ] \n}\nlocation ^~ /images/ {\n  # matches any query beginning with /images/ and halts searching,\n  # so regular expressions will not be checked.\n  [ configuration D ] \n}\nlocation ~* \\.(gif|jpg|jpeg)$ {\n  # matches any request ending in gif, jpg, or jpeg. However, all\n  # requests to the /images/ directory will be handled by\n  # Configuration D.   \n  [ configuration E ] \n}\n```\n\n\nIf it's still confusing, \nhere's a longer explanation\n.",
+    "link": "https://stackoverflow.com/questions/5238377/nginx-location-priority"
+  },
+  {
+    "category": "nginx",
+    "question": "Kubernetes service external ip pending",
+    "answer": "If you are using Minikube, there is a magic command!\n\n\n```$ minikube tunnel\n```\n\n\nHopefully someone can save a few minutes with this.\n\n\nReference link\n\nhttps://minikube.sigs.k8s.io/docs/handbook/accessing/#using-minikube-tunnel",
+    "link": "https://stackoverflow.com/questions/44110876/kubernetes-service-external-ip-pending"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx error connect to php5-fpm.sock failed (13: Permission denied)",
+    "answer": "I had a similar error after php update. PHP fixed a \nsecurity bug\n where \n```o```\n had \n```rw```\n permission to the socket file.\n\n\n\n\nOpen \n```/etc/php5/fpm/pool.d/www.conf```\n or \n```/etc/php/7.0/fpm/pool.d/www.conf```\n, depending on your version. \n\n\nUncomment all permission lines, like:\n\n\n```listen.owner = www-data\nlisten.group = www-data\nlisten.mode = 0660\n```\n\n\nRestart fpm - \n```sudo service php5-fpm restart```\n or \n```sudo service php7.0-fpm restart```\n\n\n\n\nNote\n: if your webserver runs as user other than www-data, you will need to update the \n```www.conf```\n file accordingly",
+    "link": "https://stackoverflow.com/questions/23443398/nginx-error-connect-to-php5-fpm-sock-failed-13-permission-denied"
+  },
+  {
+    "category": "nginx",
+    "question": "How to clear the cache of nginx?",
+    "answer": "I had the exact same problem - I was running my nginx in Virtualbox. I did not have caching turned on. But looks like \n```sendfile```\n was set to \n```on```\n in \n```nginx.conf```\n and that was causing the problem. @kolbyjack mentioned it above in the comments.\n\n\nWhen I turned off \n```sendfile```\n - it worked fine.\n\n\nThis is because:\n\n\n\n\nSendfile is used to ‘copy data between one file descriptor and another‘ and apparently has some real trouble when run in a virtual machine environment, or at least when run through Virtualbox. Turning this config off in nginx causes the static file to be served via a different method and your changes will be reflected immediately and without question\n\n\n\n\nIt is related to this bug: \nhttps://www.virtualbox.org/ticket/12597",
+    "link": "https://stackoverflow.com/questions/6236078/how-to-clear-the-cache-of-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx 403 error: directory index of [folder] is forbidden",
+    "answer": "If you have directory indexing off, and is having this problem, it's probably because the try_files you are using has a directory option:\n\n\n```location / {\n  try_files $uri $uri/ /index.html index.php;\n}                 ^ that is the issue\n```\n\n\nRemove it and it should work:\n\n\n```location / {\n  try_files $uri /index.html index.php;\n} \n```\n\n\nWhy this happens\n\n\nTL;DR: This is caused because nginx will try to index the directory, and be blocked by itself. Throwing the error mentioned by OP.\n\n\n```try_files $uri $uri/```\n means, from the root directory, try the file pointed by the \n```uri```\n, if that does not exists, try a directory instead (hence the \n```/```\n). When nginx access a directory, it tries to index it and return the list of files inside it to the browser/client, however by default directory indexing is disabled, and so it returns the error \"Nginx 403 error: directory index of [folder] is forbidden\".\n\n\nDirectory indexing is controlled by the \n```autoindex```\n option: \nhttps://nginx.org/en/docs/http/ngx_http_autoindex_module.html",
+    "link": "https://stackoverflow.com/questions/19285355/nginx-403-error-directory-index-of-folder-is-forbidden"
+  },
+  {
+    "category": "nginx",
+    "question": "How can I have same rule for two locations in NGINX config?",
+    "answer": "Try\n\n\n```location ~ ^/(first/location|second/location)/ {\n  ...\n}\n```\n\n\nThe \n```~```\n means to use a regular expression for the url. The \n```^```\n means to check from the first character. This will look for a \n```/```\n followed by either of the locations and then another \n```/```\n.  Quoting from \nthe docs\n,\n\n\n\n\nA regular expression is preceded with the tilde (~) for case-sensitive matching, or the tilde-asterisk (~*) for case-insensitive matching.",
+    "link": "https://stackoverflow.com/questions/35320674/how-can-i-have-same-rule-for-two-locations-in-nginx-config"
+  },
+  {
+    "category": "nginx",
+    "question": "Configure nginx with multiple locations with different root folders on subdomain",
+    "answer": "You need to use the \n```alias```\n directive for \n```location /static```\n:\n\n\n```server {\n\n  index index.html;\n  server_name test.example.com;\n\n  root /web/test.example.com/www;\n\n  location /static/ {\n    alias /web/test.example.com/static/;\n  }\n\n}\n```\n\n\nThe \nnginx wiki\n explains the difference between root and alias better than I can:\n\n\n\n\nNote that it may look similar to the root directive at first sight, but the document root doesn't change, just the file system path used for the request. The location part of the request is dropped in the request Nginx issues.\n\n\n\n\nNote that \n```root```\n and \n```alias```\n handle trailing slashes differently.",
+    "link": "https://stackoverflow.com/questions/11570321/configure-nginx-with-multiple-locations-with-different-root-folders-on-subdomain"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx - client_max_body_size has no effect",
+    "answer": "Following \nnginx documentation\n, you can set client_max_body_size 20m ( or any value you need ) in the following context:\n\n\n```context: http, server, location\n```",
+    "link": "https://stackoverflow.com/questions/2056124/nginx-client-max-body-size-has-no-effect"
+  },
+  {
+    "category": "nginx",
+    "question": "What does upstream mean in nginx?",
+    "answer": "It's used for \nproxying requests to other servers\n.\n\n\nAn example from \nhttp://wiki.nginx.org/LoadBalanceExample\n is:\n\n\n```http {\n  upstream myproject {\n    server 127.0.0.1:8000 weight=3;\n    server 127.0.0.1:8001;\n    server 127.0.0.1:8002;    \n    server 127.0.0.1:8003;\n  }\n\n  server {\n    listen 80;\n    server_name www.domain.com;\n    location / {\n      proxy_pass http://myproject;\n    }\n  }\n}\n```\n\n\nThis means all requests for / go to the any of the servers listed under upstream XXX, with a preference for port 8000.",
+    "link": "https://stackoverflow.com/questions/5877929/what-does-upstream-mean-in-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx missing sites-available directory",
+    "answer": "Well, I think nginx by itself doesn't have that in its setup, because the Ubuntu-maintained package does it as a convention to imitate Debian's apache setup.  You could create it yourself if you wanted to emulate the same setup.\n\n\nCreate \n```/etc/nginx/sites-available```\n and \n```/etc/nginx/sites-enabled```\n and then edit the \n```http```\n block inside \n```/etc/nginx/nginx.conf```\n and add this line\n\n\n```include /etc/nginx/sites-enabled/*;\n```\n\n\nOf course, all the files will be inside \n```sites-available```\n, and you'd create a symlink for them inside \n```sites-enabled```\n for those you want enabled.",
+    "link": "https://stackoverflow.com/questions/17413526/nginx-missing-sites-available-directory"
+  },
+  {
+    "category": "nginx",
+    "question": "Possible reason for NGINX 499 error codes",
+    "answer": "HTTP 499 in Nginx means that the \nclient closed the connection\n before the server answered the request. In my experience is usually caused by \nclient side timeout\n. As I know it's an Nginx specific error code.",
+    "link": "https://stackoverflow.com/questions/12973304/possible-reason-for-nginx-499-error-codes"
+  },
+  {
+    "category": "nginx",
+    "question": "413 Request Entity Too Large - File Upload Issue",
+    "answer": "Source: \ncybercity\n\n\nEdit the conf file of nginx:\n\n\n```nano /etc/nginx/nginx.conf\n```\n\n\nAdd a line in the \n```http```\n, \n```server```\n or \n```location```\n section:\n\n\n```client_max_body_size 100M;\n```\n\n\nDon't use \n```MB```\n it will not work, only the M!\nYou can test the nginx config by:\n\n\n```sudo nginx -t\n```\n\n\nThen you need to restart or reload nginx:\n\n\n```sudo nginx -s reload\n```\n\n\nOR\n\n\n```sudo systemctl restart nginx\n```",
+    "link": "https://stackoverflow.com/questions/24306335/413-request-entity-too-large-file-upload-issue"
+  },
+  {
+    "category": "nginx",
+    "question": "Have nginx access_log and error_log log to STDOUT and STDERR of master process",
+    "answer": "Edit:\n it seems nginx now supports \n```error_log stderr;```\n as mentioned in \nAnon's answer\n.\n\n\nYou can send the logs to \n```/dev/stdout```\n. In \n```nginx.conf```\n:\n\n\n```daemon off;\nerror_log /dev/stdout info;\n\nhttp {\n  access_log /dev/stdout;\n  ...\n}\n```\n\n\nedit: May need to run \nln -sf /proc/self/fd /dev/\n if using running certain docker containers, then use \n```/dev/fd/1```\n or \n```/dev/fd/2```",
+    "link": "https://stackoverflow.com/questions/22541333/have-nginx-access-log-and-error-log-log-to-stdout-and-stderr-of-master-process"
+  },
+  {
+    "category": "nginx",
+    "question": "NGINX: upstream timed out (110: Connection timed out) while reading response header from upstream",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/18740635/nginx-upstream-timed-out-110-connection-timed-out-while-reading-response-hea"
+  },
+  {
+    "category": "nginx",
+    "question": "What&#39;s the difference of $host and $http_host in Nginx",
+    "answer": "```$host```\n is a variable of the \nCore\n module.\n\n\n\n\n$host\n\n\n\n\n\n\nThis variable is equal to line Host in the header of request or\nname of the server processing the request if the Host header is not\navailable.\n\n\n\n\n\n\nThis variable may have a different value from $http_host in such\ncases: 1) when the Host input header is absent or has an empty value,\n$host equals to the value of server_name directive; 2)when the value\nof Host contains port number, $host doesn't include that port number.\n$host's value is always lowercase since 0.8.17.\n\n\n\n\n```$http_host```\n is also a variable of the same module but you won't find it with that name because it is defined generically as \n```$http_HEADER```\n (\nref\n).\n\n\n\n\n$http_HEADER\n\n\n\n\n\n\nThe value of the HTTP request header HEADER when converted to lowercase and with 'dashes' converted to 'underscores', e.g. $http_user_agent, $http_referer...;\n\n\n\n\n\n\nSummarizing:\n\n\n\n\n```$http_host```\n equals always the \n```HTTP_HOST```\n request header.\n\n\n```$host```\n equals \n```$http_host```\n, \nlowercase and without the port number\n (if present), \nexcept when \n```HTTP_HOST```\n is absent or is an empty value\n. In that case, \n```$host```\n equals the value of the \n```server_name```\n directive of the server which processed the request.",
+    "link": "https://stackoverflow.com/questions/15414810/whats-the-difference-of-host-and-http-host-in-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "NGINX to reverse proxy websockets AND enable SSL (wss://)?",
+    "answer": "Just to note that nginx has now support for Websockets on the release 1.3.13. Example of use:\n\n\n```location /websocket/ {\n\n    proxy_pass ​http://backend_host;\n    proxy_http_version 1.1;\n    proxy_set_header Upgrade $http_upgrade;\n    proxy_set_header Connection \"upgrade\";\n    proxy_read_timeout 86400;\n\n}\n```\n\n\nYou can also check the \nnginx changelog\n and the \nWebSocket proxying\n documentation.",
+    "link": "https://stackoverflow.com/questions/12102110/nginx-to-reverse-proxy-websockets-and-enable-ssl-wss"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx: [emerg] &quot;server&quot; directive is not allowed here",
+    "answer": "That is not an nginx configuration file. It is \npart\n of an nginx configuration file.\n\n\nThe nginx configuration file (usually called \n```nginx.conf```\n) will look like:\n\n\n```events {\n    ...\n}\nhttp {\n    ...\n    server {\n        ...\n    }\n}\n```\n\n\nThe \n```server```\n block is enclosed within an \n```http```\n block.\n\n\nOften the configuration is distributed across multiple files, by using the \n```include```\n directives to pull in additional fragments (for example from the \n```sites-enabled```\n directory).\n\n\nUse \n```sudo nginx -t```\n to test the complete configuration file, which starts at \n```nginx.conf```\n and pulls in additional fragments using the \n```include```\n directive.\n\n\nSee \nthis document\n for more information.",
+    "link": "https://stackoverflow.com/questions/41766195/nginx-emerg-server-directive-is-not-allowed-here"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx reverse proxy causing 504 Gateway Timeout",
+    "answer": "Probably can add a few more line to increase the timeout period to upstream. The examples below sets the timeout to 300 seconds :\n\n\n```proxy_connect_timeout       300;\nproxy_send_timeout          300;\nproxy_read_timeout          300;\nsend_timeout                300;\n```",
+    "link": "https://stackoverflow.com/questions/24453388/nginx-reverse-proxy-causing-504-gateway-timeout"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx: how to not exit if &quot;host not found in upstream&quot;?",
+    "answer": "If you can use a static IP then just use that, it'll startup and just return \n```503```\n's if it doesn't respond.\n\n\n\n\nUse the \n```resolver```\n directive to point to something that can resolve the host, regardless if it's currently up or not.\n\n\n\n\nResolve it at the \n```location```\n level, if you can't do the above \n(this will allow Nginx to start/run)\n:\n\n\n``` location /foo {\n   resolver 127.0.0.1 valid=30s;\n   # or some other DNS (your company's internal DNS server)\n   #resolver 8.8.8.8 valid=30s;\n   set $upstream_foo foo;\n   proxy_pass http://$upstream_foo:80;\n }\n\n location /bar {\n   resolver 127.0.0.1 valid=30s;\n   # or some other DNS (your company's internal DNS server)\n   #resolver 8.8.8.8 valid=30s;\n   set $upstream_bar foo;\n   proxy_pass http://$upstream_bar:80;\n }\n```",
+    "link": "https://stackoverflow.com/questions/32845674/nginx-how-to-not-exit-if-host-not-found-in-upstream"
+  },
+  {
+    "category": "nginx",
+    "question": "React-router and nginx",
+    "answer": "The location block in your nginx config should be:\n\n\n```location / {\n  try_files $uri /index.html;\n}\n```\n\n\nThe problem is that requests to the index.html file work, but you're not currently telling nginx to forward other requests to the index.html file too.",
+    "link": "https://stackoverflow.com/questions/43951720/react-router-and-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx 403 forbidden for all files",
+    "answer": "One permission requirement that is often overlooked is a user needs x permissions in every parent directory of a file to access that file.  Check the permissions on /, /home, /home/demo, etc. for www-data x access.  My guess is that /home is probably 770 and www-data can't chdir through it to get to any subdir.  If it is, try chmod o+x /home (or whatever dir is denying the request).\n\n\nEDIT: To easily display all the permissions on a path, you can use \n```namei -om /path/to/check```",
+    "link": "https://stackoverflow.com/questions/6795350/nginx-403-forbidden-for-all-files"
+  },
+  {
+    "category": "nginx",
+    "question": "How to redirect to a different domain using Nginx?",
+    "answer": "server_name\n supports suffix matches using \n```.mydomain.example```\n syntax:\n\n\n```server {\n  server_name .mydomain.example;\n  rewrite ^ http://www.adifferentdomain.example$request_uri? permanent;\n}\n```\n\n\nor on any version 0.9.1 or higher:\n\n\n```server {\n  server_name .mydomain.example;\n  return 301 http://www.adifferentdomain.example$request_uri;\n}\n```",
+    "link": "https://stackoverflow.com/questions/6045020/how-to-redirect-to-a-different-domain-using-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx: stat() failed (13: permission denied)",
+    "answer": "Nginx operates within the directory, so if you can't \n```cd```\n to that directory from the nginx user then it will fail (as does the \n```stat```\n command in your log). Make sure the \n```www-user```\n can \n```cd```\n all the way to the \n```/username/test/static```\n. You can confirm that the \n```stat```\n will fail or succeed by running\n\n\n```sudo -u www-data stat /username/test/static\n```\n\n\nIn your case probably the \n```/username```\n directory is the issue here. Usually \n```www-data```\n does not have permissions to \n```cd```\n to other users home directories.\n\n\nThe best solution in that case would be to add \n```www-data```\n to \n```username```\n group:\n\n\n```gpasswd -a www-data username\n```\n\n\nand make sure that \n```username```\n group can enter all directories along the path:\n\n\n```chmod g+x /username && chmod g+x /username/test && chmod g+x /username/test/static\n```\n\n\nFor your changes to work, restart nginx\n\n\n```nginx -s reload\n```",
+    "link": "https://stackoverflow.com/questions/25774999/nginx-stat-failed-13-permission-denied"
+  },
+  {
+    "category": "nginx",
+    "question": "How to run Nginx within a Docker container without halting?",
+    "answer": "To expand on Charles Duffy's answer, Nginx uses the \n```daemon off```\n directive to run in the foreground.  If it's inconvenient to put this in the configuration file, we can specify it directly on the command line. This makes it easy to run in debug mode (foreground) and directly switch to running in production mode (background) by changing command line args.\n\n\nTo run in foreground:\n\n\n```nginx -g 'daemon off;'\n```\n\n\nTo run in background:\n\n\n```nginx\n```",
+    "link": "https://stackoverflow.com/questions/18861300/how-to-run-nginx-within-a-docker-container-without-halting"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx serves .php files as downloads, instead of executing them",
+    "answer": "Try this:\n\n\n\n\nEdit \n```/etc/nginx/sites-available/default```\n\n\n\n\nUncomment both listen lines to make Nginx listen on port 80 IPv4 and IPv6.\n\n\n``` listen   80; ## listen for ipv4; this line is default and implied\n listen   [::]:80 default_server ipv6only=on; ## listen for ipv6\n```\n\n\n\n\nLeave \n```server_name```\n alone\n\n\n``` # Make site accessible (...)\n server_name localhost;\n```\n\n\n\n\nAdd \n```index.php```\n to the \n```index```\n line\n\n\n``` root /usr/share/nginx/www;\n index index.php index.html index.htm;\n```\n\n\n\n\nUncomment \n```location ~ \\.php$ {}```\n\n\n``` # pass the PHP scripts to FastCGI server listening on (...)\n #\n location ~ \\.php$ {\n         try_files $uri =404;\n         fastcgi_split_path_info ^(.+?\\.php)(/.+)?$;\n         # NOTE: You should have \"cgi.fix_pathinfo = 0;\" in php.ini\n\n         # With php5-cgi alone:\n         #fastcgi_pass 127.0.0.1:9000;\n         # With php5-fpm:\n         fastcgi_pass unix:/var/run/php5-fpm.sock;\n         fastcgi_index index.php;\n         include fastcgi_params;\n }\n```\n\n\n\n\nEdit \n```/etc/php5/fpm/php.ini```\n and make sure \n```cgi.fix_pathinfo```\n is set to \n```0```\n\n\n\n\nRestart Nginx and php5-fpm \n```sudo service nginx restart && sudo service php5-fpm restart```\n\n\n\n\n\n\n\n\nI just started using Linux a week ago, so I really hope to help you with this. I am using a nano text editor to edit the files. run apt-get install nano if you don't have it. Google it to know more.",
+    "link": "https://stackoverflow.com/questions/25591040/nginx-serves-php-files-as-downloads-instead-of-executing-them"
+  },
+  {
+    "category": "nginx",
+    "question": "Locate the nginx.conf file my nginx is actually using",
+    "answer": "Running \n```nginx -t```\n through your commandline will issue out a test and append the output with the filepath to the configuration file (with either an error or success message).",
+    "link": "https://stackoverflow.com/questions/19910042/locate-the-nginx-conf-file-my-nginx-is-actually-using"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx: [emerg] could not build the server_names_hash, you should increase server_names_hash_bucket_size",
+    "answer": "This is most likely happening because of the long domain name. You can fix this by adding\n\n\n```server_names_hash_bucket_size  64;\n```\n\n\nat the top of your \n```http```\n block (probably located in \n```/etc/nginx/nginx.conf```\n). I quote from the nginx documentation what to do when this error appears:\n\n\n\n\nIn this case, the directive value should be increased to the next power of two.\n\n\n\n\nSo in your case it should become 64. If you still get the same error, try increasing to 128 and further.\n\n\nReference: \nhttps://nginx.org/en/docs/http/server_names.html#optimization",
+    "link": "https://stackoverflow.com/questions/13895933/nginx-emerg-could-not-build-the-server-names-hash-you-should-increase-server"
+  },
+  {
+    "category": "nginx",
+    "question": "How to edit nginx.conf to increase file size upload",
+    "answer": "Add \nclient_max_body_size\n\n\nNow that you are editing the file you need to add the line into the server block, like so;\n\n\n```server {\n    client_max_body_size 8M;\n\n    //other lines...\n}\n```\n\n\nIf you are hosting multiple sites add it to the http context like so;\n\n\n```http {\n    client_max_body_size 8M;\n\n    //other lines...\n}\n```\n\n\nAnd also update the \n```upload_max_filesize```\n in your php.ini file so that you can upload files of the same size.\n\n\nSaving in Vi\n\n\nOnce you are done you need to save, this can be done in vi with pressing \n```esc```\n key and typing \n```:wq```\n and returning.\n\n\nRestarting Nginx and PHP\n\n\nNow you need to restart nginx and php to reload the configs. This can be done using the following commands;\n\n\n```sudo service nginx restart\nsudo service php5-fpm restart\n```\n\n\nOr whatever your php service is called.",
+    "link": "https://stackoverflow.com/questions/26717013/how-to-edit-nginx-conf-to-increase-file-size-upload"
+  },
+  {
+    "category": "nginx",
+    "question": "How do I prevent a Gateway Timeout with FastCGI on Nginx",
+    "answer": "Proxy timeouts are well, for proxies, not for FastCGI...\n\n\nThe directives that affect FastCGI timeouts are \n```client_header_timeout```\n, \n```client_body_timeout```\n and \n```send_timeout```\n.\n\n\nEdit\n: Considering what's found on nginx wiki, the \nsend_timeout directive\n is responsible for setting general timeout of response (which was bit misleading). For FastCGI there's \n```fastcgi_read_timeout```\n which is affecting the \nFastCGI process response timeout\n.",
+    "link": "https://stackoverflow.com/questions/561946/how-do-i-prevent-a-gateway-timeout-with-fastcgi-on-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "How can I tell if my server is serving GZipped content?",
+    "answer": "It looks like one possible answer is, unsurprisingly, \n```curl```\n:\n\n\n```$ curl http://example.com/ --silent --write-out \"%{size_download}\\n\" --output /dev/null\n31032\n$ curl http://example.com/ --silent -H \"Accept-Encoding: gzip,deflate\" --write-out \"%{size_download}\\n\" --output /dev/null\n2553\n```\n\n\nIn the second case the client tells the server that it supports content encoding and you can see that the response was indeed shorter, compressed.",
+    "link": "https://stackoverflow.com/questions/9140178/how-can-i-tell-if-my-server-is-serving-gzipped-content"
+  },
+  {
+    "category": "nginx",
+    "question": "Increasing client_max_body_size in Nginx conf on AWS Elastic Beanstalk",
+    "answer": "There are two methods you can take for this.  Unfortunately some work for some EB application types and some work for others.\n\n\nSupported/recommended in AWS documentation\n\n\nFor some application types, like \nJava SE\n, \nGo\n, \nNode.js\n, and maybe Ruby (it's not documented for Ruby, but all the other Nginx platforms seem to support this), Elasticbeanstalk has a built-in understanding of how to configure Nginx.\n\n\n\n\nTo extend Elastic Beanstalk's default nginx configuration, \nadd .conf configuration files to a folder named \n```.ebextensions/nginx/conf.d/```\n in your application source bundle\n. Elastic Beanstalk's nginx configuration includes .conf files in this folder automatically.\n\n\n\n\n\n\n```~/workspace/my-app/\n```\n\n\n\n\n```|-- .ebextensions\n|   `-- nginx\n|       `-- conf.d\n|           `-- myconf.conf\n`-- web.jar\n```\n\n\n\n\nConfiguring the Reverse Proxy - Java SE\n\n\n\n\nTo increase the maximum upload size specifically, then create a file at \n```.ebextensions/nginx/conf.d/proxy.conf```\n setting the max body size to whatever size you would prefer:\n\n\n```client_max_body_size 50M;\n```\n\n\nCreate the Nginx config file directly\n\n\nFor some other application types, after much research and hours of working with the wonderful AWS support team, I created a config file inside of \n```.ebextensions```\n to supplement the nginx config. This change allowed for a larger post body size.\n\n\nInside of the \n```.ebextensions```\n directory, I created a file called \n```01_files.config```\n with the following contents:\n\n\n```files:\n    \"/etc/nginx/conf.d/proxy.conf\" :\n        mode: \"000755\"\n        owner: root\n        group: root\n        content: |\n           client_max_body_size 20M;\n```\n\n\nThis generates a proxy.conf file inside of the /etc/nginx/conf.d directory. The proxy.conf file simply contains the one liner \n```client_max_body_size 20M;```\n which does the trick.\n\n\nNote that for some platforms, this file will be created during the deploy, but then removed in a later deployment phase.\n\n\nYou can specify other directives which are outlined in Nginx documentation.\n\n\nhttp://wiki.nginx.org/Configuration",
+    "link": "https://stackoverflow.com/questions/18908426/increasing-client-max-body-size-in-nginx-conf-on-aws-elastic-beanstalk"
+  },
+  {
+    "category": "nginx",
+    "question": "Default nginx client_max_body_size",
+    "answer": "The default value for \n```client_max_body_size```\n directive is \n1 MiB\n.\n\n\nIt can be set in \n```http```\n, \n```server```\n and \n```location```\n context — as in the \nmost cases\n, \nthis \ndirective in a nested block takes precedence over the same directive in the ancestors blocks\n.\n\n\nExcerpt from the \nngx_http_core_module documentation\n:\n\n\n\n\n```Syntax:   client_max_body_size size;\nDefault:  client_max_body_size 1m;\nContext:  http, server, location\n```\n\n\nSets the maximum allowed size of the client request body, specified in\n  the “Content-Length” request header field. If the size in a request\n  exceeds the configured value, the 413 (Request Entity Too Large) error\n  is returned to the client. Please be aware that browsers cannot\n  correctly display this error. Setting size to 0 disables checking of\n  client request body size.\n\n\n\n\nDon't forget to \nreload configuration\n\nby \n```nginx -s reload```\n or \n```service nginx reload```\n commands prepending with \n```sudo```\n (if any).",
+    "link": "https://stackoverflow.com/questions/28476643/default-nginx-client-max-body-size"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx.service failed because the control process exited",
+    "answer": "Try to run the following two commands:\n\n\n```sudo fuser -k 80/tcp```\n\n\n```sudo fuser -k 443/tcp```\n\n\nThen execute\n\n\n```sudo service nginx restart```\n\n\nIf that worked\n, your hosting provider might be installing Apache on your server by default during a fresh install, so keep reading for a more permenant fix. \nIf that didn't work\n, keep reading to identify the issue.\n\n\nRun \n```nginx -t```\n and if it doesn't return anything, I would verify Nginx error log. By default, it should be located in \n```/var/log/nginx/error.log```\n.\n\n\nYou can open it with any text editor:\n\n```sudo nano /var/log/nginx/error.log```\n\n\nCan you find something suspicious there?\n\n\nThe second log you can check is the following\n\n\n```sudo nano /var/log/syslog```\n\n\nWhen I had this issue, it was because my hosting provider was automatically installing Apache during a clean install. It was blocking port 80.\n\n\nWhen I executed \n```sudo nano /var/log/nginx/error.log```\n I got the following as the error log:\n\n\n```2018/08/04 06:17:33 [emerg] 634#0: bind() to 0.0.0.0:80 failed (98: Address already in use)\n2018/08/04 06:17:33 [emerg] 634#0: bind() to [::]:80 failed (98: Address already in use)\n2018/08/04 06:17:33 [emerg] 634#0: bind() to 0.0.0.0:80 failed (98: Address already in use)\n```\n\n\nWhat the above error is telling is that it was not able to bind nginx to port 80 because it was already in use.\n\n\nTo fix this, you need to run the following:\n\n\n```yum install net-tools```\n\n\n```sudo netstat -tulpn```\n\n\nWhen you execute the above you will get something like the following:\n\n\n```Proto Recv-Q Send-Q Local Address           Foreign Address         State    PID/Program name\ntcp        0      0 0.0.0.0:80              0.0.0.0:*               LISTEN      1762/httpd\ntcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      1224/sshd\ntcp        0      0 127.0.0.1:25            0.0.0.0:*               LISTEN      1528/sendmail:acce\ntcp6       0      0 :::22                   :::*                    LISTEN      1224/sshd\n```\n\n\nYou can see that port 80 is blocked by httpd (Apache). This could also be port 443 if you are using SSL.\n\n\nGet the PID of the process that uses port 80 or 443. And send the kill command changing the \n```<PID>```\n value:\n\n\n```sudo kill -2 <PID>```\n\n\nNote in my example the PID value of Apache was \n```1762```\n so I would execute \n```sudo kill -2 1762```\n\n\nAternatively you can execute the following:\n\n\n```sudo fuser -k 80/tcp```\n\n\n```sudo fuser -k 443/tcp```\n\n\nNow that port 80 or 443 is clear, you can start Nginx by running the following:\n\n\n```sudo service nginx restart```\n\n\nIt is also advisable to remove whatever was previously blocking port 80 & 443. This will avoid any conflict in the future. Since Apache (httpd) was blocking my ports I removed it by running the following:\n\n\n```yum remove httpd httpd-devel httpd-manual httpd-tools mod_auth_kerb mod_auth_mysql mod_auth_pgsql mod_authz_ldap mod_dav_svn mod_dnssd mod_nss mod_perl mod_revocator mod_ssl mod_wsgi```",
+    "link": "https://stackoverflow.com/questions/35868976/nginx-service-failed-because-the-control-process-exited"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx: send all requests to a single html page",
+    "answer": "I think this will do it for you:\n\n\n```location / {\n    try_files /base.html =404;\n}\n```",
+    "link": "https://stackoverflow.com/questions/7027636/nginx-send-all-requests-to-a-single-html-page"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx error &quot;conflicting server name&quot; ignored",
+    "answer": "I assume that you're running a Linux, and you're using gEdit to edit your files. In the \n```/etc/nginx/sites-enabled```\n, it may have left a temp file e.g. \n```default~```\n (watch the \n```~```\n). \n\n\nDepending on your editor, the file could be named \n```.save```\n or something like it. Just run \n```$ ls -lah```\n to see which files are unintended to be there and remove them (Thanks \n@Tisch\n for this).\n\n\nDelete this file, and it will solve your problem.",
+    "link": "https://stackoverflow.com/questions/11426087/nginx-error-conflicting-server-name-ignored"
+  },
+  {
+    "category": "nginx",
+    "question": "SSL: error:0B080074:x509 certificate routines:X509_check_private_key:key values mismatch",
+    "answer": "Once you have established that they don't match, you still have a problem -- what to do about it. Often, the certificate may merely be assembled incorrectly. When a CA signs your certificate, they send you a block that looks something like \n\n\n```-----BEGIN CERTIFICATE-----\nMIIAA-and-a-buncha-nonsense-that-is-your-certificate\n-and-a-buncha-nonsense-that-is-your-certificate-and-\na-buncha-nonsense-that-is-your-certificate-and-a-bun\ncha-nonsense-that-is-your-certificate-and-a-buncha-n\nonsense-that-is-your-certificate-AA+\n-----END CERTIFICATE-----\n```\n\n\nthey'll also send you a bundle (often two certificates) that represent their authority to grant you a certificate.  this will look something like \n\n\n```-----BEGIN CERTIFICATE-----\nMIICC-this-is-the-certificate-that-signed-your-request\n-this-is-the-certificate-that-signed-your-request-this\n-is-the-certificate-that-signed-your-request-this-is-t\nhe-certificate-that-signed-your-request-this-is-the-ce\nrtificate-that-signed-your-request-A\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nMIICC-this-is-the-certificate-that-signed-for-that-one\n-this-is-the-certificate-that-signed-for-that-one-this\n-is-the-certificate-that-signed-for-that-one-this-is-t\nhe-certificate-that-signed-for-that-one-this-is-the-ce\nrtificate-that-signed-for-that-one-this-is-the-certifi\ncate-that-signed-for-that-one-AA\n-----END CERTIFICATE-----\n```\n\n\nexcept that unfortunately, they won't be so clearly labeled. \n\n\na common practice, then, is to bundle these all up into one file -- your certificate, then the signing certificates. But since they aren't easily distinguished, it sometimes happens that someone accidentally puts them in the other order -- signing certs, then the final cert -- without noticing. In that case, your cert will not match your key. \n\n\nYou can test to see what the cert thinks it represents by running\n\n\n```openssl x509 -noout -text -in yourcert.cert\n```\n\n\nNear the top, you should see \"Subject:\" and then stuff that looks like your data.  If instead it lookslike your CA, your bundle is probably in the wrong order; you might try making a backup, and then moving the last cert to the beginning, hoping that is the one that is your cert.\n\n\nIf this doesn't work, you might just have to get the cert re-issued. When I make a CSR, I like to clearly label what server it's for (instead of just ssl.key or server.key) and make a copy of it with the date in the name, like mydomain.20150306.key etc. that way they private and public key pairs are unlikely to get mixed up with another set.",
+    "link": "https://stackoverflow.com/questions/26191463/ssl-error0b080074x509-certificate-routinesx509-check-private-keykey-values"
+  },
+  {
+    "category": "nginx",
+    "question": "How can query string parameters be forwarded through a proxy_pass with nginx?",
+    "answer": "From the \nproxy_pass\n documentation:\n\n\n\n\nA special case is using variables in the proxy_pass statement: The requested URL is not used and you are fully responsible to construct the target URL yourself.\n\n\n\n\nSince you're using $1 in the target, nginx relies on you to tell it exactly what to pass.  You can fix this in two ways.  First, stripping the beginning of the uri with a proxy_pass is trivial:\n\n\n```location /service/ {\n  # Note the trailing slash on the proxy_pass.\n  # It tells nginx to replace /service/ with / when passing the request.\n  proxy_pass http://apache/;\n}\n```\n\n\nOr if you want to use the regex location, just include the args:\n\n\n```location ~* ^/service/(.*) {\n  proxy_pass http://apache/$1$is_args$args;\n}\n```",
+    "link": "https://stackoverflow.com/questions/8130692/how-can-query-string-parameters-be-forwarded-through-a-proxy-pass-with-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx server_name wildcard or catch-all",
+    "answer": "Change listen option to this in your catch-all server block. (Add \n```default_server```\n) this will take all your non-defined connections (on the specified port).\n\n\n```listen       80  default_server;\n```\n\n\nif you want to push everything to index.php if the file or folder does not exist;\n\n\n```try_files                       $uri /$uri /index.php;\n```\n\n\nPer \nthe docs\n, \n```It can also be set explicitly which server should be default, with the **default_server** parameter in the listen directive```",
+    "link": "https://stackoverflow.com/questions/9454764/nginx-server-name-wildcard-or-catch-all"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx showing blank PHP pages",
+    "answer": "replace\n\n\n```include fastcgi_params;\n```\n\n\nwith\n\n\n```include fastcgi.conf;\n```\n\n\nand remove fastcgi_param SCRIPT_FILENAME ... in nginx.conf",
+    "link": "https://stackoverflow.com/questions/15423500/nginx-showing-blank-php-pages"
+  },
+  {
+    "category": "nginx",
+    "question": "Are you trying to mount a directory onto a file (or vice-versa)?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/45972812/are-you-trying-to-mount-a-directory-onto-a-file-or-vice-versa"
+  },
+  {
+    "category": "nginx",
+    "question": "How do you change the server header returned by nginx?",
+    "answer": "If you are using nginx to proxy a back-end application and want the back-end to advertise its own \n```Server:```\n header without nginx overwriting it, then you can go inside of your \n```server {…}```\n stanza and set:\n\n\n```proxy_pass_header Server;\n```\n\n\nThat will convince nginx to leave that header alone and not rewrite the value set by the back-end.",
+    "link": "https://stackoverflow.com/questions/246227/how-do-you-change-the-server-header-returned-by-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "API gateway vs. reverse proxy",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/35756663/api-gateway-vs-reverse-proxy"
+  },
+  {
+    "category": "nginx",
+    "question": "How to start nginx via different port(other than 80)",
+    "answer": "You have to go to the \n```/etc/nginx/sites-enabled/```\n and if this is the default configuration, then there should be a file by name: \n```default```\n.\n\n\nEdit that file by defining your desired port; in the snippet below, we are serving the Nginx instance on port 81.\n\n\n```server {\n    listen 81;\n}\n```\n\n\nTo start the server, run the command line below;\n\n\n```sudo service nginx start\n```\n\n\nYou may now access your application on port 81 (for localhost, \nhttp://localhost:81\n).",
+    "link": "https://stackoverflow.com/questions/10829402/how-to-start-nginx-via-different-portother-than-80"
+  },
+  {
+    "category": "nginx",
+    "question": "Why is nginx responding to any domain name?",
+    "answer": "The first server block in the nginx config is the default for all requests that hit the server for which there is no specific server block.\n\n\nSo in your config, assuming your real domain is REAL.COM, when a user types that in, it will resolve to your server, and since there is no server block for this setup, the server block for FAKE.COM, being the first server block (only server block in your case), will process that request.\n\n\nThis is why proper Nginx configs have a specific server block for defaults before following with others for specific domains.\n\n\n```# Default server\nserver {\n    return 404;\n}\n\nserver {\n    server_name domain_1;\n    [...]\n}\n\nserver {\n    server_name domain_2;\n    [...]\n}\n```\n\n\netc\n\n\n** EDIT **\n\n\nIt seems some users are a bit confused by this example and think it is limited to a single conf file etc. \n\n\nPlease note that the above is a simple example for the OP to develop as required.\n\n\nI personally use separate vhost conf files with this as so (CentOS/RHEL):\n\n\n```http {\n    [...]\n    # Default server\n    server {\n        return 404;\n    }\n    # Other servers\n    include /etc/nginx/conf.d/*.conf;\n}\n```\n\n\n```/etc/nginx/conf.d/```\n will contain domain_1.conf, domain_2.conf... domain_n.conf which will be included after the server block in the main nginx.conf file which will always be the first and will always be the default unless it is overridden it with the default_server directive elsewhere.\n\n\nThe alphabetical order of the file names of the conf files for the other servers becomes irrelevant in this case.\n\n\nIn addition, this arrangement gives a lot of flexibility in that it is possible to define multiple defaults.\n\n\nIn my specific case, I have Apache listening on Port 8080 on the internal interface only and I proxy PHP and Perl scripts to Apache. \n\n\nHowever, I run two separate applications that both return links with \":8080\" in the output html attached as they detect that Apache is not running on the standard Port 80 and try to \"help\" me out. \n\n\nThis causes an issue in that the links become invalid as Apache cannot be reached from the external interface and the links should point at Port 80.\n\n\nI resolve this by creating a default server for Port 8080 to redirect such requests.\n\n\n```http {\n    [...]\n    # Default server block for undefined domains\n    server {\n        listen 80;\n        return 404;\n    }\n    # Default server block to redirect Port 8080 for all domains\n    server {\n        listen my.external.ip.addr:8080;\n        return 301 http://$host$request_uri;\n    }\n    # Other servers\n    include /etc/nginx/conf.d/*.conf;\n}\n```\n\n\nAs nothing in the regular server blocks listens on Port 8080, the redirect default server block transparently handles such requests by virtue of its position in nginx.conf. \n\n\nI actually have four of such server blocks and this is a simplified use case.",
+    "link": "https://stackoverflow.com/questions/9824328/why-is-nginx-responding-to-any-domain-name"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx the &quot;ssl&quot; directive is deprecated, use the &quot;listen ... ssl&quot;",
+    "answer": "Edit your \n```listen```\n statement from:\n\n\n```listen 443;\n```\n\n\nto\n\n\n```listen 443 ssl;\n```\n\n\nand comment out or delete : \n\n\n```# ssl on;   \n```\n\n\nthen check \n```nginx -t```\n again.",
+    "link": "https://stackoverflow.com/questions/51703109/nginx-the-ssl-directive-is-deprecated-use-the-listen-ssl"
+  },
+  {
+    "category": "nginx",
+    "question": "How to redirect a URL in Nginx",
+    "answer": "Best way to do what you want is to add another server block:\n\n\n```server {\n        #implemented by default, change if you need different ip or port\n        #listen *:80 | *:8000;\n        server_name test.com;\n        return 301 $scheme://www.test.com$request_uri;\n}\n```\n\n\nAnd edit your main server block server_name variable as following:\n\n\n```server_name  www.test.com;\n```\n\n\nImportant\n: New \n```server```\n block is the right way to do this, \n```if```\n is evil\n. You must use locations and servers instead of \n```if```\n if it's possible. \n```Rewrite```\n is sometimes \nevil too\n, so replaced it with \n```return```\n.",
+    "link": "https://stackoverflow.com/questions/10294481/how-to-redirect-a-url-in-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "Upstream / downstream terminology used backwards? (E.g. nginx)",
+    "answer": "In HTTP world, the \"upstream server\" term was introduced in the HTTP/1.0 specification, \nRFC 1945\n:\n\n\n\n\n502 Bad Gateway\n\n\nThe server, while acting as a gateway or proxy, received an invalid\nresponse from \nthe upstream server\n it accessed in attempting to\nfulfill the request.\n\n\n\n\nFormal definition was added later, in \nRFC 2616\n:\n\n\n\n\nupstream/downstream\n\n\nUpstream and downstream describe the flow of a message: all\nmessages flow from upstream to downstream.\n\n\n\n\nAccording to this definition:\n\n\n\n\nif you are looking at a request, then the client is upstream, and the server is downstream;\n\n\nin contrast, if you are looking at a response, then the client is downstream, and the server is upstream.\n\n\n\n\nAt the same time, in HTTP most of the data flow is not for requests, but for \nresponses\n. So, if you'll consider flow of responses, then the \"upstream server\" term sounds pretty reasonable and logical.  And the term is again used in the 502 response code description (it is identical to HTTP/1.0 one), as well as some other places.\n\n\nThe same logic can be also seen in terms \"downloading\" and \"uploading\" in natural language.  Most of the data flow is from servers to clients, and that's why \"downloading\" means loading something from a server to a client, and \"uploading\" - from a client to a server.",
+    "link": "https://stackoverflow.com/questions/32364579/upstream-downstream-terminology-used-backwards-e-g-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "Prevent nginx 504 Gateway timeout using PHP set_time_limit()",
+    "answer": "There are several ways in which you can set the timeout for php-fpm. In \n```/etc/php5/fpm/pool.d/www.conf```\n I added this line:\n\n\n```request_terminate_timeout = 180\n```\n\n\nAlso, in \n```/etc/nginx/sites-available/default```\n I added the following line to the location block of the server in question:\n\n\n```fastcgi_read_timeout 180;\n```\n\n\nThe entire location block looks like this:\n\n\n```location ~ \\.php$ {\n    fastcgi_pass unix:/var/run/php5-fpm.sock;\n    fastcgi_index index.php;\n    fastcgi_param   SCRIPT_FILENAME $document_root$fastcgi_script_name;\n    fastcgi_read_timeout 180;\n    include fastcgi_params;\n} \n```\n\n\nNow just restart php-fpm and nginx and there should be no more timeouts for requests taking less than 180 seconds.",
+    "link": "https://stackoverflow.com/questions/16002268/prevent-nginx-504-gateway-timeout-using-php-set-time-limit"
+  },
+  {
+    "category": "nginx",
+    "question": "duplicate MIME type &quot;text/html&quot;?",
+    "answer": "For the option \n```gzip_types```\n, the mime-type \n```text/html```\n is always included by default, so you don't need to specify it explicitly.",
+    "link": "https://stackoverflow.com/questions/6475472/duplicate-mime-type-text-html"
+  },
+  {
+    "category": "nginx",
+    "question": "Docker Networking - nginx: [emerg] host not found in upstream",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/33639138/docker-networking-nginx-emerg-host-not-found-in-upstream"
+  },
+  {
+    "category": "nginx",
+    "question": "Dealing with nginx 400 &quot;The plain HTTP request was sent to HTTPS port&quot; error",
+    "answer": "I ran into a similar problem.  It works on one server and does not on another server with same Nginx configuration.  Found the the solution which is answered by Igor here \nhttp://forum.nginx.org/read.php?2,1612,1627#msg-1627\n\n\nYes. Or you may combine SSL/non-SSL servers in one server:\n\n\n```server {\n  listen 80;\n  listen 443 default ssl;\n\n  # ssl on   - remember to comment this out\n\n}\n```",
+    "link": "https://stackoverflow.com/questions/8768946/dealing-with-nginx-400-the-plain-http-request-was-sent-to-https-port-error"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx startup prompt [emerg] no &quot;events&quot; section in configuration",
+    "answer": "Just add \n```events { }```\n above the \n```http {```\n line:\n\n\n```events {}\nhttp {\n    server {\n        # Your code here\n    }\n}\n```",
+    "link": "https://stackoverflow.com/questions/54481423/nginx-startup-prompt-emerg-no-events-section-in-configuration"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx- duplicate default server error",
+    "answer": "You likely have other files (such as the \n```default```\n configuration) located in \n```/etc/nginx/sites-enabled```\n that needs to be removed.\n\n\nThis issue is caused by a repeat of the \n```default_server```\n parameter supplied to one or more \n```listen```\n directives in your files.  You'll likely find this conflicting directive reads something similar to:\n\n\n```listen 80 default_server;\n```\n\n\nAs the \nnginx core module documentation for \n```listen```\n states:\n\n\n\n\nThe \n```default_server```\n parameter, if present, will cause the server to become the default server for the specified \n```address:port```\n pair. If none of the directives have the \n```default_server```\n parameter then the first server with the \n```address:port```\n pair will be the default server for this pair.\n\n\n\n\nThis means that there must be another file or \n```server```\n block defined in your configuration with \n```default_server```\n set for port 80.  nginx is encountering that first before your \n```mysite.com```\n file so try removing or adjusting that other configuration.\n\n\nIf you are struggling to find where these directives and parameters are set, try a search like so:\n\n\n```grep -R default_server /etc/nginx\n```",
+    "link": "https://stackoverflow.com/questions/30973774/nginx-duplicate-default-server-error"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx upstream prematurely closed connection while reading response header from upstream, for large requests",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/36488688/nginx-upstream-prematurely-closed-connection-while-reading-response-header-from"
+  },
+  {
+    "category": "nginx",
+    "question": "How does a Node.js &quot;server&quot; compare with Nginx or Apache servers?",
+    "answer": "It's a server, yes.\n\n\nA node.js web application is a full-fledged web server just like Nginx or Apache.\n\n\nYou can indeed serve your node.js application without using any other web server. Just change your code to:\n\n\n```app = express();\nhttp.createServer(app).listen(80); // serve HTTP directly\n```\n\n\nIndeed, some projects use node.js as the \nfront-end\n load balancer for other servers (including Apache).\n\n\nNote that node.js is not the only development stack to do this. Web development frameworks in Go, Java and Swift also do this.\n\n\nWhy?\n\n\nIn the beginning was the CGI. CGI was fine and worked OK. Apache would get a request, find that the url needs to execute a CGI app, execute that CGI app and pass data as environment variables, read the stdout and serve the data back to the browser.\n\n\nThe problem is that it is slow. It's OK when the CGI app was a small statically compiled C program but a group of small statically compiled C programs became hard to maintain. So people started writing in scripting languages. Then that became hard to maintain and people started developing object oriented MVC frameworks. Now we started having trouble - EVERY REQUEST must compile all those classes and create all those objects just to serve some HTML, even if there's nothing dynamic to serve (because the framework needs to figure out that there's nothing dynamic to serve).\n\n\nWhat if we don't need to create all those objects every request?\n\n\nThat was what people thought. And from trying to solve that problem came several strategies. One of the earliest was to embed interpreters directly in web servers like \n```mod_php```\n in Apache. Compiled classes and objects can be stored in global variables and therefore cached. Another strategy was to do pre-compilation. And yet another strategy was to run the application as a regular server process and talk with the web server using a custom protocol like FastCGI.\n\n\nThen some developers started simply using HTTP as their app->server protocol. In effect, the app is also an HTTP server. The advantage of this is that you don't need to implement any new, possibly buggy, possibly not tested protocol and you can debug your app directly using a web browser (or also commonly, \n```curl```\n). And you don't need a modified web server to support your app, just any web server that can do reverse proxying or redirects.\n\n\nWhy use Apache/Nginx?\n\n\nWhen you serve a node.js app note that you are the author of your own web server. Any potential bug in your app is a directly exploitable bug on the internet. Some people are (justifiably) not comfortable with this.\n\n\nAdding a layer of Apache or Nginx in front of your node.js app means you have a battle-tested, security-hardened piece of software on the live internet as an interface to your app. It adds a tiny bit of latency (the reverse proxying) but most consider it worth it.\n\n\nThis used to be the standard advice in the early days of node.js. But these days there are also sites and web services that exposes node.js directly to the internet. The \n```http.Server```\n module is now fairly well battle-tested on the internet to be trusted.",
+    "link": "https://stackoverflow.com/questions/38821947/how-does-a-node-js-server-compare-with-nginx-or-apache-servers"
+  },
+  {
+    "category": "nginx",
+    "question": "What is the point of uWSGI?",
+    "answer": "Okay, I think I get this now.\n\n\n\n\nWhy can't nginx directly call my Flask application?\n\n\n\n\nBecause \n```nginx```\n doesn't support the WSGI spec. Technically nginx could implement the \n```WSGI```\n spec if they wanted, they just haven't.\n\n\nThat being the case, we need a web server that does implement the spec, which is what the \n```uWSGI```\n server is for.\n\n\nNote that \n```uWSGI```\n is a full fledged http server that can and does work well on its own. I've used it in this capacity several times and it works great. If you need super high throughput for static content, then you have the option of sticking \n```nginx```\n in front of your \n```uWSGI```\n server. When you do, they will communicate over a low level protocol known as \n```uwsgi```\n.\n\n\n\"What the what?! Another thing called uwsgi?!\"\n you ask. Yeah, it's confusing. When you reference \n```uWSGI```\n you are talking about an http server. When you talk about \n```uwsgi```\n (all lowercase) you are talking about a \nbinary protocol\n that the \n```uWSGI```\n \nserver\n uses to talk to other servers like \n```nginx```\n. They picked a bad name on this one.\n\n\nFor anyone who is interested, I wrote a \nblog article\n about it with more specifics, a bit of history, and some examples.",
+    "link": "https://stackoverflow.com/questions/38601440/what-is-the-point-of-uwsgi"
+  },
+  {
+    "category": "nginx",
+    "question": "How to correctly link php-fpm and Nginx Docker containers?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/29905953/how-to-correctly-link-php-fpm-and-nginx-docker-containers"
+  },
+  {
+    "category": "nginx",
+    "question": "How to add a response header on nginx when using proxy_pass?",
+    "answer": "```add_header```\n works as well with \n```proxy_pass```\n as without. I just today set up a configuration where I've used exactly that directive. I have to admit though that I've struggled as well setting this up without exactly recalling the reason, though.\n\n\nRight now I have a working configuration and it contains the following (among others):\n\n\n```server {\n    server_name  .myserver.com\n    location / {\n        proxy_pass  http://mybackend;\n        add_header  X-Upstream  $upstream_addr;\n    }\n}\n```\n\n\nBefore nginx \n```1.7.5```\n \nadd_header\n worked only on successful responses, in contrast to the \nHttpHeadersMoreModule\n mentioned by \nSebastian Goodman in his answer\n.\n\n\nSince nginx \n```1.7.5```\n you can use the keyword \n```always```\n to include custom headers even in error responses. For example:\n\n\n```add_header X-Upstream $upstream_addr always;\n```\n\n\n\n\nLimitation:\n You cannot override the \n```server```\n header value using \n```add_header```\n.",
+    "link": "https://stackoverflow.com/questions/14501047/how-to-add-a-response-header-on-nginx-when-using-proxy-pass"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx Different Domains on Same IP",
+    "answer": "Your \"listen\" directives are wrong. See this page: \nhttp://nginx.org/en/docs/http/server_names.html\n.\n\n\nThey should be\n\n\n```server {\n    listen      80;\n    server_name www.domain1.example;\n    root /var/www/domain1;\n}\n\nserver {\n    listen       80;\n    server_name www.domain2.example;\n    root /var/www/domain2;\n}\n```\n\n\nNote, I have only included the relevant lines. Everything else looked okay but I just deleted it for clarity. To test it you might want to try serving a text file from each server first before actually serving PHP. That's why I left the 'root' directive in there.",
+    "link": "https://stackoverflow.com/questions/11773544/nginx-different-domains-on-same-ip"
+  },
+  {
+    "category": "nginx",
+    "question": "How do I restart nginx only after the configuration test was successful on Ubuntu?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/18587638/how-do-i-restart-nginx-only-after-the-configuration-test-was-successful-on-ubunt"
+  },
+  {
+    "category": "nginx",
+    "question": "Why does Unicorn need to be deployed together with Nginx?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/8739871/why-does-unicorn-need-to-be-deployed-together-with-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "How to verify if nginx is running or not?",
+    "answer": "Looking at the requirement you have, the below command shall \nhelp\n:\n\n\n```service nginx status\n```",
+    "link": "https://stackoverflow.com/questions/35220654/how-to-verify-if-nginx-is-running-or-not"
+  },
+  {
+    "category": "nginx",
+    "question": "Terminal error: zsh: permission denied: ./startup.sh",
+    "answer": "Be sure to give it the execution permission.\n\n\n```cd ~/the/script/folder\n\nchmod +x ./startup.sh\n```\n\n\nThis will give exec permission to user, group and other, so beware of possible security issues. To restrict permission to a single access class, you can use:\n\n\n```chmod u+x ./startup.sh\n```\n\n\nThis will grant exec permission only to user\n\n\nFor reference",
+    "link": "https://stackoverflow.com/questions/53229221/terminal-error-zsh-permission-denied-startup-sh"
+  },
+  {
+    "category": "nginx",
+    "question": "EventSource / Server-Sent Events through Nginx",
+    "answer": "Your Nginx config is correct, you just miss few lines.\n\n\nHere is a \"magic trio\" making \n```EventSource```\n working through Nginx:\n\n\n```proxy_set_header Connection '';\nproxy_http_version 1.1;\nchunked_transfer_encoding off;\n```\n\n\nPlace them into \n```location```\n section and it should work.\n\n\nYou may also need to add\n\n\n```proxy_buffering off;\nproxy_cache off;\n```\n\n\nThat's not an official way of doing it.\n\n\nI ended up with this by \"trial and errors\" + \"googling\" :)",
+    "link": "https://stackoverflow.com/questions/13672743/eventsource-server-sent-events-through-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx not picking up site in sites-enabled?",
+    "answer": "I had the same problem. It was because I had accidentally used a relative path with the symbolic link.\n\n\nAre you sure you used full paths, e.g.:\n\n\n```ln -s /etc/nginx/sites-available/example.com.conf /etc/nginx/sites-enabled/example.com.conf\n```",
+    "link": "https://stackoverflow.com/questions/12715871/nginx-not-picking-up-site-in-sites-enabled"
+  },
+  {
+    "category": "nginx",
+    "question": "How to configure nginx to enable kinda &#39;file browser&#39; mode?",
+    "answer": "You should try \nngx_http_autoindex_module\n.\n\n\nSet \n```autoindex```\n option to \n```on```\n. It is \n```off```\n by default.\n\n\nYour example configuration should be ok\n\n\n```location /{ \n   root /home/yozloy/html/; \n   index index.html; \n   autoindex on;\n}\n```\n\n\nWithout \n```autoindex```\n option you should be getting Error 403 for requests that end with \n```/```\n on directories that do not have an \n```index.html```\n file. With this option you should be getting a simple listing:\n\n\n```<html>\n<head><title>Index of /</title></head>\n<body bgcolor=\"white\">\n<h1>Index of /test/</h1><hr><pre><a href=\"../\">../</a>\n<a href=\"test.txt\">test.txt</a>                 19-May-2012 10:43            0\n</pre><hr></body>\n</html>\n```",
+    "link": "https://stackoverflow.com/questions/10663248/how-to-configure-nginx-to-enable-kinda-file-browser-mode"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx fails to load CSS files",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/10075304/nginx-fails-to-load-css-files"
+  },
+  {
+    "category": "nginx",
+    "question": "How do I rewrite URLs in a proxy response in NGINX",
+    "answer": "We should first read \nthe documentation on proxy_pass\n carefully and fully.\n\n\nThe URI passed to upstream server is determined based on whether \"proxy_pass\" directive is used with URI or not. Trailing slash in proxy_pass directive means that URI is present and equal to \n```/```\n. Absense of trailing slash means hat URI is absent.\n\n\nProxy_pass with URI\n:\n\n\n```location /some_dir/ {\n    proxy_pass http://some_server/;\n}\n```\n\n\nWith the above, there's the following proxy:\n\n\n```http:// your_server/some_dir/ some_subdir/some_file ->\nhttp:// some_server/          some_subdir/some_file\n```\n\n\nBasically, \n```/some_dir/```\n gets replaced by \n```/```\n to change the request path from \n```/some_dir/some_subdir/some_file```\n to \n```/some_subdir/some_file```\n.\n\n\nProxy_pass without URI\n:\n\n\n```location /some_dir/ {\n    proxy_pass http://some_server;\n}\n```\n\n\nWith the second (no trailing slash): the proxy goes like this:\n\n\n```http:// your_server /some_dir/some_subdir/some_file ->\nhttp:// some_server /some_dir/some_subdir/some_file\n```\n\n\nBasically, the full original request path gets passed on without changes.\n\n\n\n\nSo, in your case, it seems you should just drop the trailing slash to get what you want.\n\n\n\n\nCaveat\n\n\nNote that automatic rewrite only works if you don't use variables in proxy_pass. If you use variables, you should do rewrite yourself:\n\n\n```location /some_dir/ {\n  rewrite    /some_dir/(.*) /$1 break;\n  proxy_pass $upstream_server;\n}\n```\n\n\nThere are other cases where rewrite wouldn't work, that's why reading documentation is a must.\n\n\n\n\nEdit\n\n\nReading your question again, it seems I may have missed that you just want to edit the html output.\n\n\nFor that, you can use the \nsub_filter\n directive. Something like ...\n\n\n```location /admin/ {\n    proxy_pass http://localhost:8080/;\n    sub_filter \"http://your_server/\" \"http://your_server/admin/\";\n    sub_filter_once off;\n}\n```\n\n\nBasically, the string you want to replace and the replacement string",
+    "link": "https://stackoverflow.com/questions/32542282/how-do-i-rewrite-urls-in-a-proxy-response-in-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "&quot;configuration file /etc/nginx/nginx.conf test failed&quot;: How do I know why this happened?",
+    "answer": "```sudo nginx -t```\n should test all files and return errors and warnings locations",
+    "link": "https://stackoverflow.com/questions/22306006/configuration-file-etc-nginx-nginx-conf-test-failed-how-do-i-know-why-this-h"
+  },
+  {
+    "category": "nginx",
+    "question": "How to redirect single URL in Nginx?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/18037716/how-to-redirect-single-url-in-nginx"
+  },
+  {
+    "category": "nginx",
+    "question": "Redirecting EC2 Elastic Load Balancer from HTTP to HTTPS",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/24603620/redirecting-ec2-elastic-load-balancer-from-http-to-https"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx upload client_max_body_size issue",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/4947107/nginx-upload-client-max-body-size-issue"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx serve static file and got 403 forbidden",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/16808813/nginx-serve-static-file-and-got-403-forbidden"
+  },
+  {
+    "category": "nginx",
+    "question": "Angular app has to clear cache after new deployment",
+    "answer": "The problem is When a static file gets cached it can be stored for very long periods of time before it ends up expiring. This can be an annoyance in the event that you make an update to a site, however, since the cached version of the file is stored in your visitors’ browsers, they may be unable to see the changes made.\n\n\nCache-busting\n solves the browser caching issue by using a unique file version identifier to tell the browser that a new version of the file is available. Therefore the browser doesn’t retrieve the old file from cache but rather makes a request to the origin server for the new file.\n\n\nAngular cli resolves this by providing an \n```--output-hashing```\n flag for the build command.\n\n\nCheck the official doc : \nhttps://angular.io/cli/build\n\n\nExample ( older versions)\n\n\n```ng build --prod --aot --output-hashing=all\n```\n\n\nBelow are the options you can pass in \n```--output-hashing```\n\n\n\n\nnone: no hashing performed\n\n\nmedia: only add hashes to files processed via [url|file]-loaders\n\n\nbundles: only add hashes to the output bundles\n\n\nall: add hashes to both media and bundles\n\n\n\n\nUpdates\n\n\nFor the version of angular ( for example Angular 8,9,10) the command is :\n\n\n```ng build --prod --aot --outputHashing=all\n```\n\n\nFor the latest version of angular ( from angular 11 to angular 14) the command is reverted back to older format:\n\n\n```ng build  --aot --output-hashing=all\n```",
+    "link": "https://stackoverflow.com/questions/55402751/angular-app-has-to-clear-cache-after-new-deployment"
+  },
+  {
+    "category": "nginx",
+    "question": "Guide on how to use regex in Nginx location block section?",
+    "answer": "Nginx location:\n\n\nNginx location block section have a search order, a modifier, an implicit match type and an implicit switch to whether stop the search on match or not. the following array describe it for regex.\n\n\n```\n# --------------------------------------------------------------------------------------------------------------------------------------------\n# Search-Order       Modifier       Description                                                        Match-Type        Stops-search-on-match\n# --------------------------------------------------------------------------------------------------------------------------------------------\n#     1st               =           The URI must match the specified pattern exactly                  Simple-string              Yes\n#     2nd               ^~          The URI must begin with the specified pattern                     Simple-string              Yes\n#     3rd             (None)        The URI must begin with the specified pattern                     Simple-string               No\n#     4th               ~           The URI must be a case-sensitive match to the specified Rx      Perl-Compatible-Rx      Yes (first match)                 \n#     4th               ~*          The URI must be a case-insensitive match to the specified Rx    Perl-Compatible-Rx      Yes (first match)\n#     N/A               @           Defines a named location block.                                   Simple-string              Yes\n# --------------------------------------------------------------------------------------------------------------------------------------------\n```\n\n\nCapturing group:\n\n\nCapturing group, expression evaluation \n```()```\n are supported, this example \n```location ~ ^/(?:index|update)$```\n match url ending with \nexample.com/index\n and \nexample.com/update\n\n\n```# -----------------------------------------------------------------------------------------\n#    ()    : Group/Capturing-group, capturing mean match and retain/output/use what matched\n#            the patern inside (). the default bracket mode is \"capturing group\" while (?:) \n#            is a non capturing group. example (?:a|b) match a or b in a non capturing mode\n# ----------------------------------------------------------------------------------------- \n#    ?:    : Non capturing group\n#    ?=    : Positive look ahead \n#    ?!    : is for negative look ahead (do not match the following...)\n#    ?<=   : is for positive look behind\n#    ?<!   : is for negative look behind\n# -----------------------------------------------------------------------------------------\n```\n\n\nThe forward slash:\n\n\nNot to confuse with the regex slash \n```\\```\n, In nginx the forward slash \n```/```\n is used to match any sub location including none example \n```location /```\n. In the context of regex support the following explanation apply\n\n\n```# -----------------------------------------------------------------------------------------\n#     /    : It doesn't actually do anything. In Javascript, Perl and some other languages, \n#            it is used as a delimiter character explicitly for regular expressions.\n#            Some languages like PHP use it as a delimiter inside a string, \n#            with additional options passed at the end, just like Javascript and Perl.\n#            Nginx does not use delimiter, / can be escaped with \\/ for code portability \n#            purpose BUT this is not required for nginx / are handled literally \n#            (don't have other meaning than /)\n# -----------------------------------------------------------------------------------------\n```\n\n\nThe slash:\n\n\nThe first purpose of the regex special character \n```\\```\n is meant to escape the next character; But note that in most case \n```\\```\n followed by a character have a different meaning, a complete list is \navailable here\n.\n\n\nNginx does not require escaping the forward slash \n```/```\n it does not either deny escaping it like we could escape any other character. and thus \n```\\/```\n is translated/matching \n```/```\n. One purpose of escaping forward slashes in the context of nginx could be for code portability.\n\n\nOther regex chars\n\n\nHere is a non exhaustive list of regex expression that can be used\n\n\n```# -----------------------------------------------------------------------------------------\n#     ~     : Enable regex mode for location (in regex ~ mean case-sensitive match)\n#     ~*    : case-insensitive match\n#     |     : Or\n#     ()    : Match group or evaluate the content of ()\n#     $     : the expression must be at the end of the evaluated text \n#             (no char/text after the match) $ is usually used at the end of a regex \n#             location expression. \n#     ?     : Check for zero or one occurrence of the previous char ex jpe?g\n#     ^~    : The match must be at the beginning of the text, note that nginx will not perform \n#             any further regular expression match even if an other match is available \n#             (check the table above); ^ indicate that the match must be at the start of \n#             the uri text, while ~ indicates a regular expression match mode.\n#             example (location ^~ /realestate/.*)\n#             Nginx evaluation exactly this as don't check regexp locations if this \n#             location is longest prefix match.\n#     =     : Exact match, no sub folders (location = /)\n#     ^     : Match the beginning of the text (opposite of $). By itself, ^ is a \n#             shortcut for all paths (since they all have a beginning).\n#     .*    : Match zero, one or more occurrence of any char\n#     \\     : Escape the next char\n#     .     : Any char \n#     *     : Match zero, one or more occurrence of the previous char\n#     !     : Not (negative look ahead)\n#     {}    : Match a specific number of occurrence ex. [0-9]{3} match 342 but not 32\n#             {2,4} match length of 2, 3 and 4\n#     +     : Match one or more occurrence of the previous char \n#     []    : Match any char inside\n# --------------------------------------------------------------------------------------------\n```\n\n\nExamples:\n\n\n```location ~ ^/(?:index)\\.php(?:$|/)\n```\n\n\n```location ~ ^\\/(?:core\\/img\\/background.png|core\\/img\\/favicon.ico)(?:$|\\/)\n```\n\n\n```location ~ ^/(?:index|core/ajax/update|ocs/v[12]|status|updater/.+|oc[ms]-provider/.+)\\.php(?:$|/)\n```",
+    "link": "https://stackoverflow.com/questions/59846238/guide-on-how-to-use-regex-in-nginx-location-block-section"
+  },
+  {
+    "category": "nginx",
+    "question": "What does &quot;trust proxy&quot; actually do in express.js, and do I need to use it?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/23413401/what-does-trust-proxy-actually-do-in-express-js-and-do-i-need-to-use-it"
+  },
+  {
+    "category": "nginx",
+    "question": "dump conf from running nginx process",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/12832033/dump-conf-from-running-nginx-process"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx - read custom header from upstream server",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/12431496/nginx-read-custom-header-from-upstream-server"
+  },
+  {
+    "category": "nginx",
+    "question": "Tuning nginx worker_process to obtain 100k hits per min",
+    "answer": "Config file:\n\n\n```worker_processes  4;  # 2 * Number of CPUs\n\nevents {\n    worker_connections  19000;  # It's the key to high performance - have a lot of connections available\n}\n\nworker_rlimit_nofile    20000;  # Each connection needs a filehandle (or 2 if you are proxying)\n\n\n# Total amount of users you can serve = worker_processes * worker_connections\n```\n\n\nmore info: \nOptimizing nginx for high traffic loads",
+    "link": "https://stackoverflow.com/questions/7325211/tuning-nginx-worker-process-to-obtain-100k-hits-per-min"
+  },
+  {
+    "category": "nginx",
+    "question": "Docker: Temporary failure resolving &#39;deb.debian.org&#39;",
+    "answer": "Try restarting Docker.\n\n\nOne of these should work:\n\n\n```sudo service docker restart\nsudo /etc/init.d/docker restart\nsudo snap restart docker\n```\n\n\nEven in cases where Docker never worked before, some commenters said this was helpful.",
+    "link": "https://stackoverflow.com/questions/61567404/docker-temporary-failure-resolving-deb-debian-org"
+  },
+  {
+    "category": "nginx",
+    "question": "Docker Network Nginx Resolver",
+    "answer": "First off, you should be using the Docker embedded DNS server at \n```127.0.0.11```\n.\n\n\nYour problem could be caused by 1 of the following:\n\n\n\n\nnginx is trying to use IPv6 (AAAA record) for the DNS queries.\n\n\nSee \nhttps://stackoverflow.com/a/35516395/1529493\n for the solution.\n\n\nBasically something like:\n\n\n```http {\n    resolver 127.0.0.11 ipv6=off;\n}\n```\n\n\nThis is probably no longer a problem with Docker 1.11:\n\n\n\n\nFix to not forward docker domain IPv6 queries to external servers\n  (\n#21396\n)\n\n\n\n\nTake care that you don't accidentally override the \n```resolver```\n configuration directive. In my case I had in the \n```server```\n block \n```resolver 8.8.8.8 8.8.4.4;```\n from \nMozilla's SSL Configuration Generator\n, which was overriding the \n```resolver 127.0.0.11;```\n in the \n```http```\n block. That had me scratching my head for a long time...",
+    "link": "https://stackoverflow.com/questions/35744650/docker-network-nginx-resolver"
+  },
+  {
+    "category": "nginx",
+    "question": "How to preserve request url with nginx proxy_pass",
+    "answer": "I think the \n```proxy_set_header```\n directive could help:\n\n\n```location / {\n    proxy_pass http://my_app_upstream;\n    proxy_set_header Host $host;\n    # ...\n}\n```",
+    "link": "https://stackoverflow.com/questions/5834025/how-to-preserve-request-url-with-nginx-proxy-pass"
+  },
+  {
+    "category": "nginx",
+    "question": "How to fix &quot;mbind: Operation not permitted&quot; in mysql error log",
+    "answer": "Add the capability \n```CAP_SYS_NICE```\n to your container until MySQL server can handle the error itself \"silently\".\n\n\n```service:\n  mysql:\n    image: mysql:8.0.15\n    # ...\n    cap_add:\n      - SYS_NICE  # CAP_SYS_NICE\n```\n\n\nIf you don't have \n```docker-compose```\n, then you can define \n```CAP_SYS_NICE```\n via\n\n\n```docker run --cap-add=sys_nice -d mysql\n```\n\n\nReferences:\n\n\n\n\nDocker Seccomp security profiles: \nhttps://docs.docker.com/engine/security/seccomp/\n\n\nDocker resource constraints: \nhttps://docs.docker.com/config/containers/resource_constraints/",
+    "link": "https://stackoverflow.com/questions/55559386/how-to-fix-mbind-operation-not-permitted-in-mysql-error-log"
+  },
+  {
+    "category": "nginx",
+    "question": "Why do HTTP servers forbid underscores in HTTP header names",
+    "answer": "They are not forbidden, it's CGI legacy. See \"\nMissing (disappearing) HTTP Headers\n\".\n\n\n\n\nIf you do not explicitly set \n```underscores_in_headers on;```\n, nginx will silently drop HTTP headers with underscores (which are perfectly valid according to the HTTP standard). This is done in order to prevent ambiguities when mapping headers to CGI variables, as both dashes and underscores are mapped to underscores during that process.",
+    "link": "https://stackoverflow.com/questions/22856136/why-do-http-servers-forbid-underscores-in-http-header-names"
+  },
+  {
+    "category": "nginx",
+    "question": "Nginx causes 301 redirect if there&#39;s no trailing slash",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/15555428/nginx-causes-301-redirect-if-theres-no-trailing-slash"
+  },
+  {
+    "category": "nginx",
+    "question": "What are the benefits of using Nginx in front of a webserver for Go?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/17776584/what-are-the-benefits-of-using-nginx-in-front-of-a-webserver-for-go"
+  },
+  {
+    "category": "nginx",
+    "question": "Use nginx to serve static files from subdirectories of a given directory",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/12806893/use-nginx-to-serve-static-files-from-subdirectories-of-a-given-directory"
+  },
+  {
+    "category": "nginx",
+    "question": "nginx: [emerg] &quot;http&quot; directive is not allowed here in /etc/nginx/sites-enabled/default:1",
+    "answer": "I am assuming that you have \n```http```\n in your /etc/nginx/nginx.conf file which then tells nginx to \n```include    sites-enabled/*;```\n\n\nSo then you have \n\n\n``` http\n    http\n       server\n```\n\n\nAs the http directive should only happen once just remove the http directive from your sites-enabled config file(s)",
+    "link": "https://stackoverflow.com/questions/43643829/nginx-emerg-http-directive-is-not-allowed-here-in-etc-nginx-sites-enabled"
+  },
+  {
+    "category": "nginx",
+    "question": "react.js application showing 404 not found in nginx server",
+    "answer": "When your \n```react.js```\n app loads, the routes are handled on the frontend by the \n```react-router```\n. Say for example you are at \n```http://a.com```\n. Then on the page you navigate to \n```http://a.com/b```\n. This route change is handled in the browser itself. Now when you refresh or open the url \n```http://a.com/b```\n in the a new tab, the request goes to your \n```nginx```\n where the particular route does not exist and hence you get 404.\n\n\nTo avoid this, you need to load the root file(usually index.html) for all non matching routes so that \n```nginx```\n sends the file and the route is then handled by your react app on the browser. To do this you have to make the below change in your \n```nginx.conf```\n or \n```sites-enabled```\n appropiately\n\n\n```location / {\n try_files $uri /index.html;\n}\n```\n\n\nThis tells \n```nginx```\n to look for the specified \n```$uri```\n, if it cannot find one then it send \n```index.html```\n back to the browser. (See \nhttps://serverfault.com/questions/329592/how-does-try-files-work\n for more details)",
+    "link": "https://stackoverflow.com/questions/43555282/react-js-application-showing-404-not-found-in-nginx-server"
+  },
+  {
+    "category": "nginx",
+    "question": "What does force_ssl do in Rails?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/15676596/what-does-force-ssl-do-in-rails"
+  },
+  {
+    "category": "nginx",
+    "question": "What language are nginx conf files?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/2936260/what-language-are-nginx-conf-files"
+  }
+]

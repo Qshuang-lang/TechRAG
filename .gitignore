@@ -1,0 +1,22 @@
+# 密钥与配置
+.env
+*.env
+config.local.json
+
+# 虚拟环境
+.venv/
+venv/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.idea/
+.vscode/
+
+# 日志与临时文件
+*.log
+temp/
+.DS_Store

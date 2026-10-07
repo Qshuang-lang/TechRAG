@@ -1,0 +1,583 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Open Source | Docs
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+{"categories":null,"description":"Get started with Redis Open Source","duplicateOf":"head:data-ai-metadata","location":"body","title":"Open Source","tableOfContents":{"sections":[{"id":"use-cases","title":"Use cases"},{"id":"data-integration-tools-libraries-and-frameworks","title":"Data integration tools, libraries, and frameworks"},{"id":"deployment-options","title":"Deployment options"},{"id":"provisioning-and-observability-tools","title":"Provisioning and observability tools"}]},"codeExamples":[]}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+          Open Source
+        
+
+
+Get started with Redis Open Source
+
+
+Redis is an 
+in-memory data store
+ used by millions of developers as a cache, 
+vector database
+, 
+document database
+, 
+streaming engine
+, and message broker. Redis has built-in replication and different levels of 
+on-disk persistence
+. It supports complex 
+data types
+ (for example, strings, hashes, lists, sets, sorted sets, and JSON), with atomic operations defined on those data types.
+
+
+Since 2009, the Redis open source project has inspired an enthusiastic and active community of users and contributors. The Redis core source repository is hosted under 
+https://github.com/redis/redis
+ along with many of the client libraries. See the 
+Redis Open Source
+ page for more details and links.
+
+
+You can install Redis from source or from an executable/distribution for your OS.
+
+
+
+
+Install Redis on Linux using 
+APT
+, 
+RPM
+, or 
+Snap
+
+
+Install Redis on macOS
+
+
+Run Redis on Windows using Docker
+
+
+Run Redis on Docker
+
+
+Install Redis from Source
+
+
+Install Redis with Redis Stack and Redis Insight
+
+
+
+
+
+  Use cases
+  
+
+
+
+
+
+
+
+
+
+
+
+
+The following quick start guides will show you how to use Redis for the following specific purposes:
+
+
+
+
+Data structure store
+
+
+Document database
+
+
+Vector database
+
+
+AI agents and chatbots
+
+
+Retrieval Augmented Generation (RAG) with Redis
+
+
+
+
+
+  Data integration tools, libraries, and frameworks
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Client API libraries
+
+
+Redis Data Integration
+
+
+Redis vector library for Python
+
+
+Redis Cloud with Amazon Bedrock
+
+
+Object-mapping for .NET
+
+
+Spring Data Redis for Java
+
+
+
+
+You can find a complete list of integrations on the 
+integrations and frameworks hub
+.
+
+
+To learn more, refer to the 
+develop with Redis
+ documentation.
+
+
+
+  Deployment options
+  
+
+
+
+
+
+
+
+
+
+
+
+
+You can deploy Redis with the following methods:
+
+
+
+
+As a service by using 
+Redis Cloud
+, the fastest way to deploy Redis on your preferred cloud platform.
+
+
+By installing 
+Redis Enterprise Software
+ in an on-premises data center or on Cloud infrastructure.
+
+
+On a variety Kubernetes distributions by using the 
+Redis Enterprise operator for Kubernetes
+.
+
+
+
+
+The following guides will help you to get started with your preferred deployment method.
+
+
+Get started with 
+Redis Cloud
+ by creating a database:
+
+
+
+
+The 
+Redis Cloud quick start
+ helps you create a free database.  (Start here if you're new.)
+
+
+Create an Essentials database
+ with a memory limit up to 12 GB.
+
+
+Create a Pro database
+ that suits your workload and offers seamless scaling.
+
+
+
+
+Install a 
+Redis Enterprise Software
+ cluster:
+
+
+
+
+Redis Enterprise on Linux quick start
+
+
+Redis Enterprise on Docker quick start
+
+
+Get started with Redis Enterprise's Active-Active feature
+
+
+Install and upgrade Redis Enterprise
+
+
+
+
+Leverage 
+Redis Enterprise for Kubernetes
+ to simply deploy a Redis Enterprise cluster on Kubernetes:
+
+
+
+
+Deploy Redis Enterprise for Kubernetes
+
+
+Deploy Redis Enterprise for Kubernetes with OpenShift
+
+
+
+
+To learn more, refer to the 
+Redis products
+ documentation.
+
+
+
+  Provisioning and observability tools
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Pulumi provider for Redis Cloud
+
+
+Terraform provider for Redis Cloud
+
+
+Prometheus and Grafana with Redis Cloud
+
+
+Prometheus and Grafana with Redis Enterprise
+
+
+
+
+You can find a complete list of integrations on the 
+libraries and tools hub
+.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+RATE THIS PAGE
+
+
+
+
+
+
+★
+
+
+
+
+★
+
+
+
+
+★
+
+
+
+
+★
+
+
+
+
+★
+
+
+
+
+
+
+
+      Back to top â
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+        Submit
+      
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+On this page
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

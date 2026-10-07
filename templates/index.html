@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TechRAG · 企业 IT 知识问答</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js" defer></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        brand: { 50:'#eef4ff', 100:'#dbe7ff', 500:'#2563eb', 600:'#1d4ed8', 700:'#1e40af' },
+        ink: '#0f172a',
+      }
+    }
+  }
+}
+</script>
+<style>
+  body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: rgba(148,163,184,.4); border-radius: 9999px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+
+  .typing-dot { width: 7px; height: 7px; border-radius: 9999px; background: #94a3b8; animation: bounceDot 1.2s infinite; }
+  .typing-dot:nth-child(2) { animation-delay: .15s; }
+  .typing-dot:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounceDot { 0%,60%,100% { transform: translateY(0); opacity:.5 } 30% { transform: translateY(-4px); opacity:1 } }
+
+  @keyframes fadeUp { from { opacity:0; transform: translateY(8px) } to { opacity:1; transform: translateY(0) } }
+  .fade-up { animation: fadeUp .25s ease both; }
+
+  .markdown-body { line-height: 1.7; word-break: break-word; }
+  .markdown-body p { margin: .35rem 0; }
+  .markdown-body h1,.markdown-body h2,.markdown-body h3 { font-weight: 700; margin: .8rem 0 .4rem; }
+  .markdown-body h1 { font-size: 1.25rem } .markdown-body h2 { font-size: 1.15rem } .markdown-body h3 { font-size: 1.05rem }
+  .markdown-body ul,.markdown-body ol { padding-left: 1.25rem; margin: .4rem 0; }
+  .markdown-body ul { list-style: disc } .markdown-body ol { list-style: decimal }
+  .markdown-body pre { background: #0f172a; color: #e2e8f0; border-radius: .6rem; padding: .8rem 1rem; overflow-x: auto; margin: .6rem 0; font-size: .85rem; }
+  .markdown-body code { font-family: ui-monospace, Consolas, monospace; font-size: .9em; }
+  .markdown-body :not(pre) > code { background: #eef2f7; color: #b91c1c; padding: .1rem .35rem; border-radius: .35rem; }
+  .markdown-body blockquote { border-left: 3px solid #cbd5e1; padding-left: .8rem; color: #64748b; margin: .5rem 0; }
+  .markdown-body a { color: #2563eb; text-decoration: underline; }
+  .markdown-body table { border-collapse: collapse; margin: .6rem 0; font-size: .88rem; }
+  .markdown-body th,.markdown-body td { border: 1px solid #e2e8f0; padding: .4rem .7rem; }
+  .markdown-body th { background: #f8fafc; font-weight: 600; }
+  .markdown-body img { max-width: 100%; border-radius: .5rem; }
+</style>
+</head>
+<body class="bg-[#f3f4f6] h-screen overflow-hidden text-ink">
+
+<div x-data="app()" x-init="init()" class="h-full flex">
+
+  <!-- ===== 全局提示 ===== -->
+  <div x-show="toast.show" x-transition.opacity.duration.200ms
+    class="fixed top-4 left-1/2 -translate-x-1/2 z-50 max-w-[90%] px-4 py-2.5 rounded-xl text-sm shadow-lg flex items-center gap-2"
+    :class="toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-slate-800 text-white'">
+    <svg x-show="toast.type === 'error'" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+    <span x-text="toast.msg"></span>
+  </div>
+
+  <!-- ===== 移动端遮罩 ===== -->
+  <div x-show="sidebarOpen" @click="sidebarOpen=false" x-transition.opacity class="fixed inset-0 bg-black/40 z-20 md:hidden"></div>
+
+  <!-- ===== 侧边栏 ===== -->
+  <aside
+    class="fixed md:static inset-y-0 left-0 z-30 w-72 md:w-64 shrink-0 bg-[#171a21] text-slate-300 flex flex-col transition-transform duration-200"
+    :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'">
+
+    <!-- 品牌 -->
+    <div class="flex items-center gap-2.5 px-4 h-16 border-b border-white/10">
+      <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30">
+        <svg class="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7l7-4z"/><path d="M9.5 12l2 2 3.5-4"/>
+        </svg>
+      </div>
+      <div>
+        <div class="text-white font-bold text-[15px] leading-tight">TechRAG</div>
+        <div class="text-[11px] text-slate-400 leading-tight">企业 IT 知识问答</div>
+      </div>
+    </div>
+
+    <!-- 新建会话 -->
+    <div class="p-3">
+      <button @click="newChat()"
+        class="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gradient-to-r from-blue-600 to-indigo-600 text-white text-sm font-medium hover:from-blue-500 hover:to-indigo-500 transition shadow-md shadow-blue-900/40">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        新建会话
+      </button>
+    </div>
+
+    <!-- 会话列表 -->
+    <div class="flex-1 overflow-y-auto px-2 pb-2">
+      <template x-if="conversations.length === 0">
+        <div class="text-center text-xs text-slate-500 py-10 px-4">
+          <p class="mb-1">暂无历史会话</p>
+          <p>开始一个新对话吧</p>
+        </div>
+      </template>
+
+      <template x-for="c in conversations" :key="c.id">
+        <div @click="openConv(c.id)"
+          class="group flex items-center gap-2 px-3 py-2.5 mb-1 rounded-lg cursor-pointer text-sm transition"
+          :class="(activeId === c.id ? 'bg-blue-600/20 text-white ring-1 ring-blue-500/40' : 'hover:bg-white/5 text-slate-300') + (loadingConv === c.id ? ' opacity-50 pointer-events-none' : '')">
+          <svg class="w-4 h-4 shrink-0 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <span class="flex-1 truncate" x-text="c.title"></span>
+          <button @click.stop="delConv(c.id)"
+            title="删除会话"
+            class="shrink-0 p-1 rounded-md text-slate-400 opacity-70 hover:opacity-100 hover:bg-red-500/20 hover:text-red-400 transition">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+            </svg>
+          </button>
+        </div>
+      </template>
+    </div>
+
+    <!-- 底部信息 -->
+    <div class="px-4 py-3 border-t border-white/10 text-[11px] text-slate-500 flex items-center gap-2">
+      <span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+      RAG + 联网搜索 · v0.1.0
+    </div>
+  </aside>
+
+  <!-- ===== 主区域 ===== -->
+  <main class="flex-1 flex flex-col min-w-0 bg-[#f3f4f6]">
+
+    <!-- 顶栏 -->
+    <header class="h-16 bg-white/90 backdrop-blur border-b border-slate-200 flex items-center gap-3 px-4 md:px-6 shrink-0">
+      <button @click="sidebarOpen=true" class="md:hidden p-1.5 rounded-md hover:bg-slate-100 text-slate-600">
+        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+      </button>
+      <div class="flex items-center gap-2 text-sm text-slate-500">
+        <span class="hidden sm:inline">当前会话：</span>
+        <span class="font-medium text-slate-700 max-w-[220px] md:max-w-sm truncate" x-text="activeTitle"></span>
+      </div>
+      <div class="ml-auto flex items-center gap-3 text-xs text-slate-500">
+        <label class="flex items-center gap-1.5 cursor-pointer select-none">
+          <input type="checkbox" x-model="enableRag" class="accent-blue-600 w-3.5 h-3.5"> 知识库检索
+        </label>
+        <label class="flex items-center gap-1.5 cursor-pointer select-none">
+          <input type="checkbox" x-model="enableWeb" class="accent-blue-600 w-3.5 h-3.5"> 联网搜索
+        </label>
+      </div>
+    </header>
+
+    <!-- 聊天区 -->
+    <div id="chatScroll" class="flex-1 overflow-y-auto">
+      <div class="max-w-3xl mx-auto px-4 md:px-6 py-6">
+
+        <!-- 欢迎页 -->
+        <div x-show="showWelcome" class="flex flex-col items-center justify-center text-center pt-10 md:pt-20">
+          <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-xl shadow-blue-500/30 mb-5">
+            <svg class="w-9 h-9 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7l7-4z"/><path d="M9.5 12l2 2 3.5-4"/>
+            </svg>
+          </div>
+          <h1 class="text-2xl md:text-3xl font-bold text-slate-800 mb-2">TechRAG 智能助手</h1>
+          <p class="text-sm text-slate-500 mb-8 max-w-md">面向企业 IT 场景的知识问答助手，融合<strong class="text-slate-600">知识库检索</strong>与<strong class="text-slate-600">联网搜索</strong>，回答仅供参考</p>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-xl">
+            <template x-for="q in examples" :key="q">
+              <button @click="sendWith(q)"
+                class="group text-left px-4 py-3 rounded-xl bg-white border border-slate-200 shadow-sm hover:border-blue-400 hover:shadow-md transition">
+                <span class="text-sm text-slate-700 group-hover:text-blue-600" x-text="q"></span>
+                <span class="mt-1 text-blue-500 text-xs opacity-0 group-hover:opacity-100 transition">发送 →</span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <!-- 消息列表 -->
+        <div x-show="!showWelcome">
+          <template x-for="(m, idx) in messages" :key="m.id">
+            <div class="flex mb-5 fade-up" :class="m.role === 'user' ? 'justify-end' : 'justify-start'">
+
+              <!-- AI 头像 -->
+              <div x-show="m.role === 'assistant'" class="mr-3 mt-0.5">
+                <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-md shadow-blue-500/20 shrink-0">
+                  <svg class="w-4.5 h-4.5 text-white" style="width:18px;height:18px" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7l7-4z"/><path d="M9.5 12l2 2 3.5-4"/>
+                  </svg>
+                </div>
+              </div>
+
+              <!-- 气泡 -->
+              <div class="max-w-[85%] md:max-w-[78%]"
+                :class="m.role === 'user' ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white rounded-2xl rounded-tr-sm px-4 py-2.5 shadow-md shadow-blue-600/20' : 'bg-white text-slate-800 border border-slate-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm'">
+
+                <!-- 用户消息 -->
+                <template x-if="m.role === 'user'">
+                  <div class="text-[15px] whitespace-pre-wrap break-words" x-text="m.content"></div>
+                </template>
+
+                <!-- AI 思考中 -->
+                <template x-if="m.role === 'assistant' && m.loading">
+                  <div class="flex items-center gap-2 py-1">
+                    <span class="text-sm text-slate-500">思考中</span>
+                    <span class="flex gap-1"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span></span>
+                  </div>
+                </template>
+
+                <!-- AI 回复 -->
+                <template x-if="m.role === 'assistant' && !m.loading">
+                  <div>
+                    <div class="markdown-body text-[15px]" x-html="m.rendered"></div>
+                    <div class="mt-2 flex items-center gap-2">
+                      <span x-show="m.stage" class="stage-tag inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full font-medium"
+                        :class="stageCls(m.stage)">
+                        <span x-text="stageLabel(m.stage)"></span>
+                      </span>
+                      <span x-show="m.stage === 'rag' || m.stage === 'web'" class="text-[11px] text-slate-400" x-text="m.detail"></span>
+                      <span x-show="m.elapsed" class="text-[11px] text-slate-400" x-text="'耗时 ' + m.elapsed + 's'"></span>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+
+    <!-- 输入区 -->
+    <div class="bg-white/90 backdrop-blur border-t border-slate-200 px-4 md:px-6 pb-4 pt-3 shrink-0">
+      <div class="max-w-3xl mx-auto">
+        <div class="flex items-end gap-2 rounded-2xl border border-slate-300 bg-white shadow-sm focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition px-3 py-2">
+          <textarea
+            x-ref="input"
+            x-model="input"
+            rows="1"
+            @input="autoGrow($event)"
+            @keydown.enter.prevent="!$event.shiftKey && send()"
+            :disabled="sending"
+            class="flex-1 resize-none bg-transparent outline-none text-[15px] text-slate-800 placeholder:text-slate-400 max-h-40 leading-6"
+            :placeholder="sending ? 'AI 正在回答，请稍候…' : '输入 IT 技术问题，Enter 发送，Shift+Enter 换行'"></textarea>
+          <button @click="send()"
+            :disabled="sending || !input.trim()"
+            class="shrink-0 w-9 h-9 rounded-xl flex items-center justify-center transition shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            :class="input.trim() && !sending ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-blue-600/30' : 'bg-slate-200 text-slate-400'">
+            <svg x-show="!sending" class="w-4.5 h-4.5" style="width:18px;height:18px" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M3.4 20.4l17.2-7.4c.8-.4.8-1.6 0-2L3.4 3.6c-.7-.3-1.4.3-1.3 1l1 6.2c0 .4.4.8.9.8l9.3 1.2-9.3 1.2c-.5 0-.9.4-.9.8l-1 6.2c-.1.7.6 1.3 1.3 1z"/>
+            </svg>
+            <svg x-show="sending" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+              <path d="M12 3a9 9 0 1 0 9 9"/>
+            </svg>
+          </button>
+        </div>
+        <div class="flex items-center justify-center gap-4 mt-2 text-[11px] text-slate-400">
+          <span>Enter 发送 · Shift+Enter 换行</span>
+          <span class="hidden sm:inline">内容由 AI 生成，请注意甄别</span>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script>
+function app() {
+  return {
+    conversations: [],
+    messages: [],
+    activeId: null,
+    activeTitle: '新会话',
+    input: '',
+    sending: false,
+    showWelcome: true,
+    sidebarOpen: false,
+    loadingConv: null,
+    toast: { show: false, msg: '', type: 'info', _timer: null },
+    enableRag: true,
+    enableWeb: true,
+    examples: [
+      '什么是 RAG？',
+      '如何排查 MySQL 连接超时？',
+      'Docker 容器怎么查看日志？',
+      '解释一下 Milvus 向量检索的原理',
+    ],
+    _msgSeq: 1,
+
+    async init() {
+      this.loadConversations();
+    },
+
+    async loadConversations() {
+      try {
+        const resp = await fetch('/api/conversations');
+        if (!resp.ok) {
+          this.toastMsg('会话列表加载失败（' + resp.status + '）', 'error');
+          return;
+        }
+        const data = await resp.json();
+        this.conversations = Array.isArray(data) ? data : [];
+      } catch (e) {
+        this.toastMsg('会话列表加载失败，请检查服务是否运行', 'error');
+      }
+    },
+
+    newChat() {
+      this.activeId = null;
+      this.activeTitle = '新会话';
+      this.messages = [];
+      this.showWelcome = true;
+      this.sidebarOpen = false;
+      this.$nextTick(() => this.scrollBottom());
+    },
+
+    async openConv(id) {
+      if (id === this.activeId) { this.sidebarOpen = false; return; }
+      if (this.loadingConv === id) return;
+      this.loadingConv = id;
+      try {
+        const resp = await fetch(`/api/conversations/${id}/messages`);
+        if (!resp.ok) {
+          this.toastMsg('加载会话失败（' + resp.status + '）', 'error');
+          return;
+        }
+        const data = await resp.json();
+        this.activeId = id;
+        this.activeTitle = data.title || '新会话';
+        this.messages = (data.messages || []).map(m => ({
+          id: `h-${m.id}`,
+          role: m.role,
+          content: m.content,
+          stage: m.stage || '',
+          detail: '',
+          loading: false,
+          typing: false,
+          rendered: m.role === 'assistant' ? this.renderMd(m.content) : '',
+        }));
+        this.showWelcome = false;
+        this.sidebarOpen = false;
+        this.$nextTick(() => this.scrollBottom());
+      } catch (e) {
+        this.toastMsg('加载会话失败，请检查服务是否运行', 'error');
+      } finally {
+        this.loadingConv = null;
+      }
+    },
+
+    async delConv(id) {
+      if (!confirm('确定删除这个会话及其全部消息吗？')) return;
+      try {
+        const resp = await fetch(`/api/conversations/${id}`, { method: 'DELETE' });
+        if (!resp.ok) {
+          this.toastMsg('删除会话失败（' + resp.status + '）', 'error');
+          return;
+        }
+        this.conversations = this.conversations.filter(c => c.id !== id);
+        if (this.activeId === id) this.newChat();
+        this.toastMsg('会话已删除', 'info');
+      } catch (e) {
+        this.toastMsg('删除会话失败，请检查服务是否运行', 'error');
+      }
+    },
+
+    toastMsg(msg, type) {
+      this.toast.msg = msg;
+      this.toast.type = type || 'info';
+      this.toast.show = true;
+      clearTimeout(this.toast._timer);
+      this.toast._timer = setTimeout(() => { this.toast.show = false; }, 2500);
+    },
+
+    async sendWith(q) {
+      this.input = q;
+      await this.send();
+    },
+
+    async send() {
+      const question = (this.input || '').trim();
+      if (!question || this.sending) return;
+      this.input = '';
+      this.$refs.input && (this.$refs.input.style.height = 'auto');
+
+      this.showWelcome = false;
+      const userMsg = { id: `u-${this._msgSeq++}`, role: 'user', content: question };
+      const aiMsg = { id: `a-${this._msgSeq++}`, role: 'assistant', content: '', stage: '', detail: '', loading: true, typing: false, rendered: '' };
+      this.messages.push(userMsg, aiMsg);
+      // 关键：必须通过 Alpine 代理后的数组元素来改值，直接改原始对象引用不会触发界面刷新
+      const aiEl = this.messages[this.messages.length - 1];
+      const t0 = performance.now(); // 记录请求开始时间（用于显示响应耗时）
+      this.sending = true;
+      this.$nextTick(() => this.scrollBottom());
+
+      try {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 60000); // 60s 前端超时保护
+        let resp;
+        try {
+          resp = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              question,
+              conversation_id: this.activeId,
+              enable_rag: this.enableRag,
+              enable_web: this.enableWeb,
+            }),
+            signal: controller.signal
+          });
+        } finally {
+          clearTimeout(timer);
+        }
+        const data = await resp.json();
+        if (this.activeId === null && data.conversation_id) {
+          this.activeId = data.conversation_id;
+          this.activeTitle = question.slice(0, 20) || '新会话';
+          this.conversations.unshift({ id: data.conversation_id, title: this.activeTitle });
+        }
+        this.startTyping(aiEl, data.answer || '（无回复）', data.stage || '', data.detail || '', t0);
+      } catch (e) {
+        aiEl.loading = false;
+        aiEl.content = (e.name === 'AbortError') ? '请求超时（60s），请稍后重试或检查网络' : '请求失败，请检查服务是否正常运行';
+        aiEl.elapsed = ((performance.now() - t0) / 1000).toFixed(1);
+        aiEl.rendered = this.renderMd(aiEl.content);
+      } finally {
+        this.sending = false;
+      }
+    },
+
+    startTyping(msg, fullText, stage, detail, t0) {
+      msg.loading = false;
+      msg.stage = stage;
+      msg.detail = detail;
+      if (t0 != null) msg.elapsed = ((performance.now() - t0) / 1000).toFixed(1); // 响应耗时（发送→收到回复）
+      msg.typing = true;
+      msg.content = fullText;
+
+      const total = fullText.length;
+      const frames = Math.min(total, 120);       // 最快约 2 秒播完
+      const chunk = Math.max(1, Math.ceil(total / frames));
+      let pos = 0;
+
+      const tick = () => {
+        pos = Math.min(total, pos + chunk);
+        msg.rendered = this.renderMd(fullText.slice(0, pos));
+        this.scrollBottom();
+        if (pos < total) {
+          setTimeout(tick, 16);
+        } else {
+          msg.typing = false;
+          this.scrollBottom();
+        }
+      };
+      tick();
+    },
+
+    renderMd(text) {
+      if (!text) return '';
+      try {
+        return DOMPurify.sanitize(marked.parse(text, { breaks: true, gfm: true }));
+      } catch (e) {
+        return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br>');
+      }
+    },
+
+    stageLabel(s) {
+      const map = { greeting: '问候', faq: 'FAQ 命中', rag: '知识库检索', web: '联网搜索', fallback: '兜底回答', empty: '空输入' };
+      return map[s] || '回答';
+    },
+
+    stageCls(s) {
+      const map = {
+        greeting: 'bg-blue-50 text-blue-600',
+        faq: 'bg-violet-50 text-violet-600',
+        rag: 'bg-emerald-50 text-emerald-600',
+        web: 'bg-amber-50 text-amber-600',
+        fallback: 'bg-slate-100 text-slate-500',
+        empty: 'bg-slate-100 text-slate-500',
+      };
+      return map[s] || 'bg-slate-100 text-slate-500';
+    },
+
+    autoGrow(ev) {
+      const el = ev.target;
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 160) + 'px';
+    },
+
+    scrollBottom() {
+      const el = document.getElementById('chatScroll');
+      if (el) el.scrollTop = el.scrollHeight;
+    },
+  };
+}
+</script>
+</body>
+</html>

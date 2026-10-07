@@ -1,0 +1,602 @@
+[
+ {
+  "category": "nginx",
+  "question": "在 Docker 容器内部，如何连接到宿主机的 localhost？",
+  "answer": "如果你使用的是 Docker-for-mac 或 Docker-for-Windows 18.03+，请使用主机名 `host.docker.internal` 来连接你的 MySQL 服务（而不是连接字符串中的 `127.0.0.1`）。\n\n如果你使用的是 Docker-for-Linux 20.10.0+，你也可以使用主机名 `host.docker.internal`，前提是你启动 Docker 容器时使用了 `--add-host host.docker.internal:host-gateway` 选项，或者在 `docker-compose.yml` 文件中添加了以下片段：\n\n```extra_hosts:\n    - \"host.docker.internal:host-gateway\"\n```\n\n否则，请阅读下文\n\n\n\n\nTLDR\n\n\n在你的 `docker run` 命令中使用 `--network=\"host\"`，然后 Docker 容器中的 `127.0.0.1` 将指向你的 Docker 宿主机。\n\n注意：根据文档，此模式仅适用于 Docker for Linux。\n\n\n\n\n关于 Docker 容器网络模式的说明\n\n\nDocker 在运行容器时提供了不同的网络模式。根据你选择的模式，连接运行在 Docker 宿主机上的 MySQL 数据库的方式会有所不同。\n\ndocker run --network=\"bridge\"（默认）\n\n\nDocker 默认创建一个名为 `docker0` 的网桥。Docker 宿主机和 Docker 容器在该网桥上都有一个 IP 地址。\n\n在 Docker 宿主机上，输入 `sudo ip addr show docker0`，你将看到类似以下的输出：\n\n```[vagrant@docker:~] $ sudo ip addr show docker0\n4: docker0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP group default\n    link/ether 56:84:7a:fe:97:99 brd ff:ff:ff:ff:ff:ff\n    inet 172.17.42.1/16 scope global docker0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::5484:7aff:fefe:9799/64 scope link\n       valid_lft forever preferred_lft forever\n```\n\n所以这里我的 Docker 宿主机在 `docker0` 网络接口上的 IP 地址是 `172.17.42.1`。\n\n现在启动一个新容器并获取其 shell：`docker run --rm -it ubuntu:trusty bash`，然后在容器内输入 `ip addr show eth0` 来查看其主网络接口的配置方式：\n\n```root@e77f6a1b3740:/# ip addr show eth0\n863: eth0: <BROADCAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000\n    link/ether 66:32:13:f0:f1:e3 brd ff:ff:ff:ff:ff:ff\n    inet 172.17.1.192/16 scope global eth0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::6432:13ff:fef0:f1e3/64 scope link\n       valid_lft forever preferred_lft forever\n```\n\n这里我的容器 IP 地址是 `172.17.1.192`。现在查看路由表：\n\n```root@e77f6a1b3740:/# route\nKernel IP routing table\nDestination     Gateway         Genmask         Flags Metric Ref    Use Iface\ndefault         172.17.42.1     0.0.0.0         UG    0      0        0 eth0\n172.17.0.0      *               255.255.0.0     U     0      0        0 eth0\n```\n\n所以 Docker 宿主机的 IP 地址 `172.17.42.1` 被设置为默认路由，并且可以从你的容器访问。\n\n```root@e77f6a1b3740:/# ping 172.17.42.1\nPING 172.17.42.1 (172.17.42.1) 56(84) bytes of data.\n64 bytes from 172.17.42.1: icmp_seq=1 ttl=64 time=0.070 ms\n64 bytes from 172.17.42.1: icmp_seq=2 ttl=64 time=0.201 ms\n64 bytes from 172.17.42.1: icmp_seq=3 ttl=64 time=0.116 ms\n```\n\n\ndocker run --network=\"host\"\n\n\n或者，你可以使用设置为 `host` 的网络设置来运行 Docker 容器。这样的容器将与 Docker 宿主机共享网络栈，从容器角度来看，`localhost`（或 `127.0.0.1`）将指向 Docker 宿主机。\n\n请注意，在你的 Docker 容器中打开的任何端口都将在 Docker 宿主机上打开。而且这不需要 `docker run` 的 `-p` 或 `-P` 选项。\n\n我的 Docker 宿主机上的 IP 配置：\n\n```[vagrant@docker:~] $ ip addr show eth0\n2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000\n    link/ether 08:00:27:98:dc:aa brd ff:ff:ff:ff:ff:ff\n    inet 10.0.2.15/24 brd 10.0.2.255 scope global eth0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a00:27ff:fe98:dcaa/64 scope link\n       valid_lft forever preferred_lft forever\n```\n\n而在 host 模式下的 Docker 容器中：\n\n```[vagrant@docker:~] $ docker run --rm -it --network=host ubuntu:trusty ip addr show eth0\n2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000\n    link/ether 08:00:27:98:dc:aa brd ff:ff:ff:ff:ff:ff\n    inet 10.0.2.15/24 brd 10.0.2.255 scope global eth0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a00:27ff:fe98:dcaa/64 scope link\n       valid_lft forever preferred_lft forever\n```\n\n如你所见，Docker 宿主机和 Docker 容器共享完全相同的网络接口，因此具有相同的 IP 地址。\n\n\n\n\n从容器连接到 MySQL\n\n\nBridge 模式\n\n\n要从 bridge 模式下的容器访问运行在 Docker 宿主机上的 MySQL，你需要确保 MySQL 服务在 `172.17.42.1` IP 地址上监听连接。\n\n为此，请确保你的 MySQL 配置文件（my.cnf）中有 `bind-address = 172.17.42.1` 或 `bind-address = 0.0.0.0`。\n\n如果你需要设置一个包含网关 IP 地址的环境变量，可以在容器中运行以下代码：\n\n```export DOCKER_HOST_IP=$(route -n | awk '/UG[ \\t]/{print $2}')\n```\n\n然后在你的应用程序中，使用 `DOCKER_HOST_IP` 环境变量来打开到 MySQL 的连接。\n\n注意：如果你使用 `bind-address = 0.0.0.0`，你的 MySQL 服务器将监听所有网络接口上的连接。这意味着你的 MySQL 服务器可能从互联网访问；请确保相应地设置防火墙规则。\n\n注意 2：如果你使用 `bind-address = 172.17.42.1`，你的 MySQL 服务器将不会监听对 `127.0.0.1` 的连接。运行在 Docker 宿主机上想要连接 MySQL 的进程必须使用 `172.17.42.1` IP 地址。\n\n\nHost 模式\n\n\n要从 host 模式下的容器访问运行在 Docker 宿主机上的 MySQL，你可以在 MySQL 配置中保持 `bind-address = 127.0.0.1`，并从容器连接到 `127.0.0.1`：\n\n```[vagrant@docker:~] $ docker run --rm -it --network=host mysql mysql -h 127.0.0.1 -uroot -p\nEnter password:\nWelcome to the MySQL monitor.  Commands end with ; or \\g.\nYour MySQL connection id is 36\nServer version: 5.5.41-0ubuntu0.14.04.1 (Ubuntu)\n\nCopyright (c) 2000, 2014, Oracle and/or its affiliates. All rights reserved.\n\nOracle is a registered trademark of Oracle Corporation and/or its affiliates. Other names may be trademarks of their respective owners.\n\nType 'help;' or '\\h' for help. Type '\\c' to clear the current input statement.\n\nmysql>\n```\n\n注意：请务必使用 `mysql -h 127.0.0.1` 而不是 `mysql -h localhost`；否则 MySQL 客户端会尝试使用 Unix socket 连接。",
+  "link": "https://stackoverflow.com/questions/24319662/from-inside-of-a-docker-container-how-do-i-connect-to-the-localhost-of-the-mach"
+ },
+ {
+  "category": "nginx",
+  "question": "Node.js + Nginx - 接下来该怎么做？",
+  "answer": "Nginx 作为前端服务器，在这种情况下将请求代理到 node.js 服务器。因此，你需要为 node 设置一个 Nginx 配置文件。\n\n这是我在 Ubuntu 机器上所做的：\n\n在 `/etc/nginx/sites-available/` 创建文件 `yourdomain.example`：\n\n```vim /etc/nginx/sites-available/yourdomain.example\n```\n\n在其中你应该有类似以下的内容：\n\n```# the IP(s) on which your node server is running. I chose port 3000.\nupstream app_yourdomain {\n    server 127.0.0.1:3000;\n    keepalive 8;\n}\n\n# the nginx server instance\nserver {\n    listen 80;\n    listen [::]:80;\n    server_name yourdomain.example www.yourdomain.example;\n    access_log /var/log/nginx/yourdomain.example.log;\n\n    # pass the request to the node.js server with the correct headers\n    # and much more can be added, see nginx config options\n    location / {\n      proxy_set_header X-Real-IP $remote_addr;\n      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n      proxy_set_header Host $http_host;\n      proxy_set_header X-NginX-Proxy true;\n\n      proxy_pass http://app_yourdomain/;\n      proxy_redirect off;\n    }\n }\n```\n\n如果你希望 Nginx（>= 1.3.13）也处理 websocket 请求，请在 `location /` 部分添加以下行：\n\n```proxy_http_version 1.1;\nproxy_set_header Upgrade $http_upgrade;\nproxy_set_header Connection \"upgrade\";\n```\n\n完成此设置后，你必须启用上述配置文件中定义的站点：\n\n```cd /etc/nginx/sites-enabled/\nln -s /etc/nginx/sites-available/yourdomain.example yourdomain.example\n```\n\n在 `/var/www/yourdomain/app.js` 创建你的 node 服务器应用，并在 `localhost:3000` 上运行它\n\n```var http = require('http');\n\nhttp.createServer(function (req, res) {\n    res.writeHead(200, {'Content-Type': 'text/plain'});\n    res.end('Hello World\\n');\n}).listen(3000, \"127.0.0.1\");\nconsole.log('Server running at http://127.0.0.1:3000/');\n```\n\n测试语法错误：\n\n```nginx -t\n```\n\n重启 Nginx：\n\n```sudo /etc/init.d/nginx restart\n```\n\n最后启动 node 服务器：\n\n```cd /var/www/yourdomain/ && node app.js\n```\n\n现在你应该在 `yourdomain.example` 看到 \"Hello World\"\n\n关于启动 node 服务器的最后一点说明：你应该为 node 守护进程使用某种监控系统。有一篇关于 node 配合 upstart 和 monit 的精彩教程。",
+  "link": "https://stackoverflow.com/questions/5009324/node-js-nginx-what-now"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx -- 使用 root 和 alias 提供静态文件服务时的混淆",
+  "answer": "```root``` 和 ```alias``` 指令之间有一个非常重要的区别。这个区别存在于 ```root``` 或 ```alias``` 中指定的路径的处理方式上。\n\n\n```root```\n\n\n\n\n```location``` 部分会被追加到 ```root``` 部分之后\n\n\n最终路径 = ```root``` + ```location```\n\n\n\n\n```alias```\n\n\n\n\n```location``` 部分会被 ```alias``` 部分替换\n\n\n最终路径 = ```alias```\n\n\n\n\n举例说明：\n\n\n假设我们有如下配置\n\n\n```location /static/ {\n    root /var/www/app/static/;\n    autoindex off;\n}\n```\n\n\n在这种情况下，Nginx 推导出的最终路径将是\n\n\n```/var/www/app/static/static\n```\n\n\n这会返回 ```404```，因为在 ```static/``` 中并不存在 ```static/```\n\n\n这是因为 location 部分被追加到了 ```root``` 中指定的路径之后。因此，使用 ```root``` 时，正确的写法是\n\n\n```location /static/ {\n    root /var/www/app/;\n    autoindex off;\n}\n```\n\n\n另一方面，使用 ```alias``` 时，location 部分会被\n丢弃\n。所以对于如下配置\n\n\n```location /static/ {\n    alias /var/www/app/static/;\n    autoindex off;           ↑\n}                            |\n                             注意这个末尾斜杠\n```\n\n\n最终路径将正确地构成为\n\n\n```/var/www/app/static\n```\n\n\n从某种意义上说，这是合理的。```alias``` 只是让你定义一个新路径来代表一个已存在的“真实”路径。location 部分就是那个新路径，因此它会被替换为真实路径。可以把它想象成一个符号链接。\n\n\n而 root 则不是一个新路径，它包含一些需要与其他信息组合起来才能构成最终路径的信息。因此，location 部分会被使用，而不是被丢弃。\n\n\n关于 ```alias``` 中末尾斜杠的情况\n\n\n根据 Nginx 文档，并没有关于末尾斜杠是否强制要求的明确指南，但这里以及其他地方人们的普遍观察似乎表明它是必需的。\n\n\n还有一些地方讨论过这个问题，不过并没有得出定论。\n\n\nhttps://serverfault.com/questions/376162/how-can-i-create-a-location-in-nginx-that-works-with-and-without-a-trailing-slas\n\n\nhttps://serverfault.com/questions/375602/why-is-my-nginx-alias-not-working",
+  "link": "https://stackoverflow.com/questions/10631933/nginx-static-file-serving-confusion-with-root-alias"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx 从 no-www 到 www 以及从 www 到 no-www",
+  "answer": "HTTP 解决方案\n\n\n根据\n文档\n，“正确的方式是为 ```example.org``` 定义一个单独的 server”：\n\n\n```server {\n    listen       80;\n    server_name  example.com;\n    return       301 http://www.example.com$request_uri;\n}\n\nserver {\n    listen       80;\n    server_name  www.example.com;\n    ...\n}\n```\n\n\nHTTPS 解决方案\n\n\n对于那些想要包含 ```https://``` 的解决方案的人……\n\n\n```server {\n        listen 80;\n        server_name www.domain.example;\n        # $scheme 会获取 http 协议\n        # 301 是平板、手机、桌面和 SEO 的最佳实践\n        return 301 $scheme://domain.example$request_uri;\n}\n\nserver {\n        listen 80;\n        server_name domain.example;\n        # 这里放配置文件的其余部分\n        # 例如\n        location / {\n\n            rewrite ^/cp/login?$ /cp/login.php last;\n            # 等等等等……\n\n        }\n}\n```\n\n\n注意：我最初没有在解决方案中包含 ```https://```，因为我们使用负载均衡器，而且我们的 https:// 服务器是一个高流量的 SSL 支付服务器：我们不会混用 https:// 和 http://。\n\n\n\n\n要检查 Nginx 版本，请使用 ```nginx -v```。\n\n\n使用 Nginx 重定向从 URL 中去掉 www\n\n\n```server {\n    server_name  www.domain.example;\n    rewrite ^(.*) http://domain.example$1 permanent;\n}\n\nserver {\n    server_name  domain.example;\n    #你的其余配置放在这里#\n}\n```\n\n\n所以你需要有两个 server 配置。\n\n\n使用 Nginx 重定向向 URL 中添加 www\n\n\n如果你需要的是相反的情况，即从 ```domain.example``` 重定向到 ```www.domain.example```，你可以使用这个：\n\n\n```server {\n    server_name  domain.example;\n    rewrite ^(.*) http://www.domain.example$1 permanent;\n}\n\nserver {\n    server_name  www.domain.example;\n    #你的其余配置放在这里#\n}\n```\n\n\n可以想象，这只是相反的情况，工作方式与第一个示例相同。这样，你不会在 SEO 上失分，因为这是完整的永久重定向和迁移。no WWW 被强制处理，并且目录也会显示出来！\n\n\n下面展示了我的一些代码，以便更好地查看：\n\n\n```server {\n    server_name  www.google.com;\n    rewrite ^(.*) http://google.com$1 permanent;\n}\nserver {\n       listen 80;\n       server_name google.com;\n       index index.php index.html;\n       ####\n       # 现在从一个目录中拉取站点 #\n       root /var/www/www.google.com/web;\n       # 完成 #\n       location = /favicon.ico {\n                log_not_found off;\n                access_log off;\n       }\n}\n```",
+  "link": "https://stackoverflow.com/questions/7947030/nginx-no-www-to-www-and-www-to-no-www"
+ },
+ {
+  "category": "nginx",
+  "question": "使用 FastCGI 和 Django 时，在哪里可以找到 nginx 的错误日志？",
+  "answer": "错误存储在 nginx 日志文件中。你可以在 nginx 配置文件的根级别指定它：\n\n\n```error_log  /var/log/nginx/nginx_error.log  warn;\n```\n\n\n在 Mac OS X 上使用 Homebrew 时，默认情况下日志文件位于以下位置：\n\n\n```/usr/local/var/log/nginx\n```",
+  "link": "https://stackoverflow.com/questions/1706111/where-can-i-find-the-error-logs-of-nginx-using-fastcgi-and-django"
+ },
+ {
+  "category": "nginx",
+  "question": "连接到上游时出现 (13: Permission denied) [nginx]",
+  "answer": "免责声明\n\n\n在运行此操作之前，请确保你的用例没有安全影响。\n\n\n答案\n\n\n我在让 Fedora 20、Nginx、Node.js 和 Ghost（博客）正常工作时遇到了类似问题。结果发现我的问题是由于 SELinux 引起的。\n\n\n这应该可以解决问题：\n\n\n```setsebool -P httpd_can_network_connect 1\n```\n\n\n详情\n\n\n我检查了 SELinux 日志中的错误：\n\n\n```sudo cat /var/log/audit/audit.log | grep nginx | grep denied\n```\n\n\n并发现运行以下命令解决了我的问题：\n\n\n```sudo cat /var/log/audit/audit.log | grep nginx | grep denied | audit2allow -M mynginx\nsudo semodule -i mynginx.pp\n```\n\n\n选项 #2（可能更安全）\n\n\n```setsebool -P httpd_can_network_relay 1\n```\n\n\nhttps://security.stackexchange.com/questions/152358/difference-between-selinux-booleans-httpd-can-network-relay-and-httpd-can-net\n\n\n参考资料\n\n\nhttp://blog.frag-gustav.de/2013/07/21/nginx-selinux-me-mad/\n\n\nhttps://wiki.gentoo.org/wiki/SELinux/Tutorials/Where_to_find_SELinux_permission_denial_details\n\n\nhttp://wiki.gentoo.org/wiki/SELinux/Tutorials/Managing_network_port_labels",
+  "link": "https://stackoverflow.com/questions/23948527/13-permission-denied-while-connecting-to-upstreamnginx"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx 默认的公共 www 目录在哪里？",
+  "answer": "如果是在 Ubuntu 上使用 apt-get 安装，可以尝试\n```/usr/share/nginx/www```\n。\n\n\n编辑：\n\n\n在较新的版本中，路径已更改为：\n\n```/usr/share/nginx/html```\n\n\n2019 年编辑：\n\n\n也可以尝试\n```/var/www/html/index.nginx-debian.html```\n。",
+  "link": "https://stackoverflow.com/questions/10674867/nginx-default-public-www-location"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx - nginx: [emerg] bind() to [::]:80 failed (98: Address already in use)",
+  "answer": "我通过运行以下命令解决了这个问题：\n\n\n```sudo apachectl stop\n```\n\n\n原来 Apache 在后台运行，阻止了 Nginx 在所需端口上启动。\n\n\n在 Ubuntu 上，运行：\n\n\n```sudo /etc/init.d/apache2 stop\n```",
+  "link": "https://stackoverflow.com/questions/14972792/nginx-nginx-emerg-bind-to-80-failed-98-address-already-in-use"
+ },
+ {
+  "category": "nginx",
+  "question": "upstream sent too big header while reading response header from upstream",
+  "answer": "在你的配置文件中添加以下内容\n\n\n```fastcgi_buffers 16 16k; \nfastcgi_buffer_size 32k;\n```",
+  "link": "https://stackoverflow.com/questions/23844761/upstream-sent-too-big-header-while-reading-response-header-from-upstream"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx location 优先级",
+  "answer": "根据 HTTP core module 文档：\n\n\n\n\n带有 \"=\" 前缀且与查询完全匹配的指令。如果找到，则停止搜索。\n\n\n所有剩余的常规字符串指令。如果此匹配使用了 \"^~\" 前缀，则停止搜索。\n\n\n正则表达式，按照它们在配置文件中定义的顺序。\n\n\n如果第 3 步产生了匹配，则使用该结果。否则，使用第 2 步的匹配。\n\n\n\n\n文档中的示例：\n\n\n```location  = / {\n  # 仅匹配查询 /。\n  [ configuration A ] \n}\nlocation  / {\n  # 匹配任何查询，因为所有查询都以 / 开头，但正则\n  # 表达式和任何更长的常规块将\n  # 优先匹配。\n  [ configuration B ] \n}\nlocation /documents/ {\n  # 匹配任何以 /documents/ 开头的查询并继续搜索，\n  # 因此将检查正则表达式。仅当\n  # 正则表达式未找到匹配时，才会匹配此项。\n  [ configuration C ] \n}\nlocation ^~ /images/ {\n  # 匹配任何以 /images/ 开头的查询并停止搜索，\n  # 因此不会检查正则表达式。\n  [ configuration D ] \n}\nlocation ~* \\.(gif|jpg|jpeg)$ {\n  # 匹配任何以 gif、jpg 或 jpeg 结尾的请求。但是，所有\n  # 对 /images/ 目录的请求将由\n  # Configuration D 处理。   \n  [ configuration E ] \n}\n```\n\n\n如果仍然感到困惑，\n这里有更详细的解释\n。",
+  "link": "https://stackoverflow.com/questions/5238377/nginx-location-priority"
+ },
+ {
+  "category": "nginx",
+  "question": "Kubernetes service external ip pending",
+  "answer": "如果你使用的是 Minikube，有一个神奇的命令！\n\n\n```$ minikube tunnel\n```\n\n\n希望这能帮某人节省几分钟时间。\n\n\n参考链接\n\nhttps://minikube.sigs.k8s.io/docs/handbook/accessing/#using-minikube-tunnel",
+  "link": "https://stackoverflow.com/questions/44110876/kubernetes-service-external-ip-pending"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx error connect to php5-fpm.sock failed (13: Permission denied)",
+  "answer": "我在 PHP 更新后遇到了类似的错误。PHP 修复了一个安全漏洞，其中 `o` 对套接字文件具有 `rw` 权限。\n\n\n\n\n打开 `/etc/php5/fpm/pool.d/www.conf` 或 `/etc/php/7.0/fpm/pool.d/www.conf`，具体取决于你的版本。\n\n\n取消注释所有权限行，例如：\n\n\n```listen.owner = www-data\nlisten.group = www-data\nlisten.mode = 0660\n```\n\n\n重启 fpm - `sudo service php5-fpm restart` 或 `sudo service php7.0-fpm restart`\n\n\n\n\n注意：如果你的 web 服务器以非 www-data 用户运行，你需要相应地更新 `www.conf` 文件",
+  "link": "https://stackoverflow.com/questions/23443398/nginx-error-connect-to-php5-fpm-sock-failed-13-permission-denied"
+ },
+ {
+  "category": "nginx",
+  "question": "如何清除 nginx 的缓存？",
+  "answer": "我遇到了完全相同的问题——我在 Virtualbox 中运行 nginx。我并没有开启缓存。但看起来在 `nginx.conf` 中 `sendfile` 被设置为 `on`，这导致了问题。@kolbyjack 在上面的评论中提到了这一点。\n\n\n当我关闭 `sendfile` 后，问题就解决了。\n\n\n原因如下：\n\n\n\n\nSendfile 用于“在一个文件描述符和另一个之间复制数据”，在虚拟机环境中运行时，或者至少在通过 Virtualbox 运行时，显然会遇到一些实际问题。在 nginx 中关闭此配置会导致静态文件通过不同的方法提供，你的更改将立即且毫无疑问地反映出来\n\n\n\n\n这与以下 bug 有关：\nhttps://www.virtualbox.org/ticket/12597",
+  "link": "https://stackoverflow.com/questions/6236078/how-to-clear-the-cache-of-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx 403 错误：[folder] 的目录索引被禁止",
+  "answer": "如果你关闭了目录索引，并且遇到了这个问题，很可能是因为你使用的 try_files 中包含了一个目录选项：\n\n\n```location / {\n  try_files $uri $uri/ /index.html index.php;\n}                 ^ 这就是问题所在\n```\n\n\n移除它应该就能正常工作：\n\n\n```location / {\n  try_files $uri /index.html index.php;\n} \n```\n\n\n为什么会发生这种情况\n\n\n简而言之：这是因为 nginx 会尝试对目录进行索引，但被自身阻止了。从而抛出 OP 提到的错误。\n\n\n```try_files $uri $uri/```\n 的意思是，从根目录开始，尝试 `uri` 指向的文件，如果该文件不存在，则尝试一个目录（因此有 `/`）。当 nginx 访问一个目录时，它会尝试对其进行索引，并将内部文件列表返回给浏览器/客户端，然而默认情况下目录索引是禁用的，因此它返回错误“Nginx 403 错误：[folder] 的目录索引被禁止”。\n\n\n目录索引由 `autoindex` 选项控制：\nhttps://nginx.org/en/docs/http/ngx_http_autoindex_module.html",
+  "link": "https://stackoverflow.com/questions/19285355/nginx-403-error-directory-index-of-folder-is-forbidden"
+ },
+ {
+  "category": "nginx",
+  "question": "如何在 NGINX 配置中为两个 location 设置相同的规则？",
+  "answer": "尝试\n\n\n```location ~ ^/(first/location|second/location)/ {\n  ...\n}\n```\n\n\n\n```~```\n 表示对 URL 使用正则表达式。\n```^```\n 表示从第一个字符开始检查。这将查找一个 \n```/```\n，后跟任一 location，然后再跟一个 \n```/```\n。引用自 \n文档\n，\n\n\n\n\n正则表达式前加波浪线（~）表示区分大小写匹配，加波浪线星号（~*）表示不区分大小写匹配。",
+  "link": "https://stackoverflow.com/questions/35320674/how-can-i-have-same-rule-for-two-locations-in-nginx-config"
+ },
+ {
+  "category": "nginx",
+  "question": "如何在子域名上配置 nginx 使用多个具有不同根文件夹的 location？",
+  "answer": "你需要为 \n```location /static```\n 使用 \n```alias```\n 指令：\n\n\n```server {\n\n  index index.html;\n  server_name test.example.com;\n\n  root /web/test.example.com/www;\n\n  location /static/ {\n    alias /web/test.example.com/static/;\n  }\n\n}\n```\n\n\n\nnginx wiki\n 对 root 和 alias 之间区别的解释比我更清楚：\n\n\n\n\n注意，乍一看它可能与 root 指令相似，但文档根目录不会改变，改变的只是用于请求的文件系统路径。请求中 location 部分在 Nginx 发出的请求中被丢弃。\n\n\n\n\n注意 \n```root```\n 和 \n```alias```\n 对尾部斜杠的处理方式不同。",
+  "link": "https://stackoverflow.com/questions/11570321/configure-nginx-with-multiple-locations-with-different-root-folders-on-subdomain"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx - client_max_body_size 无效",
+  "answer": "根据 \nnginx 文档\n，你可以在以下上下文中设置 client_max_body_size 20m（或任何你需要的值）：\n\n\n```context: http, server, location\n```",
+  "link": "https://stackoverflow.com/questions/2056124/nginx-client-max-body-size-has-no-effect"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx 中的 upstream 是什么意思？",
+  "answer": "它用于\n将请求代理到其他服务器\n。\n\n\n来自 \nhttp://wiki.nginx.org/LoadBalanceExample\n 的一个示例是：\n\n\n```http {\n  upstream myproject {\n    server 127.0.0.1:8000 weight=3;\n    server 127.0.0.1:8001;\n    server 127.0.0.1:8002;    \n    server 127.0.0.1:8003;\n  }\n\n  server {\n    listen 80;\n    server_name www.domain.com;\n    location / {\n      proxy_pass http://myproject;\n    }\n  }\n}\n```\n\n\n这意味着对 / 的所有请求都会转到 upstream XXX 下列出的任意服务器，并优先选择端口 8000。",
+  "link": "https://stackoverflow.com/questions/5877929/what-does-upstream-mean-in-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx 缺少 sites-available 目录",
+  "answer": "嗯，我认为 nginx 本身在其设置中并没有这个目录，因为 Ubuntu 维护的软件包将其作为一种约定来模仿 Debian 的 apache 设置。如果你想模拟相同的设置，可以自己创建它。\n\n\n创建 \n```/etc/nginx/sites-available```\n 和 \n```/etc/nginx/sites-enabled```\n，然后编辑 \n```/etc/nginx/nginx.conf```\n 中的 \n```http```\n 块，并添加以下行\n\n\n```include /etc/nginx/sites-enabled/*;\n```\n\n\n当然，所有文件都将放在 \n```sites-available```\n 中，你需要在 \n```sites-enabled```\n 中为想要启用的文件创建符号链接。",
+  "link": "https://stackoverflow.com/questions/17413526/nginx-missing-sites-available-directory"
+ },
+ {
+  "category": "nginx",
+  "question": "NGINX 499 错误代码的可能原因",
+  "answer": "Nginx 中的 HTTP 499 表示 \n客户端在服务器响应请求之前关闭了连接\n。根据我的经验，这通常是由 \n客户端超时\n 引起的。据我所知，这是一个 Nginx 特定的错误代码。",
+  "link": "https://stackoverflow.com/questions/12973304/possible-reason-for-nginx-499-error-codes"
+ },
+ {
+  "category": "nginx",
+  "question": "413 Request Entity Too Large - 文件上传问题",
+  "answer": "来源：\ncybercity\n\n\n编辑 nginx 的配置文件：\n\n\n```nano /etc/nginx/nginx.conf\n```\n\n\n在 \n```http```\n、\n```server```\n 或 \n```location```\n 部分添加一行：\n\n\n```client_max_body_size 100M;\n```\n\n\n不要使用 \n```MB```\n，它不会生效，只能用 M！\n你可以通过以下命令测试 nginx 配置：\n\n\n```sudo nginx -t\n```\n\n\n然后需要重启或重新加载 nginx：\n\n\n```sudo nginx -s reload\n```\n\n\n或者\n\n\n```sudo systemctl restart nginx\n```",
+  "link": "https://stackoverflow.com/questions/24306335/413-request-entity-too-large-file-upload-issue"
+ },
+ {
+  "category": "nginx",
+  "question": "让 nginx 的 access_log 和 error_log 输出到主进程的 STDOUT 和 STDERR",
+  "answer": "编辑：\n似乎 nginx 现在支持 \n```error_log stderr;```\n，如 \nAnon 的回答\n中所述。\n\n\n你可以将日志发送到 \n```/dev/stdout```\n。在 \n```nginx.conf```\n 中：\n\n\n```daemon off;\nerror_log /dev/stdout info;\n\nhttp {\n  access_log /dev/stdout;\n  ...\n}\n```\n\n\n编辑：如果使用某些 docker 容器运行，可能需要执行 \nln -sf /proc/self/fd /dev/\n，然后使用 \n```/dev/fd/1```\n 或 \n```/dev/fd/2```",
+  "link": "https://stackoverflow.com/questions/22541333/have-nginx-access-log-and-error-log-log-to-stdout-and-stderr-of-master-process"
+ },
+ {
+  "category": "nginx",
+  "question": "NGINX: upstream timed out (110: Connection timed out) while reading response header from upstream",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/18740635/nginx-upstream-timed-out-110-connection-timed-out-while-reading-response-hea"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx 中 $host 和 $http_host 有什么区别",
+  "answer": "```$host```\n 是 \nCore\n 模块的一个变量。\n\n\n\n\n$host\n\n\n\n\n\n\n该变量等于请求头中的 Host 行，如果 Host 头不可用，则等于处理请求的服务器名称。\n\n\n\n\n\n\n在以下情况下，该变量的值可能与 $http_host 不同：1) 当 Host 输入头缺失或值为空时，$host 等于 server_name 指令的值；2) 当 Host 的值包含端口号时，$host 不包含该端口号。自 0.8.17 起，$host 的值始终为小写。\n\n\n\n\n```$http_host```\n 也是同一模块的变量，但你不会以该名称找到它，因为它被泛型定义为 \n```$http_HEADER```\n（\n参考\n）。\n\n\n\n\n$http_HEADER\n\n\n\n\n\n\nHTTP 请求头 HEADER 的值，转换为小写并将“短横线”转换为“下划线”，例如 $http_user_agent、$http_referer...；\n\n\n\n\n\n\n总结：\n\n\n\n\n```$http_host```\n 始终等于 \n```HTTP_HOST```\n 请求头。\n\n\n```$host```\n 等于 \n```$http_host```\n，\n转为小写且不包含端口号\n（如果存在），\n除非 \n```HTTP_HOST```\n 缺失或为空值\n。在这种情况下，\n```$host```\n 等于处理该请求的服务器的 \n```server_name```\n 指令的值。",
+  "link": "https://stackoverflow.com/questions/15414810/whats-the-difference-of-host-and-http-host-in-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "如何使用 NGINX 反向代理 WebSocket 并启用 SSL（wss://）？",
+  "answer": "请注意，从 1.3.13 版本开始，nginx 已经支持 WebSocket。使用示例：\n\n\n```location /websocket/ {\n\n    proxy_pass http://backend_host;\n    proxy_http_version 1.1;\n    proxy_set_header Upgrade $http_upgrade;\n    proxy_set_header Connection \"upgrade\";\n    proxy_read_timeout 86400;\n\n}\n```\n\n\n你也可以查看 nginx 更新日志和 WebSocket 代理文档。",
+  "link": "https://stackoverflow.com/questions/12102110/nginx-to-reverse-proxy-websockets-and-enable-ssl-wss"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx: [emerg] “server”指令在此处不允许",
+  "answer": "那不是 nginx 配置文件，而是 nginx 配置文件的一部分。\n\n\nnginx 配置文件（通常称为```nginx.conf```）的结构如下：\n\n\n```events {\n    ...\n}\nhttp {\n    ...\n    server {\n        ...\n    }\n}\n```\n\n\n```server```块包含在```http```块内。\n\n\n通常，配置会通过```include```指令分散到多个文件中，以引入额外的片段（例如来自```sites-enabled```目录）。\n\n\n使用```sudo nginx -t```来测试完整的配置文件，该文件从```nginx.conf```开始，并通过```include```指令引入额外的片段。\n\n\n更多信息请参阅此文档。",
+  "link": "https://stackoverflow.com/questions/41766195/nginx-emerg-server-directive-is-not-allowed-here"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx 反向代理导致 504 Gateway Timeout",
+  "answer": "可能需要增加几行来延长到上游服务器的超时时间。下面的示例将超时设置为 300 秒：\n\n\n```proxy_connect_timeout       300;\nproxy_send_timeout          300;\nproxy_read_timeout          300;\nsend_timeout                300;\n```",
+  "link": "https://stackoverflow.com/questions/24453388/nginx-reverse-proxy-causing-504-gateway-timeout"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx：如何在“host not found in upstream”时不退出？",
+  "answer": "如果可以使用静态 IP，那就直接使用它，它会启动并在无响应时返回 \n```503```\n。\n\n\n\n\n使用 \n```resolver```\n 指令指向能够解析该主机的东西，无论它当前是否在线。\n\n\n\n\n如果无法做到上述操作，可以在 \n```location```\n 级别进行解析\n（这将允许 Nginx 启动/运行）\n：\n\n\n``` location /foo {\n   resolver 127.0.0.1 valid=30s;\n   # 或其他 DNS（你公司的内部 DNS 服务器）\n   #resolver 8.8.8.8 valid=30s;\n   set $upstream_foo foo;\n   proxy_pass http://$upstream_foo:80;\n }\n\n location /bar {\n   resolver 127.0.0.1 valid=30s;\n   # 或其他 DNS（你公司的内部 DNS 服务器）\n   #resolver 8.8.8.8 valid=30s;\n   set $upstream_bar foo;\n   proxy_pass http://$upstream_bar:80;\n }\n```",
+  "link": "https://stackoverflow.com/questions/32845674/nginx-how-to-not-exit-if-host-not-found-in-upstream"
+ },
+ {
+  "category": "nginx",
+  "question": "React-router 和 nginx",
+  "answer": "你的 nginx 配置中的 location 块应该是：\n\n\n```location / {\n  try_files $uri /index.html;\n}\n```\n\n\n问题在于，对 index.html 文件的请求可以正常工作，但你现在没有告诉 nginx 将其他请求也转发到 index.html 文件。",
+  "link": "https://stackoverflow.com/questions/43951720/react-router-and-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx 对所有文件返回 403 forbidden",
+  "answer": "一个经常被忽视的权限要求是，用户需要对文件所在路径中的每个父目录都具有 x 权限，才能访问该文件。请检查 /、/home、/home/demo 等目录对 www-data 的 x 访问权限。我猜测 /home 可能是 770 权限，导致 www-data 无法通过它进入任何子目录。如果是这种情况，尝试执行 chmod o+x /home（或拒绝请求的那个目录）。\n\n\n编辑：要方便地显示路径上的所有权限，你可以使用 \n```namei -om /path/to/check```",
+  "link": "https://stackoverflow.com/questions/6795350/nginx-403-forbidden-for-all-files"
+ },
+ {
+  "category": "nginx",
+  "question": "如何使用 Nginx 重定向到不同的域名？",
+  "answer": "server_name\n 支持使用 \n```.mydomain.example```\n 语法进行后缀匹配：\n\n\n```server {\n  server_name .mydomain.example;\n  rewrite ^ http://www.adifferentdomain.example$request_uri? permanent;\n}\n```\n\n\n或者在 0.9.1 或更高版本上：\n\n\n```server {\n  server_name .mydomain.example;\n  return 301 http://www.adifferentdomain.example$request_uri;\n}\n```",
+  "link": "https://stackoverflow.com/questions/6045020/how-to-redirect-to-a-different-domain-using-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx：stat() 失败（13：权限被拒绝）",
+  "answer": "Nginx 在目录内运行，因此如果 nginx 用户无法 \n```cd```\n 到该目录，那么它将会失败（日志中的 \n```stat```\n 命令也是如此）。确保 \n```www-user```\n 能够 \n```cd```\n 一直进入到 \n```/username/test/static```\n。你可以通过运行以下命令来确认 \n```stat```\n 会失败还是成功\n\n\n```sudo -u www-data stat /username/test/static\n```\n\n\n在你的情况下，问题可能出在 \n```/username```\n 目录上。通常 \n```www-data```\n 没有权限 \n```cd```\n 到其他用户的主目录。\n\n\n在这种情况下，最好的解决方案是将 \n```www-data```\n 添加到 \n```username```\n 组：\n\n\n```gpasswd -a www-data username\n```\n\n\n并确保 \n```username```\n 组可以进入路径上的所有目录：\n\n\n```chmod g+x /username && chmod g+x /username/test && chmod g+x /username/test/static\n```\n\n\n要使更改生效，请重启 nginx\n\n\n```nginx -s reload\n```",
+  "link": "https://stackoverflow.com/questions/25774999/nginx-stat-failed-13-permission-denied"
+ },
+ {
+  "category": "nginx",
+  "question": "如何在 Docker 容器中运行 Nginx 而不停止？",
+  "answer": "为了进一步解释 Charles Duffy 的回答，Nginx 使用 \n```daemon off```\n 指令在前台运行。如果在配置文件中设置不方便，我们可以在命令行中直接指定。这样，通过更改命令行参数，就可以轻松地在调试模式（前台）下运行，并直接切换到生产模式（后台）下运行。\n\n\n要在前台运行：\n\n\n```nginx -g 'daemon off;'\n```\n\n\n要在后台运行：\n\n\n```nginx\n```",
+  "link": "https://stackoverflow.com/questions/18861300/how-to-run-nginx-within-a-docker-container-without-halting"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx 将 .php 文件作为下载提供，而不是执行它们",
+  "answer": "试试这个：\n\n\n\n\n编辑 \n```/etc/nginx/sites-available/default```\n\n\n\n\n取消注释两个 listen 行，使 Nginx 在 IPv4 和 IPv6 的端口 80 上监听。\n\n\n``` listen   80; ## listen for ipv4; this line is default and implied\n listen   [::]:80 default_server ipv6only=on; ## listen for ipv6\n```\n\n\n\n\n保持 \n```server_name```\n 不变\n\n\n``` # Make site accessible (...)\n server_name localhost;\n```\n\n\n\n\n将 \n```index.php```\n 添加到 \n```index```\n 行\n\n\n``` root /usr/share/nginx/www;\n index index.php index.html index.htm;\n```\n\n\n\n\n取消注释 \n```location ~ \\.php$ {}```\n\n\n``` # pass the PHP scripts to FastCGI server listening on (...)\n #\n location ~ \\.php$ {\n         try_files $uri =404;\n         fastcgi_split_path_info ^(.+?\\.php)(/.+)?$;\n         # NOTE: You should have \"cgi.fix_pathinfo = 0;\" in php.ini\n\n         # With php5-cgi alone:\n         #fastcgi_pass 127.0.0.1:9000;\n         # With php5-fpm:\n         fastcgi_pass unix:/var/run/php5-fpm.sock;\n         fastcgi_index index.php;\n         include fastcgi_params;\n }\n```\n\n\n\n\n编辑 \n```/etc/php5/fpm/php.ini```\n 并确保 \n```cgi.fix_pathinfo```\n 设置为 \n```0```\n\n\n\n\n重启 Nginx 和 php5-fpm \n```sudo service nginx restart && sudo service php5-fpm restart```\n\n\n\n\n\n\n\n\n我一周前才开始使用 Linux，所以我真的希望这能帮到你。我使用 nano 文本编辑器来编辑文件。如果没有，请运行 apt-get install nano。用 Google 搜索以了解更多。",
+  "link": "https://stackoverflow.com/questions/25591040/nginx-serves-php-files-as-downloads-instead-of-executing-them"
+ },
+ {
+  "category": "nginx",
+  "question": "定位我的 nginx 实际使用的 nginx.conf 文件",
+  "answer": "在命令行中运行\n```nginx -t```\n会执行一次测试，并在输出中附带配置文件的路径（同时显示错误或成功信息）。",
+  "link": "https://stackoverflow.com/questions/19910042/locate-the-nginx-conf-file-my-nginx-is-actually-using"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx: [emerg] could not build the server_names_hash, you should increase server_names_hash_bucket_size",
+  "answer": "这很可能是因为域名过长导致的。你可以通过在\n\n\n```server_names_hash_bucket_size  64;\n```\n\n\n添加到你的\n```http```\n块顶部（通常位于\n```/etc/nginx/nginx.conf```\n）来解决这个问题。我引用 nginx 文档中关于出现此错误时的做法：\n\n\n\n\n在这种情况下，指令值应增加到下一个 2 的幂。\n\n\n\n\n所以在你这里应该改为 64。如果仍然出现相同的错误，尝试增加到 128 甚至更大。\n\n\n参考：\nhttps://nginx.org/en/docs/http/server_names.html#optimization",
+  "link": "https://stackoverflow.com/questions/13895933/nginx-emerg-could-not-build-the-server-names-hash-you-should-increase-server"
+ },
+ {
+  "category": "nginx",
+  "question": "如何编辑 nginx.conf 以增加文件上传大小",
+  "answer": "添加\nclient_max_body_size\n\n\n现在你正在编辑文件，需要将该行添加到 server 块中，如下所示；\n\n\n```server {\n    client_max_body_size 8M;\n\n    //其他行...\n}\n```\n\n\n如果你托管多个站点，请将其添加到 http 上下文中，如下所示；\n\n\n```http {\n    client_max_body_size 8M;\n\n    //其他行...\n}\n```\n\n\n同时更新 php.ini 文件中的\n```upload_max_filesize```\n，以便你可以上传相同大小的文件。\n\n\n在 Vi 中保存\n\n\n完成后需要保存，在 vi 中可以按\n```esc```\n键并输入\n```:wq```\n然后回车。\n\n\n重启 Nginx 和 PHP\n\n\n现在需要重启 nginx 和 php 以重新加载配置。可以使用以下命令完成；\n\n\n```sudo service nginx restart\nsudo service php5-fpm restart\n```\n\n\n或者你的 php 服务名称是什么就用什么。",
+  "link": "https://stackoverflow.com/questions/26717013/how-to-edit-nginx-conf-to-increase-file-size-upload"
+ },
+ {
+  "category": "nginx",
+  "question": "如何在 Nginx 上使用 FastCGI 时防止 Gateway Timeout",
+  "answer": "代理超时是用于代理的，不适用于 FastCGI...\n\n\n影响 FastCGI 超时的指令是\n```client_header_timeout```\n、\n```client_body_timeout```\n和\n```send_timeout```\n。\n\n\n编辑\n：考虑到 nginx wiki 上的内容，\nsend_timeout 指令\n负责设置响应的一般超时（这有点误导）。对于 FastCGI，有\n```fastcgi_read_timeout```\n，它影响\nFastCGI 进程响应超时\n。",
+  "link": "https://stackoverflow.com/questions/561946/how-do-i-prevent-a-gateway-timeout-with-fastcgi-on-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "如何判断我的服务器是否正在提供 GZipped 内容？",
+  "answer": "不出所料，一个可能的答案是使用\n```curl```\n：\n\n\n```$ curl http://example.com/ --silent --write-out \"%{size_download}\\n\" --output /dev/null\n31032\n$ curl http://example.com/ --silent -H \"Accept-Encoding: gzip,deflate\" --write-out \"%{size_download}\\n\" --output /dev/null\n2553\n```\n\n\n在第二种情况下，客户端告诉服务器它支持内容编码，你可以看到响应确实更短，是压缩过的。",
+  "link": "https://stackoverflow.com/questions/9140178/how-can-i-tell-if-my-server-is-serving-gzipped-content"
+ },
+ {
+  "category": "nginx",
+  "question": "在 AWS Elastic Beanstalk 上的 Nginx 配置中增加 client_max_body_size",
+  "answer": "有两种方法可以实现这一点。遗憾的是，有些方法适用于某些 EB 应用程序类型，而有些则适用于其他类型。\n\n\nAWS 文档中支持/推荐的方法\n\n\n对于某些应用程序类型，如 \nJava SE\n、\nGo\n、\nNode.js\n，也许还有 Ruby（Ruby 没有文档说明，但所有其他 Nginx 平台似乎都支持这一点），Elasticbeanstalk 内置了对如何配置 Nginx 的理解。\n\n\n\n\n要扩展 Elastic Beanstalk 的默认 nginx 配置，\n请将 .conf 配置文件添加到应用程序源包中名为 \n```.ebextensions/nginx/conf.d/```\n 的文件夹中\n。Elastic Beanstalk 的 nginx 配置会自动包含此文件夹中的 .conf 文件。\n\n\n\n\n\n\n```~/workspace/my-app/\n```\n\n\n\n\n```|-- .ebextensions\n|   `-- nginx\n|       `-- conf.d\n|           `-- myconf.conf\n`-- web.jar\n```\n\n\n\n\n配置反向代理 - Java SE\n\n\n\n\n要专门增加最大上传大小，请在 \n```.ebextensions/nginx/conf.d/proxy.conf```\n 创建一个文件，将最大正文大小设置为你希望的大小：\n\n\n```client_max_body_size 50M;\n```\n\n\n直接创建 Nginx 配置文件\n\n\n对于其他一些应用程序类型，经过大量研究和与出色的 AWS 支持团队合作数小时后，我在 \n```.ebextensions```\n 中创建了一个配置文件来补充 nginx 配置。这一更改允许更大的 post 正文大小。\n\n\n在 \n```.ebextensions```\n 目录中，我创建了一个名为 \n```01_files.config```\n 的文件，内容如下：\n\n\n```files:\n    \"/etc/nginx/conf.d/proxy.conf\" :\n        mode: \"000755\"\n        owner: root\n        group: root\n        content: |\n           client_max_body_size 20M;\n```\n\n\n这会在 /etc/nginx/conf.d 目录中生成一个 proxy.conf 文件。proxy.conf 文件仅包含一行 \n```client_max_body_size 20M;```\n，这就能解决问题。\n\n\n请注意，对于某些平台，此文件将在部署期间创建，但会在后续部署阶段被移除。\n\n\n你可以指定 Nginx 文档中概述的其他指令。\n\n\nhttp://wiki.nginx.org/Configuration",
+  "link": "https://stackoverflow.com/questions/18908426/increasing-client-max-body-size-in-nginx-conf-on-aws-elastic-beanstalk"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx client_max_body_size 的默认值是多少？",
+  "answer": "指令 \n```client_max_body_size```\n 的默认值是 \n1 MiB\n。\n\n\n它可以在 \n```http```\n、\n```server```\n 和 \n```location```\n 上下文中设置——正如 \n大多数情况\n 一样，\n嵌套块中的该指令会优先于祖先块中的相同指令\n。\n\n\n摘自 \nngx_http_core_module 文档\n：\n\n\n\n\n```Syntax:   client_max_body_size size;\nDefault:  client_max_body_size 1m;\nContext:  http, server, location\n```\n\n\n设置客户端请求体的最大允许大小，该大小在\n  “Content-Length” 请求头字段中指定。如果请求中的大小\n  超过配置的值，则会向客户端返回 413 (Request Entity Too Large) 错误\n  。请注意，浏览器无法\n  正确显示此错误。将 size 设置为 0 会禁用对\n  客户端请求体大小的检查。\n\n\n\n\n别忘了 \n重新加载配置\n\n通过 \n```nginx -s reload```\n 或 \n```service nginx reload```\n 命令，并在前面加上 \n```sudo```\n（如果有的话）。",
+  "link": "https://stackoverflow.com/questions/28476643/default-nginx-client-max-body-size"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx.service 失败，因为控制进程退出",
+  "answer": "尝试运行以下两个命令：\n\n\n```sudo fuser -k 80/tcp```\n\n\n```sudo fuser -k 443/tcp```\n\n\n然后执行\n\n\n```sudo service nginx restart```\n\n\n如果这有效\n，你的托管服务提供商可能在全新安装期间默认在你的服务器上安装了 Apache，所以请继续阅读以获取更永久的修复方法。 \n如果这无效\n，请继续阅读以确定问题。\n\n\n运行 \n```nginx -t```\n，如果它没有返回任何内容，我会检查 Nginx 错误日志。默认情况下，它应该位于 \n```/var/log/nginx/error.log```\n。\n\n\n你可以用任何文本编辑器打开它：\n\n```sudo nano /var/log/nginx/error.log```\n\n\n你能在那里找到可疑的东西吗？\n\n\n你可以检查的第二个日志如下\n\n\n```sudo nano /var/log/syslog```\n\n\n当我遇到这个问题时，是因为我的托管服务提供商在全新安装期间自动安装了 Apache。它阻塞了端口 80。\n\n\n当我执行 \n```sudo nano /var/log/nginx/error.log```\n 时，我得到以下错误日志：\n\n\n```2018/08/04 06:17:33 [emerg] 634#0: bind() to 0.0.0.0:80 failed (98: Address already in use)\n2018/08/04 06:17:33 [emerg] 634#0: bind() to [::]:80 failed (98: Address already in use)\n2018/08/04 06:17:33 [emerg] 634#0: bind() to 0.0.0.0:80 failed (98: Address already in use)\n```\n\n\n上面的错误表明它无法将 nginx 绑定到端口 80，因为该端口已被占用。\n\n\n要修复此问题，你需要运行以下命令：\n\n\n```yum install net-tools```\n\n\n```sudo netstat -tulpn```\n\n\n当你执行上述命令时，你会得到类似以下内容：\n\n\n```Proto Recv-Q Send-Q Local Address           Foreign Address         State    PID/Program name\ntcp        0      0 0.0.0.0:80              0.0.0.0:*               LISTEN      1762/httpd\ntcp        0      0 0.0.0.0:22              0.0.0.0:*               LISTEN      1224/sshd\ntcp        0      0 127.0.0.1:25            0.0.0.0:*               LISTEN      1528/sendmail:acce\ntcp6       0      0 :::22                   :::*                    LISTEN      1224/sshd\n```\n\n\n你可以看到端口 80 被 httpd (Apache) 阻塞。如果你使用 SSL，这也可能是端口 443。\n\n\n获取使用端口 80 或 443 的进程的 PID。并发送 kill 命令，更改 \n```<PID>```\n 值：\n\n\n```sudo kill -2 <PID>```\n\n\n注意在我的示例中，Apache 的 PID 值是 \n```1762```\n，所以我会执行 \n```sudo kill -2 1762```\n\n\n或者，你可以执行以下命令：\n\n\n```sudo fuser -k 80/tcp```\n\n\n```sudo fuser -k 443/tcp```\n\n\n现在端口 80 或 443 已清除，你可以通过运行以下命令启动 Nginx：\n\n\n```sudo service nginx restart```\n\n\n还建议移除之前阻塞端口 80 和 443 的任何内容。这将避免将来发生任何冲突。由于 Apache (httpd) 阻塞了我的端口，我通过运行以下命令将其移除：\n\n\n```yum remove httpd httpd-devel httpd-manual httpd-tools mod_auth_kerb mod_auth_mysql mod_auth_pgsql mod_authz_ldap mod_dav_svn mod_dnssd mod_nss mod_perl mod_revocator mod_ssl mod_wsgi```",
+  "link": "https://stackoverflow.com/questions/35868976/nginx-service-failed-because-the-control-process-exited"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx：将所有请求发送到单个 HTML 页面",
+  "answer": "我认为这样可以实现：\n\n\n```location / {\n    try_files /base.html =404;\n}\n```",
+  "link": "https://stackoverflow.com/questions/7027636/nginx-send-all-requests-to-a-single-html-page"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx 错误“conflicting server name”被忽略",
+  "answer": "我假设你运行的是 Linux，并且使用 gEdit 编辑文件。在\n```/etc/nginx/sites-enabled```\n目录下，可能遗留了一个临时文件，例如\n```default~```\n（注意那个\n```~```\n）。\n\n\n取决于你的编辑器，该文件可能名为\n```.save```\n或类似名称。只需运行\n```$ ls -lah```\n查看哪些文件是不应该存在的，并将其删除（感谢\n@Tisch\n提供此建议）。\n\n\n删除这个文件，问题就会解决。",
+  "link": "https://stackoverflow.com/questions/11426087/nginx-error-conflicting-server-name-ignored"
+ },
+ {
+  "category": "nginx",
+  "question": "SSL: error:0B080074:x509 certificate routines:X509_check_private_key:key values mismatch",
+  "answer": "一旦确认它们不匹配，你仍然面临一个问题——该如何处理。通常，证书可能只是组装不正确。当 CA 签署你的证书时，他们会发送给你一个类似这样的块：\n\n\n```-----BEGIN CERTIFICATE-----\nMIIAA-and-a-buncha-nonsense-that-is-your-certificate\n-and-a-buncha-nonsense-that-is-your-certificate-and-\na-buncha-nonsense-that-is-your-certificate-and-a-bun\ncha-nonsense-that-is-your-certificate-and-a-buncha-n\nonsense-that-is-your-certificate-AA+\n-----END CERTIFICATE-----\n```\n\n\n他们还会发送一个 bundle（通常是两个证书），代表他们授予你证书的权限。这看起来类似这样：\n\n\n```-----BEGIN CERTIFICATE-----\nMIICC-this-is-the-certificate-that-signed-your-request\n-this-is-the-certificate-that-signed-your-request-this\n-is-the-certificate-that-signed-your-request-this-is-t\nhe-certificate-that-signed-your-request-this-is-the-ce\nrtificate-that-signed-your-request-A\n-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nMIICC-this-is-the-certificate-that-signed-for-that-one\n-this-is-the-certificate-that-signed-for-that-one-this\n-is-the-certificate-that-signed-for-that-one-this-is-t\nhe-certificate-that-signed-for-that-one-this-is-the-ce\nrtificate-that-signed-for-that-one-this-is-the-certifi\ncate-that-signed-for-that-one-AA\n-----END CERTIFICATE-----\n```\n\n\n只是不幸的是，它们不会有如此清晰的标签。\n\n\n因此，一种常见的做法是将这些全部捆绑到一个文件中——你的证书，然后是签名证书。但由于它们不容易区分，有时会发生有人意外地将它们按相反顺序放置——先签名证书，然后是最终证书——而没有注意到。在这种情况下，你的证书将不会与你的密钥匹配。\n\n\n你可以通过运行以下命令来测试证书认为它代表什么：\n\n\n```openssl x509 -noout -text -in yourcert.cert\n```\n\n\n在顶部附近，你应该看到“Subject:”，然后是看起来像你的数据的内容。如果它看起来像你的 CA，那么你的 bundle 可能顺序错误；你可以尝试备份，然后将最后一个证书移到开头，希望那是你的证书。\n\n\n如果这不起作用，你可能只需要重新颁发证书。当我创建 CSR 时，我喜欢清楚地标记它是为哪个服务器（而不是仅仅 ssl.key 或 server.key），并制作一个带有日期的副本，比如 mydomain.20150306.key 等。这样，私钥和公钥对就不太可能与其他组混淆。",
+  "link": "https://stackoverflow.com/questions/26191463/ssl-error0b080074x509-certificate-routinesx509-check-private-keykey-values"
+ },
+ {
+  "category": "nginx",
+  "question": "如何在 nginx 中通过 proxy_pass 转发查询字符串参数？",
+  "answer": "从 proxy_pass 文档中：\n\n\n\n\n一种特殊情况是在 proxy_pass 语句中使用变量：请求的 URL 不会被使用，你完全负责自己构建目标 URL。\n\n\n\n\n由于你在目标中使用了 $1，nginx 依赖你准确告诉它要传递什么。你可以通过两种方式修复这个问题。首先，使用 proxy_pass 剥离 uri 的开头是简单的：\n\n\n```location /service/ {\n  # 注意 proxy_pass 上的尾随斜杠。\n  # 它告诉 nginx 在传递请求时将 /service/ 替换为 /。\n  proxy_pass http://apache/;\n}\n```\n\n\n或者如果你想使用正则 location，只需包含 args：\n\n\n```location ~* ^/service/(.*) {\n  proxy_pass http://apache/$1$is_args$args;\n}\n```",
+  "link": "https://stackoverflow.com/questions/8130692/how-can-query-string-parameters-be-forwarded-through-a-proxy-pass-with-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx server_name 通配符或全捕获",
+  "answer": "在你的全捕获 server 块中将 listen 选项改为如下所示。（添加\n```default_server```\n）这将接收所有未定义的连接（在指定端口上）。\n\n\n```listen       80  default_server;\n```\n\n\n如果你希望在文件或文件夹不存在时将所有请求推送到 index.php；\n\n\n```try_files                       $uri /$uri /index.php;\n```\n\n\n根据\n文档\n，\n```还可以通过 listen 指令中的 **default_server** 参数显式指定哪个 server 应为默认 server```",
+  "link": "https://stackoverflow.com/questions/9454764/nginx-server-name-wildcard-or-catch-all"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx 显示空白 PHP 页面",
+  "answer": "将\n\n\n```include fastcgi_params;\n```\n\n\n替换为\n\n\n```include fastcgi.conf;\n```\n\n\n并移除 nginx.conf 中的 fastcgi_param SCRIPT_FILENAME ...",
+  "link": "https://stackoverflow.com/questions/15423500/nginx-showing-blank-php-pages"
+ },
+ {
+  "category": "nginx",
+  "question": "你是否试图将目录挂载到文件上（或反之）？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/45972812/are-you-trying-to-mount-a-directory-onto-a-file-or-vice-versa"
+ },
+ {
+  "category": "nginx",
+  "question": "如何更改 nginx 返回的 Server 头信息？",
+  "answer": "如果你正在使用 nginx 代理后端应用，并希望后端能够声明自己的\n```Server:```\n头信息而不被 nginx 覆盖，那么你可以在\n```server {…}```\n配置块中设置：\n\n\n```proxy_pass_header Server;\n```\n\n\n这样会使得 nginx 保留该头信息，不重写后端设置的值。",
+  "link": "https://stackoverflow.com/questions/246227/how-do-you-change-the-server-header-returned-by-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "API 网关与反向代理",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/35756663/api-gateway-vs-reverse-proxy"
+ },
+ {
+  "category": "nginx",
+  "question": "如何通过不同端口（非 80）启动 nginx",
+  "answer": "你需要进入\n```/etc/nginx/sites-enabled/```\n目录，如果这是默认配置，那么应该有一个名为：\n```default```\n的文件。\n\n\n编辑该文件，定义你想要的端口；在下面的代码片段中，我们将 Nginx 实例服务于端口 81。\n\n\n```server {\n    listen 81;\n}\n```\n\n\n要启动服务器，请运行以下命令行；\n\n\n```sudo service nginx start\n```\n\n\n现在你可以通过端口 81 访问你的应用（对于 localhost，\nhttp://localhost:81\n）。",
+  "link": "https://stackoverflow.com/questions/10829402/how-to-start-nginx-via-different-portother-than-80"
+ },
+ {
+  "category": "nginx",
+  "question": "为什么 nginx 会对任何域名都做出响应？",
+  "answer": "nginx 配置中的第一个 server 块是所有请求的默认服务器，当请求到达服务器但没有特定的 server 块匹配时，就会由它来处理。\n\n\n因此，在你的配置中，假设你的真实域名是 REAL.COM，当用户输入该域名时，它会解析到你的服务器，由于没有针对这个设置的 server 块，那么 FAKE.COM 的 server 块（在你的情况下是唯一的 server 块，也是第一个）就会处理这个请求。\n\n\n这就是为什么正确的 Nginx 配置会有一个专门的默认 server 块，然后再跟其他针对特定域名的 server 块。\n\n\n```# Default server\nserver {\n    return 404;\n}\n\nserver {\n    server_name domain_1;\n    [...]\n}\n\nserver {\n    server_name domain_2;\n    [...]\n}\n```\n\n\n等等\n\n\n** 编辑 **\n\n\n似乎有些用户对这个例子感到有些困惑，认为它仅限于单个 conf 文件等。\n\n\n请注意，以上只是一个简单的示例，供提问者根据需要进行开发。\n\n\n我个人使用单独的 vhost conf 文件，如下所示（CentOS/RHEL）：\n\n\n```http {\n    [...]\n    # Default server\n    server {\n        return 404;\n    }\n    # Other servers\n    include /etc/nginx/conf.d/*.conf;\n}\n```\n\n\n```/etc/nginx/conf.d/```\n 将包含 domain_1.conf、domain_2.conf... domain_n.conf，这些文件会在主 nginx.conf 文件中的 server 块之后被包含，而主 nginx.conf 中的 server 块始终是第一个，并且始终是默认的，除非在其他地方用 default_server 指令覆盖它。\n\n\n在这种情况下，其他服务器的 conf 文件名的字母顺序就变得无关紧要了。\n\n\n此外，这种安排提供了很大的灵活性，因为可以定义多个默认值。\n\n\n在我的具体情况下，我让 Apache 仅监听内部接口的 8080 端口，并将 PHP 和 Perl 脚本代理到 Apache。\n\n\n然而，我运行了两个独立的应用程序，它们都会在输出的 html 中返回带有 \":8080\" 的链接，因为它们检测到 Apache 没有运行在标准的 80 端口上，并试图“帮助”我。\n\n\n这导致了一个问题，即这些链接变得无效，因为无法从外部接口访问 Apache，而链接应该指向 80 端口。\n\n\n我通过创建一个默认服务器来重定向此类请求，监听 8080 端口，从而解决了这个问题。\n\n\n```http {\n    [...]\n    # Default server block for undefined domains\n    server {\n        listen 80;\n        return 404;\n    }\n    # Default server block to redirect Port 8080 for all domains\n    server {\n        listen my.external.ip.addr:8080;\n        return 301 http://$host$request_uri;\n    }\n    # Other servers\n    include /etc/nginx/conf.d/*.conf;\n}\n```\n\n\n由于常规 server 块中没有监听 8080 端口的，重定向默认 server 块凭借其在 nginx.conf 中的位置，透明地处理了此类请求。\n\n\n实际上我有四个这样的 server 块，这只是一个简化的用例。",
+  "link": "https://stackoverflow.com/questions/9824328/why-is-nginx-responding-to-any-domain-name"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx 的 “ssl” 指令已弃用，请使用 “listen ... ssl”",
+  "answer": "将你的 \n```listen```\n 语句从：\n\n\n```listen 443;\n```\n\n\n改为\n\n\n```listen 443 ssl;\n```\n\n\n并注释掉或删除：\n\n\n```# ssl on;   \n```\n\n\n然后再次检查 \n```nginx -t```\n。",
+  "link": "https://stackoverflow.com/questions/51703109/nginx-the-ssl-directive-is-deprecated-use-the-listen-ssl"
+ },
+ {
+  "category": "nginx",
+  "question": "如何在 Nginx 中重定向 URL",
+  "answer": "实现你想要的功能的最佳方式是添加另一个 server 块：\n\n\n```server {\n        #implemented by default, change if you need different ip or port\n        #listen *:80 | *:8000;\n        server_name test.com;\n        return 301 $scheme://www.test.com$request_uri;\n}\n```\n\n\n并将主 server 块的 server_name 变量修改如下：\n\n\n```server_name  www.test.com;\n```\n\n\n重要\n：新增 \n```server```\n 块才是正确的做法，\n```if```\n 是邪恶的\n。如果可能的话，你必须使用 location 和 server 而不是 \n```if```\n。\n```Rewrite```\n 有时也 \n是邪恶的\n，所以用 \n```return```\n 替换它。",
+  "link": "https://stackoverflow.com/questions/10294481/how-to-redirect-a-url-in-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "Upstream / downstream 术语是否被反用了？（例如 nginx）",
+  "answer": "在 HTTP 世界中，“upstream server”这个术语是在 HTTP/1.0 规范 \nRFC 1945\n 中引入的：\n\n\n\n\n502 Bad Gateway\n\n\nThe server, while acting as a gateway or proxy, received an invalid\nresponse from \nthe upstream server\n it accessed in attempting to\nfulfill the request.\n\n\n\n\n正式定义后来在 \nRFC 2616\n 中补充：\n\n\n\n\nupstream/downstream\n\n\nUpstream and downstream describe the flow of a message: all\nmessages flow from upstream to downstream.\n\n\n\n\n根据这个定义：\n\n\n\n\n如果你看的是请求，那么客户端是 upstream，服务器是 downstream；\n\n\n相反，如果你看的是响应，那么客户端是 downstream，服务器是 upstream。\n\n\n\n\n同时，在 HTTP 中，大部分数据流不是请求，而是 \n响应\n。所以，如果你考虑响应的流向，那么“upstream server”这个术语听起来相当合理且符合逻辑。而且这个术语再次出现在 502 响应码的描述中（与 HTTP/1.0 中的描述相同），以及其他一些地方。\n\n\n同样的逻辑也可以在自然语言中的“downloading”和“uploading”这两个术语中看到。大部分数据流是从服务器到客户端，这就是为什么“downloading”意味着从服务器加载某些东西到客户端，而“uploading”则是从客户端到服务器。",
+  "link": "https://stackoverflow.com/questions/32364579/upstream-downstream-terminology-used-backwards-e-g-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "使用 PHP set_time_limit() 防止 nginx 504 Gateway timeout",
+  "answer": "有几种方法可以为 php-fpm 设置超时时间。在\n```/etc/php5/fpm/pool.d/www.conf```\n中，我添加了这一行：\n\n\n```request_terminate_timeout = 180\n```\n\n\n另外，在\n```/etc/nginx/sites-available/default```\n中，我在相关服务器的 location 块中添加了以下行：\n\n\n```fastcgi_read_timeout 180;\n```\n\n\n完整的 location 块如下所示：\n\n\n```location ~ \\.php$ {\n    fastcgi_pass unix:/var/run/php5-fpm.sock;\n    fastcgi_index index.php;\n    fastcgi_param   SCRIPT_FILENAME $document_root$fastcgi_script_name;\n    fastcgi_read_timeout 180;\n    include fastcgi_params;\n} \n```\n\n\n现在只需重启 php-fpm 和 nginx，对于耗时少于 180 秒的请求，就不应再出现超时了。",
+  "link": "https://stackoverflow.com/questions/16002268/prevent-nginx-504-gateway-timeout-using-php-set-time-limit"
+ },
+ {
+  "category": "nginx",
+  "question": "重复的 MIME 类型 &quot;text/html&quot;？",
+  "answer": "对于选项\n```gzip_types```\n，mime-type\n```text/html```\n默认始终会被包含，因此你无需显式指定它。",
+  "link": "https://stackoverflow.com/questions/6475472/duplicate-mime-type-text-html"
+ },
+ {
+  "category": "nginx",
+  "question": "Docker Networking - nginx: [emerg] host not found in upstream",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/33639138/docker-networking-nginx-emerg-host-not-found-in-upstream"
+ },
+ {
+  "category": "nginx",
+  "question": "处理 nginx 400 \"The plain HTTP request was sent to HTTPS port\" 错误",
+  "answer": "我遇到了类似的问题。在相同的 Nginx 配置下，它在一台服务器上可以正常工作，但在另一台服务器上却不行。找到了解决方案，这是 Igor 在这里回答的\nhttp://forum.nginx.org/read.php?2,1612,1627#msg-1627\n\n\n是的。或者你可以将 SSL/非 SSL 服务器合并到一个 server 中：\n\n\n```server {\n  listen 80;\n  listen 443 default ssl;\n\n  # ssl on   - 记得将其注释掉\n\n}\n```",
+  "link": "https://stackoverflow.com/questions/8768946/dealing-with-nginx-400-the-plain-http-request-was-sent-to-https-port-error"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx 启动提示 [emerg] no \"events\" section in configuration",
+  "answer": "只需在 \n```http {```\n 行上方添加 \n```events { }```\n 即可：\n\n\n```events {}\nhttp {\n    server {\n        # Your code here\n    }\n}\n```",
+  "link": "https://stackoverflow.com/questions/54481423/nginx-startup-prompt-emerg-no-events-section-in-configuration"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx - 重复的默认服务器错误",
+  "answer": "你可能在 \n```/etc/nginx/sites-enabled```\n 目录下还有其他文件（例如 \n```default```\n 配置），需要将其移除。\n\n\n此问题是由于在一个或多个 \n```listen```\n 指令中重复提供了 \n```default_server```\n 参数所导致的。你可能会发现这个冲突的指令内容类似于：\n\n\n```listen 80 default_server;\n```\n\n\n正如 nginx 核心模块关于 \n```listen```\n 的文档所述：\n\n\n\n\n如果存在 \n```default_server```\n 参数，服务器将成为指定 \n```address:port```\n 对的默认服务器。如果没有任何指令带有 \n```default_server```\n 参数，那么第一个具有该 \n```address:port```\n 对的服务器将成为该对的默认服务器。\n\n\n\n\n这意味着在你的配置中必定有另一个文件或 \n```server```\n 块为端口 80 设置了 \n```default_server```\n。nginx 在遇到你的 \n```mysite.com```\n 文件之前先遇到了那个配置，因此请尝试移除或调整那个其他配置。\n\n\n如果你难以找到这些指令和参数的设置位置，可以尝试如下搜索：\n\n\n```grep -R default_server /etc/nginx```",
+  "link": "https://stackoverflow.com/questions/30973774/nginx-duplicate-default-server-error"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx upstream prematurely closed connection while reading response header from upstream, for large requests",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/36488688/nginx-upstream-prematurely-closed-connection-while-reading-response-header-from"
+ },
+ {
+  "category": "nginx",
+  "question": "Node.js 的“服务器”与 Nginx 或 Apache 服务器相比如何？",
+  "answer": "是的，它是一个服务器。\n\n\n一个 Node.js Web 应用就是一个功能完备的 Web 服务器，就像 Nginx 或 Apache 一样。\n\n\n你确实可以在不使用任何其他 Web 服务器的情况下直接提供 Node.js 应用服务。只需将代码改为：\n\n\n```app = express();\nhttp.createServer(app).listen(80); // 直接提供 HTTP 服务\n```\n\n\n事实上，有些项目使用 Node.js 作为其他服务器（包括 Apache）的前端负载均衡器。\n\n\n注意，Node.js 并不是唯一采用这种方式的开发栈。Go、Java 和 Swift 的 Web 开发框架也这样做。\n\n\n为什么？\n\n\n最初是 CGI。CGI 表现良好且运行正常。Apache 收到请求后，发现该 URL 需要执行一个 CGI 应用，便执行该 CGI 应用并将数据作为环境变量传递，读取其 stdout 并将数据返回给浏览器。\n\n\n问题在于它很慢。当 CGI 应用是一个小型静态编译的 C 程序时还好，但一组小型静态编译的 C 程序变得难以维护。于是人们开始用脚本语言编写。接着这也变得难以维护，人们开始开发面向对象的 MVC 框架。现在我们开始遇到麻烦了——每个请求都必须编译所有这些类并创建所有这些对象，仅仅为了提供一些 HTML，即使没有任何动态内容需要提供（因为框架需要判断出没有动态内容需要提供）。\n\n\n如果我们不需要每个请求都创建所有这些对象呢？\n\n\n这就是人们的想法。为了解决这个问题，出现了几种策略。最早的一种是将解释器直接嵌入 Web 服务器中，比如 Apache 中的 ```mod_php```。编译后的类和对象可以存储在全局变量中，从而被缓存。另一种策略是进行预编译。还有一种策略是将应用作为常规服务器进程运行，并使用 FastCGI 等自定义协议与 Web 服务器通信。\n\n\n然后一些开发者开始简单地使用 HTTP 作为其应用到服务器的协议。实际上，应用本身也是一个 HTTP 服务器。这样做的好处是你不需要实现任何新的、可能有 bug、可能未经测试的协议，并且你可以直接使用 Web 浏览器（或者通常也用 ```curl```）调试你的应用。而且你不需要修改过的 Web 服务器来支持你的应用，只需要任何能进行反向代理或重定向的 Web 服务器即可。\n\n\n为什么要使用 Apache/Nginx？\n\n\n当你提供 Node.js 应用服务时，请注意你是自己 Web 服务器的作者。你的应用中的任何潜在 bug 都是互联网上可直接利用的漏洞。有些人（有理由地）对此感到不安。\n\n\n在你的 Node.js 应用前面加一层 Apache 或 Nginx，意味着你在实时互联网上拥有一个经过实战检验、安全加固的软件作为应用的接口。它会增加一点点延迟（反向代理），但大多数人认为这是值得的。\n\n\n这在 Node.js 早期曾是标准建议。但如今也有一些网站和 Web 服务直接将 Node.js 暴露到互联网。```http.Server``` 模块现在在互联网上已经相当经得起考验，值得信赖。",
+  "link": "https://stackoverflow.com/questions/38821947/how-does-a-node-js-server-compare-with-nginx-or-apache-servers"
+ },
+ {
+  "category": "nginx",
+  "question": "uWSGI 的作用是什么？",
+  "answer": "好的，我想我现在明白了。\n\n\n\n\n为什么 nginx 不能直接调用我的 Flask 应用？\n\n\n\n\n因为 \n```nginx```\n 不支持 WSGI 规范。从技术上讲，如果 nginx 愿意，他们可以实现 \n```WSGI```\n 规范，只是他们没有这样做。\n\n\n既然如此，我们就需要一个实现了该规范的 web 服务器，这正是 \n```uWSGI```\n 服务器的作用。\n\n\n请注意，\n```uWSGI```\n 是一个功能完备的 http 服务器，它可以独立运行且表现良好。我曾多次以这种方式使用它，效果非常好。如果你需要静态内容具有超高的吞吐量，那么你可以选择将 \n```nginx```\n 放在你的 \n```uWSGI```\n 服务器前面。当你这样做时，它们将通过一种称为 \n```uwsgi```\n 的低级协议进行通信。\n\n\n“什么鬼？！又有一个叫 uwsgi 的东西？！”\n 你可能会问。是的，这确实令人困惑。当你提到 \n```uWSGI```\n 时，你指的是一个 http 服务器。当你谈论 \n```uwsgi```\n（全小写）时，你指的是 \n```uWSGI```\n \n服务器\n用来与其他服务器（如 \n```nginx```\n）通信的一种\n二进制协议\n。他们在这上面取了一个糟糕的名字。\n\n\n对于任何感兴趣的人，我写了一篇 \n博客文章\n 来介绍它，包含更多细节、一些历史以及一些示例。",
+  "link": "https://stackoverflow.com/questions/38601440/what-is-the-point-of-uwsgi"
+ },
+ {
+  "category": "nginx",
+  "question": "如何正确链接 php-fpm 和 Nginx Docker 容器？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/29905953/how-to-correctly-link-php-fpm-and-nginx-docker-containers"
+ },
+ {
+  "category": "nginx",
+  "question": "在使用 proxy_pass 时，如何在 nginx 上添加响应头？",
+  "answer": "```add_header```\n 在有或没有 \n```proxy_pass```\n 的情况下都能正常工作。我今天刚设置了一个配置，正好用到了这个指令。不过我得承认，在没有确切回忆起原因的情况下，我也曾为此挣扎过。\n\n\n目前我有一个可用的配置，其中包含以下内容（以及其他内容）：\n\n\n```server {\n    server_name  .myserver.com\n    location / {\n        proxy_pass  http://mybackend;\n        add_header  X-Upstream  $upstream_addr;\n    }\n}\n```\n\n\n在 nginx \n```1.7.5```\n 之前，\nadd_header\n 仅在成功响应时有效，这与 \nSebastian Goodman 在他的回答中提到的 \nHttpHeadersMoreModule\n 形成对比。\n\n\n从 nginx \n```1.7.5```\n 开始，你可以使用关键字 \n```always```\n 来在错误响应中也包含自定义头。例如：\n\n\n```add_header X-Upstream $upstream_addr always;\n```\n\n\n\n\n限制：\n 你不能使用 \n```add_header```\n 覆盖 \n```server```\n 头值。",
+  "link": "https://stackoverflow.com/questions/14501047/how-to-add-a-response-header-on-nginx-when-using-proxy-pass"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx 在同一 IP 上配置不同域名",
+  "answer": "你的“listen”指令有误。请参阅此页面：\nhttp://nginx.org/en/docs/http/server_names.html\n。\n\n\n它们应该是\n\n\n```server {\n    listen      80;\n    server_name www.domain1.example;\n    root /var/www/domain1;\n}\n\nserver {\n    listen       80;\n    server_name www.domain2.example;\n    root /var/www/domain2;\n}\n```\n\n\n注意，我只包含了相关行。其他一切看起来都没问题，但为了清晰起见，我删除了它们。为了测试，你可能想先尝试从每个服务器提供一个文本文件，然后再实际提供 PHP。这就是我保留“root”指令的原因。",
+  "link": "https://stackoverflow.com/questions/11773544/nginx-different-domains-on-same-ip"
+ },
+ {
+  "category": "nginx",
+  "question": "在 Ubuntu 上，如何仅在配置测试成功后才重启 nginx？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/18587638/how-do-i-restart-nginx-only-after-the-configuration-test-was-successful-on-ubunt"
+ },
+ {
+  "category": "nginx",
+  "question": "为什么 Unicorn 需要与 Nginx 一起部署？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/8739871/why-does-unicorn-need-to-be-deployed-together-with-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "如何验证 nginx 是否正在运行？",
+  "answer": "根据你的需求，以下命令应该能帮到你：\n\n\n```service nginx status\n```",
+  "link": "https://stackoverflow.com/questions/35220654/how-to-verify-if-nginx-is-running-or-not"
+ },
+ {
+  "category": "nginx",
+  "question": "终端错误：zsh: permission denied: ./startup.sh",
+  "answer": "确保给它执行权限。\n\n\n```cd ~/the/script/folder\n\nchmod +x ./startup.sh\n```\n\n\n这将为用户、组和其他人授予执行权限，因此请注意可能的安全问题。要将权限限制为单一访问类别，你可以使用：\n\n\n```chmod u+x ./startup.sh\n```\n\n\n这将仅向用户授予执行权限\n\n\n供参考",
+  "link": "https://stackoverflow.com/questions/53229221/terminal-error-zsh-permission-denied-startup-sh"
+ },
+ {
+  "category": "nginx",
+  "question": "通过 Nginx 使用 EventSource / Server-Sent Events",
+  "answer": "你的 Nginx 配置是正确的，只是缺少了几行。\n\n\n以下是让\n```EventSource```\n通过 Nginx 正常工作的“神奇三行”：\n\n\n```proxy_set_header Connection '';\nproxy_http_version 1.1;\nchunked_transfer_encoding off;\n```\n\n\n将它们放入\n```location```\n块中，应该就能正常工作了。\n\n\n你可能还需要添加：\n\n\n```proxy_buffering off;\nproxy_cache off;\n```\n\n\n这并不是官方推荐的做法。\n\n\n我是通过“反复试验”加上“Google 搜索”才得出这个结论的 :)",
+  "link": "https://stackoverflow.com/questions/13672743/eventsource-server-sent-events-through-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx 没有加载 sites-enabled 中的站点？",
+  "answer": "我遇到过同样的问题。原因是我在创建符号链接时不小心使用了相对路径。\n\n\n你确定使用的是完整路径吗，例如：\n\n\n```ln -s /etc/nginx/sites-available/example.com.conf /etc/nginx/sites-enabled/example.com.conf\n```",
+  "link": "https://stackoverflow.com/questions/12715871/nginx-not-picking-up-site-in-sites-enabled"
+ },
+ {
+  "category": "nginx",
+  "question": "如何配置 nginx 以启用类似“文件浏览器”的模式？",
+  "answer": "你应该尝试使用\nngx_http_autoindex_module\n。\n\n\n将\n```autoindex```\n选项设置为\n```on```\n。默认情况下它是\n```off```\n。\n\n\n你的示例配置应该没问题\n\n\n```location /{ \n   root /home/yozloy/html/; \n   index index.html; \n   autoindex on;\n}\n```\n\n\n如果没有\n```autoindex```\n选项，对于以\n```/```\n结尾且目录中没有\n```index.html```\n文件的请求，你应该会收到 Error 403。启用此选项后，你应该会得到一个简单的列表：\n\n\n```<html>\n<head><title>Index of /</title></head>\n<body bgcolor=\"white\">\n<h1>Index of /test/</h1><hr><pre><a href=\"../\">../</a>\n<a href=\"test.txt\">test.txt</a>                 19-May-2012 10:43            0\n</pre><hr></body>\n</html>\n```",
+  "link": "https://stackoverflow.com/questions/10663248/how-to-configure-nginx-to-enable-kinda-file-browser-mode"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx 无法加载 CSS 文件",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/10075304/nginx-fails-to-load-css-files"
+ },
+ {
+  "category": "nginx",
+  "question": "如何在 NGINX 中重写代理响应中的 URL？",
+  "answer": "我们首先应该仔细且完整地阅读关于 proxy_pass 的文档。\n\n传递给上游服务器的 URI 取决于是否在 \"proxy_pass\" 指令中使用了 URI。proxy_pass 指令中的尾部斜杠表示 URI 存在且等于 \n```/```\n。没有尾部斜杠表示 URI 不存在。\n\n带 URI 的 proxy_pass：\n\n```location /some_dir/ {\n    proxy_pass http://some_server/;\n}\n```\n\n使用上述配置，代理如下：\n\n```http:// your_server/some_dir/ some_subdir/some_file ->\nhttp:// some_server/          some_subdir/some_file\n```\n\n基本上，\n```/some_dir/```\n 被替换为 \n```/```\n，从而将请求路径从 \n```/some_dir/some_subdir/some_file```\n 更改为 \n```/some_subdir/some_file```\n。\n\n不带 URI 的 proxy_pass：\n\n```location /some_dir/ {\n    proxy_pass http://some_server;\n}\n```\n\n使用第二种配置（没有尾部斜杠）：代理如下：\n\n```http:// your_server /some_dir/some_subdir/some_file ->\nhttp:// some_server /some_dir/some_subdir/some_file\n```\n\n基本上，完整的原始请求路径会原样传递。\n\n因此，在您的情况下，似乎只需去掉尾部斜杠即可得到您想要的结果。\n\n注意事项\n\n请注意，自动重写仅在 proxy_pass 中不使用变量时有效。如果使用变量，您需要自行进行重写：\n\n```location /some_dir/ {\n  rewrite    /some_dir/(.*) /$1 break;\n  proxy_pass $upstream_server;\n}\n```\n\n还有其他情况下重写不会生效，这就是为什么阅读文档是必须的。\n\n编辑\n\n再次阅读您的问题，我可能忽略了您只是想编辑 HTML 输出。\n\n为此，您可以使用 \nsub_filter\n 指令。类似这样...\n\n```location /admin/ {\n    proxy_pass http://localhost:8080/;\n    sub_filter \"http://your_server/\" \"http://your_server/admin/\";\n    sub_filter_once off;\n}\n```\n\n基本上，就是您想要替换的字符串和替换后的字符串。",
+  "link": "https://stackoverflow.com/questions/32542282/how-do-i-rewrite-urls-in-a-proxy-response-in-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "“配置文件 /etc/nginx/nginx.conf 测试失败”：我如何知道为什么会发生这种情况？",
+  "answer": "```sudo nginx -t```\n 应该测试所有文件并返回错误和警告的位置。",
+  "link": "https://stackoverflow.com/questions/22306006/configuration-file-etc-nginx-nginx-conf-test-failed-how-do-i-know-why-this-h"
+ },
+ {
+  "category": "nginx",
+  "question": "如何在 Nginx 中重定向单个 URL？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/18037716/how-to-redirect-single-url-in-nginx"
+ },
+ {
+  "category": "nginx",
+  "question": "将 EC2 Elastic Load Balancer 从 HTTP 重定向到 HTTPS",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/24603620/redirecting-ec2-elastic-load-balancer-from-http-to-https"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx 上传时 client_max_body_size 问题",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/4947107/nginx-upload-client-max-body-size-issue"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx 提供静态文件时遇到 403 Forbidden 错误",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/16808813/nginx-serve-static-file-and-got-403-forbidden"
+ },
+ {
+  "category": "nginx",
+  "question": "Angular 应用在新部署后需要清除缓存",
+  "answer": "问题在于，当静态文件被缓存后，它可能会在过期之前被存储很长时间。这在您更新网站时可能会造成困扰，因为文件的缓存版本存储在访问者的浏览器中，他们可能无法看到所做的更改。\n\n\n缓存清除（Cache-busting）\n通过使用唯一的文件版本标识符来告诉浏览器有新版本的文件可用，从而解决浏览器缓存问题。因此，浏览器不会从缓存中检索旧文件，而是向源服务器请求新文件。\n\n\nAngular CLI 通过为构建命令提供 \n```--output-hashing```\n 标志来解决此问题。\n\n\n查看官方文档：\nhttps://angular.io/cli/build\n\n\n示例（旧版本）\n\n\n```ng build --prod --aot --output-hashing=all\n```\n\n\n以下是您可以传入 \n```--output-hashing```\n 的选项\n\n\n\n\nnone：不执行哈希处理\n\n\nmedia：仅向通过 [url|file]-loaders 处理的文件添加哈希\n\n\nbundles：仅向输出包添加哈希\n\n\nall：向媒体和包都添加哈希\n\n\n\n\n更新\n\n\n对于 Angular 的版本（例如 Angular 8、9、10），命令为：\n\n\n```ng build --prod --aot --outputHashing=all\n```\n\n\n对于最新版本的 Angular（从 Angular 11 到 Angular 14），命令恢复为旧格式：\n\n\n```ng build  --aot --output-hashing=all\n```",
+  "link": "https://stackoverflow.com/questions/55402751/angular-app-has-to-clear-cache-after-new-deployment"
+ },
+ {
+  "category": "nginx",
+  "question": "Nginx location 块中使用正则表达式的指南？",
+  "answer": "Nginx location：\n\n\nNginx location 块部分有一个搜索顺序、一个修饰符、一个隐式匹配类型以及一个隐式的开关，用于决定匹配时是否停止搜索。以下数组描述了正则表达式的情况。\n\n\n```\n# --------------------------------------------------------------------------------------------------------------------------------------------\n# Search-Order       Modifier       Description                                                        Match-Type        Stops-search-on-match\n# --------------------------------------------------------------------------------------------------------------------------------------------\n#     1st               =           The URI must match the specified pattern exactly                  Simple-string              Yes\n#     2nd               ^~          The URI must begin with the specified pattern                     Simple-string              Yes\n#     3rd             (None)        The URI must begin with the specified pattern                     Simple-string               No\n#     4th               ~           The URI must be a case-sensitive match to the specified Rx      Perl-Compatible-Rx      Yes (first match)                 \n#     4th               ~*          The URI must be a case-insensitive match to the specified Rx    Perl-Compatible-Rx      Yes (first match)\n#     N/A               @           Defines a named location block.                                   Simple-string              Yes\n# --------------------------------------------------------------------------------------------------------------------------------------------\n```\n\n\n捕获组：\n\n\n支持捕获组、表达式求值 \n```()```\n，此示例 \n```location ~ ^/(?:index|update)$```\n 匹配以 \nexample.com/index\n 和 \nexample.com/update\n 结尾的 URL\n\n\n```# -----------------------------------------------------------------------------------------\n#    ()    : Group/Capturing-group, capturing mean match and retain/output/use what matched\n#            the patern inside (). the default bracket mode is \"capturing group\" while (?:) \n#            is a non capturing group. example (?:a|b) match a or b in a non capturing mode\n# ----------------------------------------------------------------------------------------- \n#    ?:    : Non capturing group\n#    ?=    : Positive look ahead \n#    ?!    : is for negative look ahead (do not match the following...)\n#    ?<=   : is for positive look behind\n#    ?<!    : is for negative look behind\n# -----------------------------------------------------------------------------------------\n```\n\n\n正斜杠：\n\n\n不要与正则表达式斜杠 \n```\\```\n 混淆，在 nginx 中，正斜杠 \n```/```\n 用于匹配任何子位置，包括无子位置，例如 \n```location /```\n。在正则表达式支持的上下文中，以下解释适用\n\n\n```# -----------------------------------------------------------------------------------------\n#     /    : It doesn't actually do anything. In Javascript, Perl and some other languages, \n#            it is used as a delimiter character explicitly for regular expressions.\n#            Some languages like PHP use it as a delimiter inside a string, \n#            with additional options passed at the end, just like Javascript and Perl.\n#            Nginx does not use delimiter, / can be escaped with \\/ for code portability \n#            purpose BUT this is not required for nginx / are handled literally \n#            (don't have other meaning than /)\n# -----------------------------------------------------------------------------------------\n```\n\n\n反斜杠：\n\n\n正则表达式特殊字符 \n```\\```\n 的首要用途是转义下一个字符；但请注意，在大多数情况下，\n```\\```\n 后跟一个字符会有不同的含义，完整列表可在\n此处\n获取。\n\n\nNginx 不需要转义正斜杠 \n```/```\n，也不拒绝转义它，就像我们可以转义任何其他字符一样。因此 \n```\\/```\n 被转换/匹配为 \n```/```\n。在 nginx 上下文中转义正斜杠的一个用途可能是为了代码可移植性。\n\n\n其他正则表达式字符\n\n\n以下是可以使用的正则表达式的不完整列表\n\n\n```# -----------------------------------------------------------------------------------------\n#     ~     : Enable regex mode for location (in regex ~ mean case-sensitive match)\n#     ~*    : case-insensitive match\n#     |     : Or\n#     ()    : Match group or evaluate the content of ()\n#     $     : the expression must be at the end of the evaluated text \n#             (no char/text after the match) $ is usually used at the end of a regex \n#             location expression. \n#     ?     : Check for zero or one occurrence of the previous char ex jpe?g\n#     ^~    : The match must be at the beginning of the text, note that nginx will not perform \n#             any further regular expression match even if an other match is available \n#             (check the table above); ^ indicate that the match must be at the start of \n#             the uri text, while ~ indicates a regular expression match mode.\n#             example (location ^~ /realestate/.*)\n#             Nginx evaluation exactly this as don't check regexp locations if this \n#             location is longest prefix match.\n#     =     : Exact match, no sub folders (location = /)\n#     ^     : Match the beginning of the text (opposite of $). By itself, ^ is a \n#             shortcut for all paths (since they all have a beginning).\n#     .*    : Match zero, one or more occurrence of any char\n#     \\     : Escape the next char\n#     .     : Any char \n#     *     : Match zero, one or more occurrence of the previous char\n#     !     : Not (negative look ahead)\n#     {}    : Match a specific number of occurrence ex. [0-9]{3} match 342 but not 32\n#             {2,4} match length of 2, 3 and 4\n#     +     : Match one or more occurrence of the previous char \n#     []    : Match any char inside\n# --------------------------------------------------------------------------------------------\n```\n\n\n示例：\n\n\n```location ~ ^/(?:index)\\.php(?:$|/)\n```\n\n\n```location ~ ^\\/(?:core\\/img\\/background.png|core\\/img\\/favicon.ico)(?:$|\\/)\n```\n\n\n```location ~ ^/(?:index|core/ajax/update|ocs/v[12]|status|updater/.+|oc[ms]-provider/.+)\\.php(?:$|/)\n```",
+  "link": "https://stackoverflow.com/questions/59846238/guide-on-how-to-use-regex-in-nginx-location-block-section"
+ },
+ {
+  "category": "nginx",
+  "question": "在 express.js 中，\"trust proxy\" 实际上做了什么，我需要使用它吗？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/23413401/what-does-trust-proxy-actually-do-in-express-js-and-do-i-need-to-use-it"
+ },
+ {
+  "category": "nginx",
+  "question": "从运行中的 nginx 进程导出配置",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/12832033/dump-conf-from-running-nginx-process"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx - 从上游服务器读取自定义 header",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/12431496/nginx-read-custom-header-from-upstream-server"
+ },
+ {
+  "category": "nginx",
+  "question": "调整 nginx worker_process 以达到每分钟 100k 次访问",
+  "answer": "配置文件：\n\n\n```worker_processes  4;  # 2 * CPU 数量\n\nevents {\n    worker_connections  19000;  # 这是高性能的关键——拥有大量可用连接\n}\n\nworker_rlimit_nofile    20000;  # 每个连接需要一个文件句柄（如果做代理则需要 2 个）\n\n\n# 可服务的用户总数 = worker_processes * worker_connections\n```\n\n\n更多信息：\n针对高流量负载优化 nginx",
+  "link": "https://stackoverflow.com/questions/7325211/tuning-nginx-worker-process-to-obtain-100k-hits-per-min"
+ },
+ {
+  "category": "nginx",
+  "question": "Docker：解析 'deb.debian.org' 时出现临时故障",
+  "answer": "尝试重启 Docker。\n\n\n以下方法之一应该有效：\n\n\n```sudo service docker restart\nsudo /etc/init.d/docker restart\nsudo snap restart docker\n```\n\n\n即使是在 Docker 之前从未正常工作过的情况下，一些评论者也表示这很有帮助。",
+  "link": "https://stackoverflow.com/questions/61567404/docker-temporary-failure-resolving-deb-debian-org"
+ },
+ {
+  "category": "nginx",
+  "question": "Docker 网络 Nginx 解析器",
+  "answer": "首先，你应该使用位于 \n```127.0.0.11```\n 的 Docker 嵌入式 DNS 服务器。\n\n\n你的问题可能由以下之一引起：\n\n\n\n\nnginx 正在尝试为 DNS 查询使用 IPv6（AAAA 记录）。\n\n\n请参阅 \nhttps://stackoverflow.com/a/35516395/1529493\n 获取解决方案。\n\n\n基本上类似于：\n\n\n```http {\n    resolver 127.0.0.11 ipv6=off;\n}\n```\n\n\n在 Docker 1.11 中，这可能不再是问题：\n\n\n\n\n修复不再将 docker 域名的 IPv6 查询转发到外部服务器\n  (\n#21396\n)\n\n\n\n\n注意不要意外覆盖 \n```resolver```\n 配置指令。在我的情况下，我在 \n```server```\n 块中使用了来自 \nMozilla 的 SSL 配置生成器\n 的 \n```resolver 8.8.8.8 8.8.4.4;```\n，它覆盖了 \n```http```\n 块中的 \n```resolver 127.0.0.11;```\n。这让我困惑了很长时间……",
+  "link": "https://stackoverflow.com/questions/35744650/docker-network-nginx-resolver"
+ },
+ {
+  "category": "nginx",
+  "question": "如何在 nginx proxy_pass 中保留请求 URL",
+  "answer": "我认为 \n```proxy_set_header```\n 指令可能会有帮助：\n\n\n```location / {\n    proxy_pass http://my_app_upstream;\n    proxy_set_header Host $host;\n    # ...\n}\n```",
+  "link": "https://stackoverflow.com/questions/5834025/how-to-preserve-request-url-with-nginx-proxy-pass"
+ },
+ {
+  "category": "nginx",
+  "question": "如何修复 mysql 错误日志中的“mbind: Operation not permitted”",
+  "answer": "为你的容器添加 \n```CAP_SYS_NICE```\n 能力，直到 MySQL 服务器能够自行“静默”处理该错误。\n\n\n```service:\n  mysql:\n    image: mysql:8.0.15\n    # ...\n    cap_add:\n      - SYS_NICE  # CAP_SYS_NICE\n```\n\n\n如果你没有 \n```docker-compose```\n，那么你可以通过以下方式定义 \n```CAP_SYS_NICE```\n：\n\n\n```docker run --cap-add=sys_nice -d mysql\n```\n\n\n参考资料：\n\n\n\n\nDocker Seccomp 安全配置文件：\nhttps://docs.docker.com/engine/security/seccomp/\n\n\nDocker 资源约束：\nhttps://docs.docker.com/config/containers/resource_constraints/",
+  "link": "https://stackoverflow.com/questions/55559386/how-to-fix-mbind-operation-not-permitted-in-mysql-error-log"
+ },
+ {
+  "category": "nginx",
+  "question": "为什么 HTTP 服务器禁止在 HTTP 头名称中使用下划线？",
+  "answer": "它们并未被禁止，这是 CGI 遗留问题。参见“缺失（消失）的 HTTP 头”。\n\n\n\n\n如果你没有明确设置 \n```underscores_in_headers on;```\n，nginx 会静默丢弃带有下划线的 HTTP 头（根据 HTTP 标准，这些头是完全有效的）。这样做是为了在将头映射到 CGI 变量时防止歧义，因为在此过程中，破折号和下划线都会被映射为下划线。",
+  "link": "https://stackoverflow.com/questions/22856136/why-do-http-servers-forbid-underscores-in-http-header-names"
+ },
+ {
+  "category": "nginx",
+  "question": "如果没有尾部斜杠，Nginx 会导致 301 重定向",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/15555428/nginx-causes-301-redirect-if-theres-no-trailing-slash"
+ },
+ {
+  "category": "nginx",
+  "question": "在 Go 的 webserver 前面使用 Nginx 有哪些好处？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/17776584/what-are-the-benefits-of-using-nginx-in-front-of-a-webserver-for-go"
+ },
+ {
+  "category": "nginx",
+  "question": "使用 nginx 从给定目录的子目录中提供静态文件服务",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/12806893/use-nginx-to-serve-static-files-from-subdirectories-of-a-given-directory"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx: [emerg] &quot;http&quot; directive is not allowed here in /etc/nginx/sites-enabled/default:1",
+  "answer": "我假设你的 /etc/nginx/nginx.conf 文件中有 \n```http```\n 指令，它告诉 nginx 执行 \n```include    sites-enabled/*;```\n\n\n因此你的配置结构变成了：\n\n\n``` http\n    http\n       server\n```\n\n\n由于 http 指令只能出现一次，只需从你的 sites-enabled 配置文件中移除 http 指令即可。",
+  "link": "https://stackoverflow.com/questions/43643829/nginx-emerg-http-directive-is-not-allowed-here-in-etc-nginx-sites-enabled"
+ },
+ {
+  "category": "nginx",
+  "question": "react.js 应用在 nginx 服务器上显示 404 not found",
+  "answer": "当你的 \n```react.js```\n 应用加载时，路由由前端的 \n```react-router```\n 处理。例如，假设你当前在 \n```http://a.com```\n，然后在页面上导航到 \n```http://a.com/b```\n。这个路由变化是在浏览器中处理的。现在当你刷新页面或在新标签页中打开 \n```http://a.com/b```\n 时，请求会发送到你的 \n```nginx```\n 服务器，而该路由在服务器上并不存在，因此你会收到 404 错误。\n\n\n为了避免这个问题，你需要对所有不匹配的路由都返回根文件（通常是 index.html），这样 \n```nginx```\n 会将该文件发送给浏览器，然后由你的 React 应用在浏览器中处理路由。为此，你需要在 \n```nginx.conf```\n 或 \n```sites-enabled```\n 中做如下修改：\n\n\n```location / {\n try_files $uri /index.html;\n}\n```\n\n\n这告诉 \n```nginx```\n 先查找指定的 \n```$uri```\n，如果找不到，则将 \n```index.html```\n 返回给浏览器。（更多详情请参见 \nhttps://serverfault.com/questions/329592/how-does-try-files-work\n）",
+  "link": "https://stackoverflow.com/questions/43555282/react-js-application-showing-404-not-found-in-nginx-server"
+ },
+ {
+  "category": "nginx",
+  "question": "在 Rails 中 force_ssl 有什么作用？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/15676596/what-does-force-ssl-do-in-rails"
+ },
+ {
+  "category": "nginx",
+  "question": "nginx 配置文件使用什么语言编写？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/2936260/what-language-are-nginx-conf-files"
+ }
+]

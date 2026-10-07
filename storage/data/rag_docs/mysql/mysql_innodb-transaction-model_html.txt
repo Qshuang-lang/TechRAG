@@ -1,0 +1,570 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+MySQL :: MySQL 8.0 Reference Manual :: 17.7.2 InnoDB Transaction Model
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Skip to Main Content
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Documentation Home
+
+
+MySQL 8.0 Reference Manual
+
+
+
+
+
+
+
+
+Related Documentation
+
+
+
+
+
+
+MySQL 8.0 Release Notes
+
+
+MySQL 8.0 Source Code Documentation
+
+
+
+
+
+
+
+
+
+            Download
+                            this Manual
+                    
+
+
+
+
+
+
+
+
+PDF (US Ltr)
+
+            - 43.2Mb
+
+
+PDF (A4)
+
+            - 43.3Mb
+
+
+Man Pages (TGZ)
+
+            - 295.2Kb
+
+
+Man Pages (Zip)
+
+            - 400.4Kb
+
+
+Info (Gzip)
+
+            - 4.3Mb
+
+
+Info (Zip)
+
+            - 4.3Mb
+
+
+
+
+
+
+
+
+Excerpts from this Manual
+
+
+
+
+
+
+MySQL Globalization
+
+
+MySQL Information Schema
+
+
+MySQL Installation Guide
+
+
+Security in MySQL
+
+
+Starting and Stopping MySQL
+
+
+MySQL and Linux/Unix
+
+
+MySQL and Windows
+
+
+MySQL and macOS
+
+
+MySQL and Solaris
+
+
+Building MySQL from Source
+
+
+MySQL Restrictions and Limitations
+
+
+MySQL Partitioning
+
+
+MySQL Tutorial
+
+
+MySQL Performance Schema
+
+
+MySQL Replication
+
+
+Using the MySQL Yum Repository
+
+
+MySQL NDB Cluster 8.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+version 8.0
+            
+
+
+
+
+
+                        26.7
+                                            
+
+
+
+                        9.7
+                                                 current
+                                            
+
+
+
+                        8.4
+                                            
+
+
+
+
+
+                                    8.0 
+                                                                            Japanese
+                                                                    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+MySQL 8.0 Reference Manual
+  / 
+                            
+...
+  / 
+
+
+
+
+The InnoDB Storage Engine
+  / 
+                                                            
+InnoDB Locking and Transaction Model
+  / 
+                                                                                        
+
+                                        InnoDB Transaction Model
+                                    
+
+
+
+
+
+
+
+
+
+
+
+
+17.7.2 InnoDB Transaction Model
+
+
+
+
+
+
+
+
+
+
+17.7.2.1 Transaction Isolation Levels
+17.7.2.2 autocommit, Commit, and Rollback
+17.7.2.3 Consistent Nonlocking Reads
+17.7.2.4 Locking Reads
+
+
+
+
+
+      The 
+InnoDB
+ transaction model aims to combine
+      the best properties of a
+      
+multi-versioning
+ database with
+      traditional two-phase locking. 
+InnoDB
+ performs
+      locking at the row level and runs queries as nonlocking
+      
+consistent reads
+ by
+      default, in the style of Oracle. The lock information in
+      
+InnoDB
+ is stored space-efficiently so that lock
+      escalation is not needed. Typically, several users are permitted
+      to lock every row in 
+InnoDB
+ tables, or any
+      random subset of the rows, without causing
+      
+InnoDB
+ memory exhaustion.
+
+
+
+
+
+
+
+
+
+
+
+ PREV
+  
+
+ HOME
+  
+        
+ UP
+  
+    
+NEXT 
+
+
+
+
+
+
+
+
+
+
+Related Documentation
+
+
+
+
+
+
+MySQL 8.0 Release Notes
+
+
+MySQL 8.0 Source Code Documentation
+
+
+
+
+
+
+
+
+
+            Download
+                            this Manual
+                    
+
+
+
+
+
+
+
+
+PDF (US Ltr)
+
+            - 43.2Mb
+
+
+PDF (A4)
+
+            - 43.3Mb
+
+
+Man Pages (TGZ)
+
+            - 295.2Kb
+
+
+Man Pages (Zip)
+
+            - 400.4Kb
+
+
+Info (Gzip)
+
+            - 4.3Mb
+
+
+Info (Zip)
+
+            - 4.3Mb
+
+
+
+
+
+
+
+
+Excerpts from this Manual
+
+
+
+
+
+
+MySQL Globalization
+
+
+MySQL Information Schema
+
+
+MySQL Installation Guide
+
+
+Security in MySQL
+
+
+Starting and Stopping MySQL
+
+
+MySQL and Linux/Unix
+
+
+MySQL and Windows
+
+
+MySQL and macOS
+
+
+MySQL and Solaris
+
+
+Building MySQL from Source
+
+
+MySQL Restrictions and Limitations
+
+
+MySQL Partitioning
+
+
+MySQL Tutorial
+
+
+MySQL Performance Schema
+
+
+MySQL Replication
+
+
+Using the MySQL Yum Repository
+
+
+MySQL NDB Cluster 8.0
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,60 @@
+Get started | Docker Docs
+
+
+
+
+
+
+Start a new chat
+
+
+
+
+When enabled, Gordon considers the current page you're viewing
+to provide more relevant answers.
+Share feedback
+Answers are generated based on the documentation.
+
+
+
+
+Back
+Get started
+
+
+
+
+
+
+
+
+Guides
+
+
+Manuals
+
+
+Reference
+Install what you need
+Docker
+Install Docker
+Get Docker Desktop or Docker Engine for your operating system.
+Docker Sandboxes
+Install Docker Sandboxes
+Install the sbx command to run coding agents in isolated environments.
+Choose a tutorial
+New to Docker
+Build and share a containerized application
+Run a container and an application stack, build an image, and share it through Docker Hub.
+AI developers
+Run your coding agent in a sandbox
+Move your existing full-autonomy coding-agent workflow into a disposable Docker Sandbox.
+Administrators
+Roll out Docker to a pilot group
+Invite a pilot user, apply a Docker Desktop policy, and verify the managed experience.
+
+
+Edit this page
+
+
+Request changes

@@ -1,0 +1,602 @@
+[
+ {
+  "category": "redis",
+  "question": "Memcached 与 Redis 的对比？",
+  "answer": "总结（TL;DR）\n\n\n更新于 2017 年 6 月 3 日\n\n\nRedis 比 memcached 更强大、更受欢迎，并且拥有更好的支持。Memcached 只能完成 Redis 能做的一小部分功能。即使在功能重叠的地方，Redis 也更胜一筹。\n\n\n对于任何新项目，请使用 Redis。\n\n\nMemcached 与 Redis：直接对比\n\n\n这两种工具都是强大、快速的内存数据存储，可用作缓存。它们都能通过缓存数据库结果、HTML 片段或其他生成成本高昂的内容来帮助加速你的应用程序。\n\n\n考虑要点\n\n\n当用于相同目的时，以下是它们根据原问题中“考虑要点”的对比：\n\n\n\n\n读写速度\n：两者都极其快速。基准测试因工作负载、版本和许多其他因素而异，但通常显示 redis 与 memcached 一样快或几乎一样快。我推荐 redis，但不是因为 memcached 慢。它并不慢。\n\n\n内存使用\n：Redis 更好。\n\n\n\nmemcached：你指定缓存大小，随着插入项目，守护进程会迅速增长到略大于此大小。除非重启 memcached，否则永远无法真正回收这部分空间。即使所有键都过期了，你刷新了数据库，它仍会占用你配置的全部 RAM。\n\n\nredis：最大大小由你设置。Redis 永远不会使用超过必要的内存，并会归还不再使用的内存。\n\n\n我向两者各存储了 100,000 个约 2KB 的随机句子字符串（约 200MB）。Memcached 的 RAM 使用增长到约 225MB。Redis 的 RAM 使用增长到约 228MB。刷新两者后，redis 降至约 29MB，而 memcached 保持在约 225MB。它们在存储数据的效率上相似，但只有一种能够回收内存。\n\n\n\n\n\n\n磁盘 I/O 转储\n：redis 明显胜出，因为它默认执行此操作，并且具有高度可配置的持久化。Memcached 没有第三方工具就无法转储到磁盘。\n\n\n扩展性\n：两者在需要超过单个实例作为缓存之前都提供了大量余量。Redis 包含帮助你进一步扩展的工具，而 memcached 没有。\n\n\n\n\nmemcached\n\n\nMemcached 是一个简单的易失性缓存服务器。它允许你存储键/值对，其中值仅限于最大 1MB 的字符串。\n\n\n它擅长这一点，但仅此而已。你可以以极高的速度通过键访问这些值，通常能饱和可用的网络甚至内存带宽。\n\n\n当你重启 memcached 时，数据会丢失。这对于缓存来说没问题。你不应该在那里存储任何重要内容。\n\n\n如果你需要高性能或高可用性，有第三方工具、产品和服务可用。\n\n\nredis\n\n\nRedis 可以完成 memcached 能做的相同工作，并且做得更好。\n\n\nRedis 也可以\n充当缓存\n。它也可以存储键/值对。在 redis 中，它们甚至可以高达 512MB。\n\n\n你可以关闭持久化，它也会在重启时愉快地丢失数据。如果你希望缓存在重启后存活，它也允许你这样做。事实上，这是默认设置。\n\n\n它也超级快，通常受网络或内存带宽限制。\n\n\n如果一个 redis/memcached 实例不足以满足你的工作负载性能，redis 是明确的选择。Redis 包含\n集群支持\n，并“开箱即用”地附带高可用性工具（\nredis-sentinel\n）。在过去几年中，redis 在第三方工具方面也已成为明显的领导者。像 Redis Labs、Amazon 等公司提供了许多有用的 redis 工具和服务。围绕 redis 的生态系统要大得多。大规模部署的数量现在可能超过 memcached。\n\n\nRedis 超集\n\n\nRedis 不仅仅是缓存。它是一个内存数据结构服务器。下面你将快速了解 Redis 除了像 memcached 这样的简单键/值缓存之外还能做什么。\n大多数\n redis 的功能是 memcached 无法做到的。\n\n\n文档\n\n\nRedis 的文档比 memcached 更好。虽然这可能是主观的，但似乎越来越真实。\n\n\nredis.io\n 是一个极好的易于导航的资源。它让你\n在浏览器中尝试 redis\n，甚至为文档中的每个命令提供实时交互示例。\n\n\n现在 redis 在 stackoverflow 上的结果数量是 memcached 的两倍。Google 结果也是两倍。更多语言中更易访问的示例。更活跃的开发。更活跃的客户端开发。这些指标单独可能意义不大，但结合起来描绘了一幅清晰的画面：redis 的支持和文档更丰富且更新得多。\n\n\n持久化\n\n\n默认情况下，redis 使用一种称为快照的机制将数据持久化到磁盘。如果你有足够的 RAM，它能够以几乎无性能损失的方式将所有数据写入磁盘。几乎免费！\n\n\n在快照模式下，突然崩溃可能会导致少量数据丢失。如果你绝对需要确保数据永不丢失，别担心，redis 通过 AOF（Append Only File）模式也为你提供了支持。在这种持久化模式下，数据可以在写入时同步到磁盘。这可能会将最大写入吞吐量降低到磁盘写入速度，但仍应相当快。\n\n\n如果需要，有许多配置选项可以微调持久化，但默认值非常合理。这些选项使 redis 易于设置为安全、冗余的数据存储位置。它是一个\n真正的\n数据库。\n\n\n多种数据类型\n\n\nMemcached 仅限于字符串，但 Redis 是一个数据结构服务器，可以提供多种不同的数据类型。它还提供了充分利用这些数据类型所需的命令。\n\n\n字符串（\n命令\n）\n\n\n简单的文本或二进制值，大小可达 512MB。这是 redis 和 memcached 唯一共享的数据类型，尽管 memcached 字符串限制为 1MB。\n\n\nRedis 通过提供位运算、位级操作、浮点递增/递减支持、范围查询和多键操作等命令，为你提供了更多利用此数据类型的工具。Memcached 不支持任何这些。\n\n\n字符串适用于各种用例，这就是为什么 memcached 仅凭此数据类型就相当有用。\n\n\n哈希（\n命令\n）\n\n\n哈希有点像键值存储中的键值存储。它们在字符串字段和字符串值之间映射。使用哈希的字段->值映射比使用常规字符串的键->值映射略更节省空间。\n\n\n哈希可用作命名空间，或当你想要逻辑分组多个键时。使用哈希，你可以高效地获取所有成员、一起过期所有成员、一起删除所有成员等。非常适合任何需要分组多个键/值对的用例。\n\n\n哈希的一个示例用途是存储应用程序之间的用户配置文件。以用户 ID 为键存储的 redis 哈希将允许你存储关于用户的任意多位数据，同时将它们保存在单个键下。使用哈希而不是将配置文件序列化为字符串的优点是，你可以让不同的应用程序读写用户配置文件中的不同字段，而不必担心一个应用覆盖其他应用所做的更改（如果序列化过时数据，可能会发生这种情况）。\n\n\n列表（\n命令\n）\n\n\nRedis 列表是有序的字符串集合。它们针对从列表顶部或底部（即：左侧或右侧）插入、读取或删除值进行了优化。\n\n\nRedis 提供了许多\n命令\n来利用列表，包括推送/弹出项目、在列表之间推送/弹出、截断列表、执行范围查询等命令。\n\n\n列表可以制作出色的持久、原子队列。这些非常适合作业队列、日志、缓冲区以及许多其他用例。\n\n\n集合（\n命令\n）\n\n\n集合是唯一值的无序集合。它们经过优化，让你快速检查值是否在集合中、快速添加/删除值，以及测量与其他集合的重叠。\n\n\n这些非常适合访问控制列表、唯一访客跟踪器以及许多其他事物。大多数编程语言都有类似的东西（通常称为 Set）。这就像那样，只是分布式的。\n\n\nRedis 提供了几个\n命令\n来管理集合。明显的如添加、删除和检查集合都存在。不太明显的命令如弹出/读取随机项以及与其他集合执行并集和交集的命令也存在。\n\n\n有序集合（\n命令\n）\n\n\n有序集合也是唯一值的集合。顾名思义，这些是有序的。它们按分数排序，然后按字典序排序。\n\n\n此数据类型针对按分数快速查找进行了优化。获取最高、最低或介于两者之间的任何值范围都极其快速。\n\n\n如果你将用户及其高分添加到有序集合中，你就拥有了一个完美的排行榜。当新的高分出现时，只需再次将它们及其高分添加到集合中，它就会重新排序你的排行榜。也非常适合跟踪用户上次访问时间以及谁在你的应用程序中活跃。\n\n\n存储具有相同分数的值会导致它们按字典序排序（想想字母顺序）。这对于自动完成功能等很有用。\n\n\n许多有序集合\n命令\n类似于集合的命令，有时带有额外的分数参数。还包括管理分数和按分数查询的命令。\n\n\n地理\n\n\nRedis 有几个\n命令\n用于存储、检索和测量地理数据。这包括半径查询和测量点之间的距离。\n\n\n技术上，redis 中的地理数据存储在有序集合中，所以这不是一个真正独立的数据类型。它更像是有序集合之上的扩展。\n\n\n位图和 HyperLogLog\n\n\n像地理一样，这些不是完全独立的数据类型。这些命令允许你将字符串数据视为位图或 hyperloglog。\n\n\n位图是我在\n```Strings```\n下引用的位级运算符的用途。这种数据类型是 reddit 最近的协作艺术项目：\nr/Place\n 的基本构建块。\n\n\nHyperLogLog 允许你使用恒定极小的空间来以惊人的准确性计数几乎无限的唯一值。仅使用约 16KB，你就可以高效地计数你网站的唯一访客数量，即使该数字达到数百万。\n\n\n事务和原子性\n\n\nRedis 中的命令是原子的，意味着你可以确信一旦你向 redis 写入一个值，该值就对所有连接到 redis 的客户端可见。无需等待该值传播。技术上 memcached 也是原子的，但 redis 在 memcached 之外添加了所有这些功能，值得注意的是，所有这些额外的数据类型和功能也是原子的，这有些令人印象深刻。\n\n\n虽然与关系数据库中的事务不完全相同，但 redis 也有使用“乐观锁定”（\nWATCH\n/\nMULTI\n/\nEXEC\n）的\n事务\n。\n\n\n管道\n\n\nRedis 提供了一个称为‘\n管道\n’的功能。如果你有许多想要执行的 redis 命令，你可以使用管道将它们一次性发送到 redis，而不是一次一个。\n\n\n通常，当你向 redis 或 memcached 执行命令时，每个命令都是一个单独的请求/响应周期。使用管道，redis 可以缓冲多个命令并一次性执行它们，在单个回复中响应所有命令的所有响应。\n\n\n这可以让你在批量导入或其他涉及大量命令的操作中实现更大的吞吐量。\n\n\n发布/订阅\n\n\nRedis 有专门用于\n发布/订阅功能\n的\n命令\n，允许 redis 充当高速消息广播器。这允许单个客户端向连接到通道的许多其他客户端发布消息。\n\n\nRedis 的发布/订阅几乎与任何工具一样好。像\nRabbitMQ\n这样的专用消息代理可能在某些领域有优势，但同一服务器还可以为你提供持久耐用的队列和你的发布/订阅工作负载可能需要的其他数据结构，这一事实通常证明 Redis 是最佳且最简单的工具。\n\n\nLua 脚本\n\n\n你可以将\nlua 脚本\n视为 redis 自己的 SQL 或存储过程。它既多于又少于那个，但这个类比大体上有效。\n\n\n也许你有复杂的计算想让 redis 执行。也许你无法承受事务回滚，并且需要保证复杂过程的每一步都以原子方式发生。这些问题以及更多问题可以通过 lua 脚本解决。\n\n\n整个脚本以原子方式执行，所以如果你能将逻辑放入 lua 脚本中，你通常可以避免处理乐观锁定事务。\n\n\n扩展性\n\n\n如上所述，redis 包含对集群的内置支持，并捆绑了自己的高可用性工具，称为\n```redis-sentinel```\n。\n\n\n结论\n\n\n我毫不犹豫地推荐 redis 而不是 memcached，对于任何新项目，或者尚未使用 memcached 的现有项目。\n\n\n上面可能听起来我不喜欢 memcached。相反：它是一个强大、简单、稳定、成熟且经过强化的工具。甚至有一些用例它比 redis 稍快。我喜欢 memcached。我只是认为它对未来发展没有太大意义。\n\n\nRedis 能做 memcached 所做的一切，通常更好。memcached 的任何性能优势都是微小的且特定于工作负载。也有一些工作负载 redis 会更快，以及更多 redis 能做而 memcached 根本无法做的工作负载。在功能上的巨大鸿沟以及两种工具都如此快速和高效，它们很可能成为你基础设施中最后需要担心扩展的部分这一事实面前，微小的性能差异似乎微不足道。\n\n\n只有一种场景 memcached 更有意义：memcached 已经作为缓存使用。如果你已经在使用 memcached 缓存，那么如果它满足你的需求，就继续使用它。迁移到 redis 可能不值得努力，如果你只是为了缓存而使用 redis，它可能无法提供足够的益处来值得你的时间。如果 memcached 不满足你的需求，那么你可能应该迁移到 redis。无论你是需要超越 memcached 的扩展还是需要额外功能，这都是正确的。",
+  "link": "https://stackoverflow.com/questions/10558465/memcached-vs-redis"
+ },
+ {
+  "category": "redis",
+  "question": "如何在 Redis 中删除所有内容？",
+  "answer": "使用 redis-cli：\n\n\n\n\nFLUSHDB\n – 删除连接当前数据库中的所有键。\n\n\nFLUSHALL\n – 删除当前主机上所有数据库中的所有键。\n\n\n\n\n例如，在你的 shell 中：\n\n\n```redis-cli flushall\n```",
+  "link": "https://stackoverflow.com/questions/6851909/how-do-i-delete-everything-in-redis"
+ },
+ {
+  "category": "redis",
+  "question": "如何使用 Redis 原子性地删除匹配某个模式的键",
+  "answer": "在 bash 中执行：\n\n\n```redis-cli KEYS \"prefix:*\" | xargs redis-cli DEL\n```\n\n\n更新\n\n\n好的，我明白了。那这种方式怎么样：存储一个当前额外的增量前缀，并将其添加到所有键中。例如：\n\n\n你有这样的值：\n\n\n```prefix_prefix_actuall = 2\nprefix:2:1 = 4\nprefix:2:2 = 10\n```\n\n\n当你需要清除数据时，先修改 prefix_actuall（例如设置 prefix_prefix_actuall = 3），这样你的应用就会把新数据写入键 prefix:3:1 和 prefix:3:2。然后你就可以安全地从 prefix:2:1 和 prefix:2:2 中取出旧值，并清除旧键。",
+  "link": "https://stackoverflow.com/questions/4006324/how-to-atomically-delete-keys-matching-a-pattern-using-redis"
+ },
+ {
+  "category": "redis",
+  "question": "如何在 Windows 上运行 Redis？",
+  "answer": "历史上，微软有一个 \nRedis 的 Windows 移植版\n，以 \nRedis-64\n 的形式发布，提供了适用于 Windows 的完整 Redis 发行版。\n\n\n微软的这个移植版 \n现在已弃用\n，但已经出现了一些替代方案来填补这一空白：\n\n\n\n\nMemurai\n 是 Redis-64 弃用页面上官方推荐的替代方案；它是一个商业产品，提供免费的开发者层级，由 Janea Systems 维护\n\n\nredis-windows\n 是另一个非官方移植版，它也存在\n\n\n\n\n\n\n这个发行版包含 \n```redis-server.exe```\n（在 Memurai 上是 \n```memurai.exe```\n）应用程序，它会在你的 Windows 机器上以服务方式运行一个 Redis 实例，还包含 \n```redis-cli.exe```\n（在 Memurai 上是 \n```memurai-cli.exe```\n），你可以用它来与任何 Redis 实例交互。\n\n\nRGL 仓库\n 在历史上曾被列为 Redis 的另一个 Windows 移植版，但这个仓库已经有一段时间没有维护了，而且实现的 Redis 版本比微软的移植版更旧。",
+  "link": "https://stackoverflow.com/questions/6476945/how-do-i-run-redis-on-windows"
+ },
+ {
+  "category": "redis",
+  "question": "获取所有可用键的 Redis 命令是什么？",
+  "answer": "尝试查看 \n```KEYS```\n 命令。\n```KEYS *```\n 将列出存储在 redis 中的所有键。\n\n\n编辑：\n 请注意 \n```KEYS```\n 文档页面顶部的警告：\n\n\n\n\n时间复杂度：\n O(N)，其中 N 是数据库中的键数量，假设数据库中的键名和给定模式具有有限长度。\n\n\n\n\n更新（V2.8 或更高版本）：\n \n```SCAN```\n 是 \n```KEYS```\n 的更优替代方案，因为它不会阻塞服务器，也不会消耗大量资源。建议优先使用它。",
+  "link": "https://stackoverflow.com/questions/5252099/redis-command-to-get-all-available-keys"
+ },
+ {
+  "category": "redis",
+  "question": "MISCONF Redis 被配置为保存 RDB 快照",
+  "answer": "重启你的 redis 服务器。\n\n\n\n\nmacOS (brew)\n：\n```brew services restart redis```\n。\n\n\nLinux：\n \n```sudo service redis restart```\n / \n```sudo systemctl restart redis```\n\n\nWindows：\n \nWindows\n + \nR\n -> 输入 \n```services.msc```\n，\nEnter\n -> 搜索 \n```Redis```\n 然后点击 \n```restart```\n。\n\n\n\n\n我在使用 Brew 升级 redis（\n```brew upgrade```\n）后遇到了这个问题。\n\n\n重启笔记本电脑后，它立即恢复正常。",
+  "link": "https://stackoverflow.com/questions/19581059/misconf-redis-is-configured-to-save-rdb-snapshots"
+ },
+ {
+  "category": "redis",
+  "question": "如何停止 redis-server？",
+  "answer": "可以连接到节点实例并使用 \nshutdown\n 命令，或者如果你在 ubuntu 上，可以尝试通过 init.d 重启 redis 服务器：\n\n\n```/etc/init.d/redis-server restart\n```\n\n\n或者停止/启动它：\n\n\n```/etc/init.d/redis-server stop\n/etc/init.d/redis-server start\n```\n\n\n在 Mac 上\n\n\n```redis-cli shutdown\n```",
+  "link": "https://stackoverflow.com/questions/6910378/how-can-i-stop-redis-server"
+ },
+ {
+  "category": "redis",
+  "question": "Express.js 是什么？",
+  "answer": "1) Express.js 是什么？\n\n\n\n\nExpress.js\n 是一个 \nNode.js\n 框架。它是目前最流行的框架（在 NPM 上获得最多星标）。\n\n\n。\n\n\n它围绕 Connect 中间件的配置和细粒度简洁性构建。有些人将 Express.js 比作 \nRuby Sinatra\n，而非臃肿且固执己见的 \nRuby on Rails\n。\n\n\n\n\n2) 它与 Node.js 一起使用的目的是什么？\n\n\n\n\n这样你就不必一遍又一遍地重复相同的代码。Node.js 是一种底层 \nI/O\n 机制，带有一个 HTTP 模块。如果你只使用 HTTP 模块，很多工作，比如解析 payload、cookies、存储会话（在内存或 \nRedis\n 中）、基于 \n正则表达式\n 选择正确的路由模式，都 \n必须\n 重新实现。使用 Express.js，这些都已经为你准备好了。\n\n\n\n\n3) 我们为什么真的需要 Express.js？它与 Node.js 一起使用对我们有什么用处？\n\n\n\n\n第一个答案应该能回答你的问题。如果不能，那就试着用纯 Node.js（即只使用核心模块）编写一个小型 \nREST\n API 服务器，然后再用 Express.js 编写。后者将花费你少 5-10 倍的时间和代码行数。\n\n\n\n\nRedis 是什么？它随 Express.js 一起提供吗？\n\n\n\n\nRedis 是一种快速的持久化键值存储。你可以选择用它来配合 Express.js 存储会话，但并非必须。默认情况下，Express.js 使用内存存储来保存会话。Redis 也可以用于排队任务，例如邮件任务。\n\n\n查看 \n我的 Express.js REST API 服务器教程\n。\n\n\n\n\nMVC 但并非自身实现\n\n\n\n\nExpress.js \n不是\n 一个自身的 model-view-controller 框架。你需要自带对象关系映射库，例如用于 MongoDB 的 Mongoose、用于 SQL 数据库的 Sequelize（\nhttp://sequelizejs.com\n）、用于多种数据库的 Waterline（\nhttps://github.com/balderdashy/waterline\n）加入技术栈。\n\n\n\n\n替代方案\n\n\n\n\n其他值得考虑的 Node.js 框架（\nhttps://www.quora.com/Node-js/Which-Node-js-framework-is-best-for-building-a-RESTful-API\n）：\n\n\n更新：我整理了这个资源，帮助人们选择 Node.js 框架：\nhttp://nodeframework.com\n\n\n更新2：我们在 nodeframework.com 上添加了一些 GitHub 统计数据，所以现在你可以在一个页面上比较 30 多个框架的社会证明水平（GitHub 星标）。\n\n\n\n\n全栈：\n\n\n\n\nhttp://sailsjs.org\n\n\nhttp://derbyjs.com/\n\n\n\n\n仅 REST API：\n\n\n\n\nhttp://mcavage.github.io/node-restify/\n\n\n\n\n类似 Ruby on Rails：\n\n\n\n\nhttp://railwayjs.com\n\n\nhttp://geddyjs.org\n\n\n\n\n类似 Sinatra：\n\n\n\n\nhttp://expressjs.com/\n\n\n\n\n其他：\n\n\n\n\nhttp://flatironjs.org\n\n\nhttps://github.com/isaacs/npm-www\n\n\nhttp://frisbyjs.com/\n\n\n\n\n中间件：\n\n\n\n\nhttp://www.senchalabs.org/connect/\n\n\n\n\n静态站点生成器：\n\n\n\n\nhttp://docpad.org\n\n\nhttps://github.com/jnordberg/wintersmith\n\n\nhttp://blacksmith.jit.su/\n\n\nhttps://github.com/felixge/node-romulus\n\n\nhttps://github.com/caolan/petrify",
+  "link": "https://stackoverflow.com/questions/12616153/what-is-express-js"
+ },
+ {
+  "category": "redis",
+  "question": "何时使用 Redis？何时使用 MongoDB？",
+  "answer": "我认为，这取决于你的开发团队类型以及应用需求。\n\n\n例如，如果你需要大量\n查询\n，这通常意味着使用 Redis 会给开发者带来更多工作量，因为你的数据可能存储在多种专用数据结构中，每种对象类型都经过定制以提升效率。而在 MongoDB 中，由于数据结构更加一致，同样的查询可能更容易实现。另一方面，在 Redis 中，\n极致的速度\n是对处理各种数据存储结构额外工作量的回报。\n\n\nMongoDB 提供了简洁性，对于有传统数据库和 SQL 经验的开发者来说学习曲线短得多。然而，Redis 的非传统方法需要更多学习投入，但灵活性更高。\n\n\n例如，\n缓存\n层可能更适合用 Redis 实现。对于模式化程度更高的数据，MongoDB 更合适。\n[注：从技术上讲，MongoDB 和 Redis 都是无模式的]\n\n\n如果你问我，我个人在大多数需求下会选择 Redis。\n\n\n最后，希望到现在你已经看过\nhttp://antirez.com/post/MongoDB-and-Redis.html",
+  "link": "https://stackoverflow.com/questions/5400163/when-to-redis-when-to-mongodb"
+ },
+ {
+  "category": "redis",
+  "question": "WRONGTYPE 操作针对持有错误类型值的键 php",
+  "answer": "Redis 支持多种数据类型。你需要知道某个键映射的值是什么类型。对于每种数据类型，获取它的命令都不同。\n\n\n使用\n```TYPE key```\n命令来检查某个键映射的值的类型。\n\n\n以下是一些常见数据类型的键值获取命令：\n\n\n\n\n\n\n\n\n数据类型\n\n\n命令\n\n\n功能\n\n\n\n\n\n\n\n\n\n\nstring\n\n\n```GET key```\n\n\n获取值\n\n\n\n\n\n\nhash\n\n\n```HKEYS key```\n\n\n列出字段\n\n\n\n\n\n\n\n\n```HGET key field```\n\n\n获取字段值\n\n\n\n\n\n\n\n\n```HMGET key field field…```\n\n\n获取多个字段值\n\n\n\n\n\n\n\n\n```HGETALL key```\n\n\n获取所有字段值\n\n\n\n\n\n\nlist\n\n\n```LLEN key```\n\n\n获取长度\n\n\n\n\n\n\n\n\n```LINDEX key index```\n\n\n获取指定索引处的值\n\n\n\n\n\n\n\n\n```LRANGE key start stop```\n\n\n获取范围内的值\n\n\n\n\n\n\nset\n\n\n```SMEMBERS key```\n\n\n列出所有集合成员\n\n\n\n\n\n\nsorted set\n\n\n```ZSCORE key member```\n\n\n获取成员的分数\n\n\n\n\n\n\nstream\n\n\n```XRANGE key start stop```\n\n\n获取范围内的流条目",
+  "link": "https://stackoverflow.com/questions/37953019/wrongtype-operation-against-a-key-holding-the-wrong-kind-of-value-php"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 字符串 vs Redis 哈希来表示 JSON：效率如何？",
+  "answer": "这篇文章可以提供很多见解：\n内存优化\n\n\n在 Redis 中存储对象数组有很多种方式（剧透：对于大多数用例，我喜欢选项 1）：\n\n\n\n\n将整个对象作为 JSON 编码字符串存储在单个键中，并使用一个 set（或 list，如果更合适）跟踪所有对象。例如：\n\n\n```INCR id:users\nSET user:{id} '{\"name\":\"Fred\",\"age\":25}'\nSADD users {id}\n```\n\n\n一般来说，这在大多数情况下可能是最好的方法。如果对象中有很多字段，你的对象没有与其他对象嵌套，并且你倾向于一次只访问一小部分字段，那么选项 2 可能更好。\n\n\n优点：被认为是“良好实践”。每个对象都是一个完整的 Redis 键。JSON 解析很快，尤其是当你需要一次性访问该对象的许多字段时。\n缺点：当你只需要访问单个字段时较慢。\n\n\n\n\n将每个对象的属性存储在一个 Redis hash 中。\n\n\n```INCR id:users\nHMSET user:{id} name \"Fred\" age 25\nSADD users {id}\n```\n\n\n优点：被认为是“良好实践”。每个对象都是一个完整的 Redis 键。无需解析 JSON 字符串。\n缺点：当你需要访问对象中全部/大部分字段时可能较慢。此外，嵌套对象（对象中的对象）不容易存储。\n\n\n\n\n将每个对象作为 JSON 字符串存储在一个 Redis hash 中。\n\n\n```INCR id:users\nHMSET users {id} '{\"name\":\"Fred\",\"age\":25}'\n```\n\n\n这允许你稍微整合一下，只使用两个键而不是很多键。明显的缺点是，你无法为每个用户对象设置 TTL（以及其他内容），因为它只是 Redis hash 中的一个字段，而不是一个完整的 Redis 键。\n\n\n优点：JSON 解析很快，尤其是当你需要一次性访问该对象的许多字段时。对主键命名空间的“污染”更少。\n缺点：当你有大量对象时，内存使用量与 #1 大致相同。当你只需要访问单个字段时，比 #2 慢。可能不被认为是“良好实践”。\n\n\n\n\n将每个对象的每个属性存储在专用键中。\n\n\n```INCR id:users\nSET user:{id}:name \"Fred\"\nSET user:{id}:age 25\nSADD users {id}\n```\n\n\n根据上面的文章，这个选项几乎从不被首选（除非对象的属性需要特定的 TTL 或其他东西）。\n\n\n优点：对象属性是完整的 Redis 键，这对你的应用来说可能并不算过度。\n缺点：慢，使用更多内存，并且不被认为是“最佳实践”。对主键命名空间造成大量污染。\n\n\n\n\n\n\n总体总结\n\n\n选项 4 通常不是首选。选项 1 和 2 非常相似，而且两者都很常见。我（一般来说）更喜欢选项 1，因为它允许你存储更复杂的对象（具有多层嵌套等）。当你真的在意不污染主键命名空间时（即你不希望数据库中有很多键，并且你不在意 TTL、键分片之类的东西），会使用选项 3。",
+  "link": "https://stackoverflow.com/questions/16375188/redis-strings-vs-redis-hashes-to-represent-json-efficiency"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 使用的底层数据结构是什么？",
+  "answer": "我会尝试回答你的问题，但我会先从一个乍看可能有些奇怪的说法开始：如果你对 Redis 内部实现不感兴趣，你就不应该关心数据类型在内部是如何实现的。原因很简单：对于每一个 Redis 操作，你都可以在文档中找到时间复杂度；而如果你有了操作集合和时间复杂度，唯一还需要的就是关于内存使用的一些线索（而且由于我们做了许多可能因数据而异的优化，获得这些数字的最佳方式是做一些简单的真实世界测试）。\n\n\n但既然你问了，下面是每种 Redis 数据类型的底层实现。\n\n\n\n\n字符串使用 C 动态字符串库实现，这样我们在 append 操作中（从渐进意义上说）不必为分配付出代价。例如，这样我们就有 O(N) 的 append，而不是二次行为。\n\n\n列表使用链表实现。\n\n\n集合和哈希使用哈希表实现。\n\n\n有序集合使用跳表实现（一种特殊类型的平衡树）。\n\n\n\n\n但是当列表、集合和有序集合在元素数量以及最大值大小方面都很小时，会使用一种不同的、更紧凑的编码。这种编码因类型而异，但其特点是它是一个紧凑的数据块，通常会在每次操作时强制进行 O(N) 扫描。由于我们只对小对象使用这种格式，所以这不是问题；扫描一个小型 O(N) 数据块是缓存无关的，因此实际上非常快；当元素太多时，编码会自动切换为原生编码（链表、哈希等）。\n\n\n但你的问题实际上并不只是关于内部实现，你的重点是“用什么类型来完成什么任务？”。\n\n\n字符串\n\n\n这是所有类型的基础类型。它是四种类型之一，但也是复杂类型的基础类型，因为 List 是字符串的列表，Set 是字符串的集合，等等。\n\n\n在你想要存储 HTML 页面的所有显而易见场景中，Redis 字符串都是一个好主意；当你想要避免转换已经编码的数据时也是如此。例如，如果你有 JSON 或 MessagePack，你可能只需将对象存储为字符串。在 Redis 2.6 中，你甚至可以使用 Lua 脚本在服务端操作这种对象。\n\n\n字符串的另一个有趣用法是位图，以及一般的随机访问字节数组，因为 Redis 导出了访问随机字节范围甚至单个位的命令。例如，看看这篇不错的博客文章：使用 Redis 实现快速简单的实时指标。\n\n\n列表\n\n\n当你可能只接触列表的两端时，列表很好：靠近尾部或靠近头部。列表不太适合分页内容，因为随机访问很慢，为 O(N)。\n因此列表的良好用途是普通队列和栈，或者使用 RPOPLPUSH 并将源和目标设为同一个，在循环中处理项目以“旋转”一组项目。\n\n\n当我们只想创建一个包含 N 个项目的有上限集合，并且通常只访问顶部或底部项目，或者当 N 很小时，列表也很有用。\n\n\n集合\n\n\n集合是无序的数据集合，因此每当你有一个项目集合，并且非常重要的是以非常快的方式检查存在性或集合大小时，它们都很好。集合的另一个很酷之处是支持窥视或弹出随机元素（SRANDMEMBER 和 SPOP 命令）。\n\n\n集合也适合表示关系，例如“用户 X 的朋友是谁？”等等。但对于这类东西，另一个好的数据结构是有序集合，我们稍后会看到。\n\n\n集合支持交集、并集等复杂操作，因此当你拥有数据并希望对这些数据执行转换以获得某种输出时，这是一种以“计算”方式使用 Redis 的好数据结构。\n\n\n小集合会以非常高效的方式编码。\n\n\n哈希\n\n\n哈希是表示由字段和值组成的对象的完美数据结构。哈希的字段也可以使用 HINCRBY 原子性地递增。当你拥有诸如用户、博客文章或某种其他“项目”之类的对象时，如果你不想使用自己的编码如 JSON 或类似方式，哈希很可能是合适的选择。\n\n\n然而，请记住，小哈希会被 Redis 非常高效地编码，并且你可以要求 Redis 以非常快的方式原子性地 GET、SET 或递增单个字段。\n\n\n哈希也可以使用引用来表示链式数据结构。例如，看看 lamernews.com 对评论的实现。\n\n\n有序集合\n\n\n有序集合是除列表之外唯一维护有序元素的数据结构。你可以用有序集合做很多很酷的事情。例如，你可以在 Web 应用中拥有各种“Top Something”列表。按分数排名的顶级用户、按页面浏览量排名的顶级帖子、顶级任何东西，但单个 Redis 实例每秒将支持大量插入和获取顶部元素操作。\n\n\n有序集合和普通集合一样，可以用来描述关系，但它们还允许你对项目列表进行分页并记住顺序。例如，如果我用有序集合记住用户 X 的朋友，我就可以轻松地按成为好友的顺序记住他们。\n\n\n有序集合适合优先队列。\n\n\n有序集合就像更强大的列表，在其中从列表中间插入、删除或获取范围总是很快。但它们使用更多内存，并且是 O(log(N)) 数据结构。\n\n\n结论\n\n\n我希望我在这篇文章中提供了一些信息，但从 http://github.com/antirez/lamernews 下载 lamernews 的源代码并理解其工作方式会好得多。Lamer News 内部使用了许多 Redis 数据结构，并且有很多关于使用什么来解决给定任务的线索。\n\n\n抱歉有语法拼写错误，这里已经是午夜了，我太累了，没法再检查这篇文章 ;)",
+  "link": "https://stackoverflow.com/questions/9625246/what-are-the-underlying-data-structures-used-for-redis"
+ },
+ {
+  "category": "redis",
+  "question": "Linux - 仅安装 redis-cli",
+  "answer": "Ubuntu（在 14.04 上测试过）有一个名为\n```redis-tools```\n的包，其中包含\n```redis-cli```\n以及其他工具。\n要安装它，请输入：\n\n\n```sudo apt-get install redis-tools\n```\n\n\n注意，在 Ubuntu 16.04+ 上，命令略有不同：\n\n\n```sudo apt install redis-tools\n```",
+  "link": "https://stackoverflow.com/questions/21795340/linux-install-redis-cli-only"
+ },
+ {
+  "category": "redis",
+  "question": "WSL Redis 遇到 System has not been booted with systemd as init system (PID 1). Can't operate",
+  "answer": "相反，使用：\n```sudo service redis-server start```\n\n\n我遇到了同样的问题，在 WSL 中的 Ubuntu 内停止/启动其他服务。这个方法有效，而 systemctl 则不行。\n\n\n有人可能会合理地问：“你怎么知道服务名是 'redis-server'？”你可以使用\n```service --status-all```\n来查看它们。",
+  "link": "https://stackoverflow.com/questions/52197246/wsl-redis-encountered-system-has-not-been-booted-with-systemd-as-init-system-pi"
+ },
+ {
+  "category": "redis",
+  "question": "检查 Redis 服务器版本",
+  "answer": "$ redis-server --version\n\n\n\n\n即可获取版本信息。",
+  "link": "https://stackoverflow.com/questions/21555942/check-redis-server-version"
+ },
+ {
+  "category": "redis",
+  "question": "使用 homebrew 安装后，无法连接到 Redis，地址为 127.0.0.1:6379：连接被拒绝",
+  "answer": "安装 \n```redis```\n 后，在 \n```terminal```\n 中输入：\n\n\n```redis-server\n```\n\n\nRedis-Server 将会启动。",
+  "link": "https://stackoverflow.com/questions/42857551/could-not-connect-to-redis-at-127-0-0-16379-connection-refused-with-homebrew"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 键命名规范是什么？",
+  "answer": "Redis 中键的常规命名规范是什么？我见过用 : 分隔的值，但我不确定常规规范是什么，或者为什么这样。\n\n\n\n\n是的，冒号符号 \n```:```\n 是命名键时的一种惯例。在 Redis 网站上的这个教程中提到：\n尽量遵循一种模式。例如 \"object-type:id:field\" 可能是个好主意，比如 \"user:1000:password\"。我喜欢用点号来表示多词字段，比如 \"comment:1234:reply.to\"。\n\n\n\n\n能否只查询键的开头部分来返回所有用户？\n\n\n\n\n如果你指的是直接查询所有以 \n```user:```\n 开头的键，有一个 \nkeys\n 命令可以做到。然而，这个命令只应用于调试目的，因为它是 \nO(N)\n 的，因为它会搜索数据库中存储的所有键。\n\n\n对于这个问题，更合适的解决方案是创建一个专用键，我们将其命名为 \n```users```\n，它将存储所有用户键，例如，在 \nlist\n 或 \nset\n 数据结构中。",
+  "link": "https://stackoverflow.com/questions/6965451/redis-key-naming-conventions"
+ },
+ {
+  "category": "redis",
+  "question": "如何列出所有 Redis 数据库？",
+  "answer": "没有命令可以做到这一点（就像你对 MySQL 所做的那样）。Redis 数据库的数量是固定的，并在配置文件中设置。默认情况下，你有 16 个数据库。每个数据库由一个数字标识（而不是名称）。\n\n\n你可以使用以下命令来了解数据库的数量：\n\n\n```CONFIG GET databases\n1) \"databases\"\n2) \"16\"\n```\n\n\n你可以使用以下命令来列出定义了某些键的数据库：\n\n\n```INFO keyspace\n# Keyspace\ndb0:keys=10,expires=0\ndb1:keys=1,expires=0\ndb3:keys=1,expires=0\n```\n\n\n请注意，你应该使用 \"redis-cli\" 客户端来运行这些命令，而不是 telnet。如果你想使用 telnet，那么你需要使用 Redis 协议格式化这些命令。\n\n\n例如：\n\n\n```*2\n$4\nINFO\n$8\nkeyspace\n\n$79\n# Keyspace\ndb0:keys=10,expires=0\ndb1:keys=1,expires=0\ndb3:keys=1,expires=0\n```\n\n\n你可以在这里找到 Redis 协议的描述：\n\nhttp://redis.io/topics/protocol",
+  "link": "https://stackoverflow.com/questions/12802726/how-to-list-all-redis-databases"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 只是一个缓存吗？",
+  "answer": "不，Redis 远不止是一个缓存。\n\n\n和缓存一样，Redis 存储键值对。但与缓存不同的是，Redis 允许你对值进行操作。Redis 中有 5 种数据类型——Strings、Sets、Hashs、Lists 和 Sorted Sets。每种数据类型都提供了多种操作。\n\n\n理解 Redis 的最佳方式是先对应用进行建模，而不必考虑如何将其存储到数据库中。\n\n\n假设我们要构建 StackOverflow.com。为简单起见，我们需要 Questions、Answers、Tags 和 Users。\n\n\n对 Questions、Users 和 Answers 建模\n\n\n每个对象都可以建模为一个 Map。例如，一个 Question 是一个包含以下字段的 map：\n```{id, title, date_asked, votes, asked_by, status}```\n。类似地，一个 Answer 是一个包含以下字段的 map：\n```{id, question_id, answer_text, answered_by, votes, status}```\n。同样，我们也可以对 user 对象进行建模。\n\n\n这些对象中的每一个都可以直接作为 Hash 存储在 Redis 中。要生成唯一 id，你可以使用原子递增命令。类似这样：\n\n\n```$ HINCRBY unique_ids question 1\n(integer) 1\n$ HMSET question:1 title \"Is Redis just a cache?\" asked_by 12 votes 0\nOK\n\n$ HINCRBY unique_ids answer 1\n(integer) 1\n$ HMSET answer:1 question_id 1 answer_text \"No, its a lot more\" answered_by 15 votes 1\nOK\n```\n\n\n处理点赞\n\n\n现在，每当有人给某个 question 或 answer 点赞时，你只需要这样做：\n\n\n```$ HINCRBY question:1 votes 1\n(integer) 1\n$ HINCRBY question:1 votes 1\n(integer) 2\n```\n\n\n首页的 Questions 列表\n\n\n接下来，我们想存储最新的 questions 以在首页展示。如果你在编写 .NET 或 Java 程序，你会把 questions 存储在一个 List 中。事实证明，这也是在 Redis 中存储它的最佳方式。\n\n\n每当有人提出一个问题时，我们就将其 id 添加到列表中：\n\n\n```$ lpush questions question:1\n(integer) 1\n$ lpush questions question:2\n(integer) 1\n```\n\n\n现在，当你想渲染首页时，你向 Redis 请求最新的 25 个 questions：\n\n\n```$ lrange questions 0 24\n1) \"question:100\"\n2) \"question:99\"\n3) \"question:98\"\n4) \"question:97\"\n5) \"question:96\"\n...\n25) \"question:76\"\n```\n\n\n现在你有了这些 id，就可以使用 pipelining 从 Redis 中检索条目并展示给用户。\n\n\n按 Tags 分类、按 Votes 排序的 Questions\n\n\n接下来，我们想按每个 tag 检索 questions。但 SO 允许你在每个 tag 下查看得票最高的 questions、新 questions 或未回答的 questions。\n\n\n为了对此建模，我们使用 Redis 的 Sorted Set 特性。Sorted Set 允许你将一个 score 与每个元素关联起来。然后你可以根据它们的 scores 来检索元素。\n\n\n让我们继续，为 Redis 这个 tag 来做这件事：\n\n\n```$ zadd questions_by_votes_tagged:redis 2 question:1 \n(integer) 1\n$ zadd questions_by_votes_tagged:redis 10 question:2 \n(integer) 1\n$ zadd questions_by_votes_tagged:redis 5 question:613 \n(integer) 1\n$ zrange questions_by_votes_tagged:redis 0 5 \n1) \"question:1\"\n2) \"question:613\"\n3) \"question:2\"\n$ zrevrange questions_by_votes_tagged:redis 0 5 \n1) \"question:2\"\n2) \"question:613\"\n3) \"question:1\"\n```\n\n\n我们在这里做了什么？我们把 questions 添加到一个 sorted set 中，并将一个 score（得票数）与每个 question 关联起来。每当一个 question 被点赞时，我们就递增它的 score。当用户点击“Questions tagged Redis, sorted by votes”时，我们只需执行一个 \n```zrevrange```\n 就能取回排名靠前的 questions。\n\n\n无需刷新页面的实时 Questions\n\n\n最后，还有一个附加功能。如果你保持 questions 页面打开，当有新 question 被添加时，SO 会通知你。Redis 在这里能帮上什么忙呢？\n\n\nRedis 有一个 pub-sub 模型。你可以创建 channels，例如 \"channel_questions_tagged_redis\"。然后你让用户 \n```subscribe```\n 到某个特定的 channel。当有新 question 被添加时，你会向该 channel \n```publish```\n 一条消息。所有用户随后都会收到这条消息。你还需要使用 web sockets 或 comet 之类的 web 技术来真正将消息传递到浏览器，但 Redis 会在服务器端帮你处理所有的底层管道工作。\n\n\n持久化、可靠性等\n\n\n与缓存不同，Redis 会将数据持久化到硬盘上。你可以采用 master-slave 架构来提供更好的可靠性。要了解更多，请查阅 \nhere\n 上的 Persistence 和 Replication 主题。",
+  "link": "https://stackoverflow.com/questions/10137857/is-redis-just-a-cache"
+ },
+ {
+  "category": "redis",
+  "question": "如何连接到远程 Redis 服务器？",
+  "answer": "```redis-cli -h XXX.XXX.XXX.XXX -p YYYY\n```\n\n\n```xxx.xxx.xxx.xxx```\n 是 IP 地址，\n```yyyy```\n 是端口\n\n\n来自我的开发环境的示例\n\n\n```redis-cli -h 10.144.62.3 -p 30000\n```\n\n\nREDIS CLI 命令\n\n\n\n\n主机、端口、密码和数据库 默认情况下，redis-cli 连接到\n127.0.0.1 端口 6379 上的服务器。正如你所料，你可以轻松地使用命令行选项来更改这一点。要指定不同的主机名或\nIP 地址，请使用 -h。要设置不同的端口，请使用 -p。\n\n\nredis-cli -h redis15.localnet.org -p 6390 ping",
+  "link": "https://stackoverflow.com/questions/40678865/how-to-connect-to-remote-redis-server"
+ },
+ {
+  "category": "redis",
+  "question": "多个 Redis 数据库有什么意义？",
+  "answer": "你不应该在单个 Redis 实例中使用多个数据库。正如你所指出的，多个实例可以让你利用多核的优势。如果使用数据库选择，升级时你将不得不重构。监控和管理多个实例并不困难，也不痛苦。\n\n\n实际上，通过基于实例的隔离，你可以获得每个数据库更好的指标。每个实例都会有反映该数据段的数据统计，这可以允许更好的调优以及更灵敏和准确的监控。使用较新的版本，并通过实例来分离你的数据。\n\n\n正如 Jonaton 所说，不要使用 keys 命令。如果你简单地创建一个键索引，你会发现性能要好得多。每当添加一个键时，将键名添加到一个集合中。一旦规模扩大，keys 命令就不太有用了，因为它需要相当长的时间才能返回。\n\n\n让访问模式决定如何构建你的数据，而不是按照你认为可行的方式存储数据，然后再围绕之后如何访问和处理它来工作。你将看到更好的性能，并且发现处理数据的代码通常更加清晰和简单。\n\n\n关于单线程，考虑到 Redis 是为速度和原子性设计的。当然，修改一个数据库中数据的操作不需要等待另一个数据库，但如果该操作是保存到转储文件，或者在从节点上处理事务呢？那时你就开始陷入并发编程的复杂细节中了。\n\n\n通过使用多个实例，你将多线程的复杂性转变为一个更简单的消息传递风格系统。",
+  "link": "https://stackoverflow.com/questions/16221563/whats-the-point-of-multiple-redis-databases"
+ },
+ {
+  "category": "redis",
+  "question": "为什么我们需要像 RabbitMQ 这样的消息代理，而不是像 PostgreSQL 这样的数据库？",
+  "answer": "Rabbit 的队列驻留在内存中，因此比在数据库中实现这一点要快得多。一个（好的）专用消息队列还应该提供基本的队列相关功能，例如节流/流控，以及选择不同路由算法的能力，仅举几例（RabbitMQ 提供了这些以及更多功能）。根据你项目的规模，你可能还希望消息传递组件与数据库分离，这样如果一个组件承受重负载，它就不必妨碍另一个组件的运行。\n\n\n至于你提到的问题：\n\n\n\n\n轮询使数据库繁忙且性能低下\n：使用 RabbitMQ，生产者可以向消费者\n推送\n更新，这比轮询性能高得多。数据在需要时被简单地发送给消费者，消除了浪费的检查需求。\n\n\n\n\n表锁定 -> 同样性能低下：\n 没有表需要锁定 :P\n\n\n\n\n数百万行任务 -> 同样轮询性能低下：\n 如上所述，RabbitMQ 由于驻留在 RAM 中，运行速度更快，并提供流控。如果需要，它还可以在 RAM 耗尽时使用磁盘临时存储消息。在 2.0 之后，Rabbit 在 RAM 使用方面有了显著改进。集群选项也可用。\n\n\n\n\n\n\n关于 AMQP，我想说一个非常酷的功能是“exchange”，以及它路由到其他 exchange 的能力。这为你提供了更多灵活性，并使你能够创建各种各样的精细路由拓扑，这在扩展时非常方便。一个好的例子，请参见：\n\n\n\n\n（来源：\nspring.io\n）\n\n\n以及：\nhttps://web.archive.org/web/20130730091944/http://blog.springsource.org/2011/04/01/routing-topologies-for-performance-and-scalability-with-rabbitmq/\n\n\n最后，关于 Redis，是的，它可以用作消息代理，并且可以做得很好。然而，RabbitMQ 比 Redis 有更多的消息队列功能，因为 RabbitMQ 是从头开始构建为一个全功能的企业级专用消息队列。另一方面，Redis 主要被创建为一个内存键值存储（尽管它现在做的远不止这些；它甚至被称为瑞士军刀）。尽管如此，我读到/听到许多人在较小的项目中使用 Redis 取得了良好结果，但在较大的应用中很少听说。\n\n\n这里有一个 Redis 用于长轮询聊天实现的例子：\nhttps://web.archive.org/web/20180523045840/http://eflorenzano.com/blog/2011/02/16/technology-behind-convore/",
+  "link": "https://stackoverflow.com/questions/13005410/why-do-we-need-message-brokers-like-rabbitmq-over-a-database-like-postgresql"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 是单线程的，那么它是如何实现并发 I/O 的？",
+  "answer": "这取决于你如何定义并发。\n\n\n在服务器端软件中，并发和并行通常被视为不同的概念。在服务器中，支持并发 I/O 意味着服务器能够通过仅使用一个计算单元执行与多个客户端对应的多个流程来为这些客户端提供服务。在这种情况下，并行意味着服务器能够同时执行多项任务（使用多个计算单元），这是不同的。\n\n\n例如，一个酒保能够同时照顾多个顾客，但他一次只能准备一杯饮料。因此，他可以提供并发，但没有并行。\n\n\n这个问题在这里有过讨论：\n\n并发和并行之间有什么区别？\n\n\n另请参阅\n这个演示\n，来自 Rob Pike。\n\n\n一个单线程程序完全可以通过使用 I/O（解）多路复用机制和事件循环（这正是 Redis 所做的）在 I/O 层面提供并发。\n\n\n并行是有代价的：在现代硬件上可以找到的多路套接字/多核，线程之间的同步极其昂贵。另一方面，像 Redis 这样高效的存储引擎的瓶颈往往首先是网络，远早于 CPU。因此，隔离的事件循环（不需要同步）被视为构建高效、可扩展服务器的良好设计。\n\n\nRedis 操作是原子的这一事实仅仅是单线程事件循环的结果。有趣的一点是，原子性是在没有额外成本的情况下提供的（它不需要同步）。用户可以借此实现乐观锁和其他模式，而无需支付同步开销。",
+  "link": "https://stackoverflow.com/questions/10489298/redis-is-single-threaded-then-how-does-it-do-concurrent-i-o"
+ },
+ {
+  "category": "redis",
+  "question": "打印 Redis 中的键数量",
+  "answer": "你可以发出 INFO 命令，它返回有关服务器的信息和统计信息。请参阅\n这里\n以获取示例输出。\n\n\n正如 mVChr 在评论中提到的，你可以直接在 redis-cli 上使用 \n```info keyspace```\n。\n\n\n```redis> INFO\n# Server\nredis_version:6.0.6\nredis_git_sha1:00000000\nredis_git_dirty:0\nredis_build_id:b63575307aaffe0a\nredis_mode:standalone\nos:Linux 5.4.0-1017-aws x86_64\narch_bits:64\nmultiplexing_api:epoll\natomicvar_api:atomic-builtin\ngcc_version:9.3.0\nprocess_id:2854672\nrun_id:90a5246f10e0aeb6b02cc2765b485d841ffc924e\ntcp_port:6379\nuptime_in_seconds:2593097\nuptime_in_days:30\nhz:10\nconfigured_hz:10\nlru_clock:4030200\nexecutable:/usr/local/bin/redis-server\n```",
+  "link": "https://stackoverflow.com/questions/9888387/print-number-of-keys-in-redis"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 会持久化数据吗？",
+  "answer": "我建议你阅读 \nhttp://redis.io/topics/persistence\n 上的相关内容。\n基本上，当你仅使用内存存储来提升性能时，就会失去有保证的持久性。想象这样一个场景：你 INSERT 到内存中，但在它被持久化到磁盘之前断电了。这就会导致数据丢失。\n\n\nRedis 支持所谓的“快照”。这意味着它会在某些时间点（例如每小时整点）对内存中的内容做一次完整拷贝。如果在两次快照之间断电，你就会丢失上一次快照到崩溃之间（不一定是断电……）的数据。和大多数 NoSQL 数据库一样，Redis 在数据安全性和性能之间做权衡。\n\n\n大多数 NoSQL 数据库采用多节点复制来尽量降低这种风险。Redis 更被认为是一个高速缓存，而不是一个保证数据一致性的数据库。因此它的用例通常与真正的数据库不同：\n例如，你可以用它存储会话、性能计数器或其他内容，性能无与伦比，而且即使崩溃也不会有真正的损失。但处理订单/购买历史等则被认为是传统数据库的工作。",
+  "link": "https://stackoverflow.com/questions/25328317/does-redis-persist-data"
+ },
+ {
+  "category": "redis",
+  "question": "如何将 Redis 数据库从一台服务器迁移到另一台？",
+  "answer": "首先，在服务器 A 上创建一个 dump。\n\n\n```A$ redis-cli\n127.0.0.1:6379> CONFIG GET dir\n1) \"dir\"\n2) \"/var/lib/redis/\"\n127.0.0.1:6379> SAVE\nOK\n```\n\n\n这可以确保 \n```dump.rdb```\n 完全是最新的，并显示它存储在哪里（本例中是 \n```/var/lib/redis/dump.rdb```\n）。 \n```dump.rdb```\n 也会定期自动写入磁盘。\n\n\n接下来，把它复制到服务器 B：\n\n\n```A$ scp /var/lib/redis/dump.rdb myuser@B:/tmp/dump.rdb\n```\n\n\n停止 B 上的 Redis 服务器，复制 dump.rdb（确保权限与之前相同），然后启动。\n\n\n```B$ sudo service redis-server stop\nB$ sudo cp /tmp/dump.rdb /var/lib/redis/dump.rdb\nB$ sudo chown redis: /var/lib/redis/dump.rdb\nB$ sudo service redis-server start\n```\n\n\nB 上的 Redis 版本必须大于或等于 A 上的版本，否则可能会遇到 \n兼容性问题\n。",
+  "link": "https://stackoverflow.com/questions/6004915/how-do-i-move-a-redis-database-from-one-server-to-another"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 缓存与直接使用内存的对比",
+  "answer": "Redis 是一个\n远程\n数据结构服务器。它肯定比仅仅将数据存储在本地内存中要慢（因为涉及通过网络套接字往返来获取/存储数据）。然而，它也带来了一些有趣的特性：\n\n\n\n\nRedis 可以被应用程序的所有进程访问，这些进程可能运行在多个节点上（这是本地内存无法实现的）。\n\n\nRedis 的内存存储非常高效，并且在单独的进程中完成。如果应用程序运行在内存由垃圾回收机制管理的平台上（如 node.js、java 等……），它允许处理更大的内存缓存/存储。实际上，非常大的堆在垃圾回收语言中表现不佳。\n\n\n如果需要，Redis 可以将数据持久化到磁盘上。\n\n\nRedis 不仅仅是一个简单的缓存：它提供了多种数据结构、多种条目淘汰策略、阻塞队列、发布/订阅、原子性、Lua 脚本等……\n\n\nRedis 可以通过主/从机制复制其活动，以实现高可用性。\n\n\n\n\n基本上，如果你的应用程序需要在多个节点上扩展并共享相同的数据，那么像 Redis（或任何其他远程键/值存储）这样的东西将是必需的。",
+  "link": "https://stackoverflow.com/questions/19477821/redis-cache-vs-using-memory-directly"
+ },
+ {
+  "category": "redis",
+  "question": "何时应该使用像 Redis 这样的键/值存储来替代或配合 SQL 数据库？",
+  "answer": "我似乎无法弄清楚在应用程序中何时该使用它。\n\n\n\n\n我建议你阅读\n这个\n教程，其中也包含了用例。由于 Redis 更偏向于内存导向，它非常适合频繁更新的实时数据，如会话存储、状态数据库、统计信息、缓存，而其\n高级数据结构\n为许多其他场景提供了多样性。\n\n\n然而，Redis 并不是经典关系数据库的 NoSQL 替代品，因为它不支持 RDBMS 领域的许多标准功能，例如对数据的查询，这可能会使其变慢。替代品更多是像 MongoDB 或 CouchDB 这样的文档数据库，而 Redis 在补充特定功能方面表现出色，尤其是在速度和高级数据结构支持方面非常方便。",
+  "link": "https://stackoverflow.com/questions/7535184/when-to-use-a-key-value-store-such-as-redis-instead-along-side-of-a-sql-database"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 比 MongoDB 快多少？",
+  "answer": "根据以下基准测试的大致结果：\n写入速度是 2 倍，读取速度是 3 倍。\n\n\n下面是一个简单的 Python 基准测试，你可以根据自己的需求进行调整。我当时是想看看它们在简单地设置/获取值时各自的表现如何：\n\n\n```#!/usr/bin/env python2.7\nimport sys, time\nfrom pymongo import Connection\nimport redis\n\n# connect to redis & mongodb\nredis = redis.Redis()\nmongo = Connection().test\ncollection = mongo['test']\ncollection.ensure_index('key', unique=True)\n\ndef mongo_set(data):\n    for k, v in data.iteritems():\n        collection.insert({'key': k, 'value': v})\n\ndef mongo_get(data):\n    for k in data.iterkeys():\n        val = collection.find_one({'key': k}, fields=('value',)).get('value')\n\ndef redis_set(data):\n    for k, v in data.iteritems():\n        redis.set(k, v)\n\ndef redis_get(data):\n    for k in data.iterkeys():\n        val = redis.get(k)\n\ndef do_tests(num, tests):\n    # setup dict with key/values to retrieve\n    data = {'key' + str(i): 'val' + str(i)*100 for i in range(num)}\n    # run tests\n    for test in tests:\n        start = time.time()\n        test(data)\n        elapsed = time.time() - start\n        print \"Completed %s: %d ops in %.2f seconds : %.1f ops/sec\" % (test.__name__, num, elapsed, num / elapsed)\n\nif __name__ == '__main__':\n    num = 1000 if len(sys.argv) == 1 else int(sys.argv[1])\n    tests = [mongo_set, mongo_get, redis_set, redis_get] # order of tests is significant here!\n    do_tests(num, tests)\n```\n\n\n使用 mongodb 1.8.1、redis 2.2.5 以及最新的 pymongo/redis-py 得到的结果如下：\n\n\n```$ ./cache_benchmark.py 10000\nCompleted mongo_set: 10000 ops in 1.40 seconds : 7167.6 ops/sec\nCompleted mongo_get: 10000 ops in 2.38 seconds : 4206.2 ops/sec\nCompleted redis_set: 10000 ops in 0.78 seconds : 12752.6 ops/sec\nCompleted redis_get: 10000 ops in 0.89 seconds : 11277.0 ops/sec\n```\n\n\n当然，这些结果仅供参考！如果你使用其他语言编程、使用其他客户端/不同的实现等，结果会有很大差异。更不用说你的使用场景会完全不同！最好的办法是你自己按照实际打算使用的方式来进行基准测试。顺带一提，你很可能也会因此弄清楚使用每一种工具的最佳方式。永远要自己动手做基准测试！",
+  "link": "https://stackoverflow.com/questions/5252577/how-much-faster-is-redis-than-mongodb"
+ },
+ {
+  "category": "redis",
+  "question": "如何清空一个 Redis 数据库？",
+  "answer": "你有两个选择：\n\n\n\n\nFLUSHDB\n - 清除当前活动的数据库\n\n\nFLUSHALL\n - 清除所有现有的数据库",
+  "link": "https://stackoverflow.com/questions/5756067/how-to-empty-a-redis-database"
+ },
+ {
+  "category": "redis",
+  "question": "如何在 Redis 中为 HSET 的子键设置 EXPIRE？",
+  "answer": "正如评论中所指出的，从 7.4 版本开始，可以使用 hexpire 来实现：\nhttps://redis.io/docs/latest/commands/hexpire/\n\n\n\n\n以前这是不可能的，\n为了保持 Redis 的简单性\n。\n\n\n引用 Redis 的创造者 Antirez 的话：\n\n\n\n\n你好，这是不可能的，要么为该特定字段使用不同的顶级键，要么在存储字段的同时存储另一个带有过期时间的字段，获取两者，并让应用程序根据当前时间判断它是否仍然有效。",
+  "link": "https://stackoverflow.com/questions/16545321/how-to-expire-the-hset-child-key-in-redis"
+ },
+ {
+  "category": "redis",
+  "question": "Mac（OS X）：有没有办法只安装 redis-cli？",
+  "answer": "如果你使用 homebrew 安装 redis，你可以这样查看包中的内容：\n\n\n```brew install redis\nbrew ls redis\n```\n\n\n你会发现它实际上只安装了很少的文件：\n\n\n```/usr/local/Cellar/redis/3.2.3/bin/redis-benchmark\n/usr/local/Cellar/redis/3.2.3/bin/redis-check-aof\n/usr/local/Cellar/redis/3.2.3/bin/redis-check-rdb\n/usr/local/Cellar/redis/3.2.3/bin/redis-cli\n/usr/local/Cellar/redis/3.2.3/bin/redis-sentinel\n/usr/local/Cellar/redis/3.2.3/bin/redis-server\n/usr/local/Cellar/redis/3.2.3/homebrew.mxcl.redis.plist\n```\n\n\n或者，你可以直接查看 homebrew 的 Cellar，像这样：\n\n\n```ls -lR /usr/local/Cellar/redis/3.2.3\ntotal 40\n-rw-r--r--  1 mark  admin  1487  2 Aug 10:00 COPYING\n-rw-r--r--  1 mark  admin   376  9 Aug 10:34 INSTALL_RECEIPT.json\n-rw-r--r--  1 mark  admin  6834  2 Aug 10:00 README.md\ndrwxr-xr-x  8 mark  admin   272  2 Aug 10:00 bin\n-rw-r--r--  1 mark  admin   785  9 Aug 10:34 homebrew.mxcl.redis.plist\n\n/usr/local/Cellar/redis/3.2.3/bin:\ntotal 3440\n-r-xr-xr-x  1 mark  admin   67668  2 Aug 10:00 redis-benchmark\n-r-xr-xr-x  1 mark  admin   13936  2 Aug 10:00 redis-check-aof\n-r-xr-xr-x  1 mark  admin  768704  2 Aug 10:00 redis-check-rdb\n-r-xr-xr-x  1 mark  admin  129712  2 Aug 10:00 redis-cli\nlrwxr-xr-x  1 mark  admin      12  2 Aug 10:00 redis-sentinel -> redis-server\n-r-xr-xr-x  1 mark  admin  768704  2 Aug 10:00 redis-server\n```\n\n\n所以，其中很多是许可证、README，而在 6 个二进制文件中，有一个还是符号链接。因此，它并不是一个包含大量服务和配置文件的重量级安装。\n\n\n\n\n顺便说一句，你总是可以拉取并运行 docker 的 redis-cli，而无需安装任何东西：\n\n\n```docker run --rm -it redis:alpine redis-cli -h 192.168.0.8     # 更改为你的 Redis 主机的 IP\n```\n\n\n\n\n如果你实际上只想安装尽可能少的软件，你其实根本不需要安装任何东西！Redis 协议相当简单，所以你可以在 bash 中构建一个命令并自己发送，像这样：\n\n\n```#!/bin/bash\n################################################################################\n# redis.sh\n# 非常、非常简单的 bash Redis 客户端\n# Mark Setchell\n# 用法：\n# redis.sh SET answer 42\n#\n# 参考：https://redis.io/topics/mass-insert\n################################################################################\nif [ $# -lt 2 ] ; then\n    echo \"用法：redis.sh SET answer 42\" >&2\n    exit 1\nfi\n\n# 构建协议字符串\nprotocol=\"*$#\\r\\n\"\n\nfor var in \"$@\" ; do\n   protocol+=\"$\" \n   protocol+=\"${#var}\\r\\n${var}\\r\\n\"\ndone\n\n# 发送到本地主机默认端口上的 Redis - 但你可以更改它\nprintf \"$protocol\" > /dev/tcp/localhost/6379\n```",
+  "link": "https://stackoverflow.com/questions/39704273/macos-x-is-there-a-way-to-install-only-redis-cli"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 连接 127.0.0.1:6379 失败 - connect ECONNREFUSED",
+  "answer": "安装 redis 后，在终端输入：\n\n\n```redis-server\n```\n\n\n这样 redis 就会运行起来",
+  "link": "https://stackoverflow.com/questions/8754304/redis-connection-to-127-0-0-16379-failed-connect-econnrefused"
+ },
+ {
+  "category": "redis",
+  "question": "与 Redis 相比，memcached 是否已经过时？",
+  "answer": "取决于你的需求，总体而言我认为：\n\n\n\n\n你不必过于在意性能。对于小值，Redis 单核更快，但 memcached 无需客户端协助即可通过单个可执行文件和 TCP 端口利用多核。此外，对于 100k 量级的大值，memcached 更快。Redis 最近在大值方面有了很大改进（unstable 分支），但在此用例中 memcached 仍然更快。关键在于：无论是哪一个，都不太可能成为你每秒查询数的瓶颈。\n\n\n你应该关注内存使用。对于简单的键值对，memcached 更节省内存。如果你使用 Redis hashes，Redis 更节省内存。取决于用例。\n\n\n你应该关注持久化和复制，这两个特性仅 Redis 提供。即使你的目标是构建缓存，在升级或重启后数据仍然存在也是有益的。\n\n\n你应该关注所需操作的类型。Redis 中有许多复杂操作，即使仅考虑缓存用例，你通常也能在单个操作中完成更多事情，而无需在客户端处理数据（有时需要大量 I/O）。这些操作通常与普通的 GET 和 SET 一样快。因此，如果你需要的不仅仅是 GET/SET，而是更复杂的功能，Redis 能帮上大忙（想想时间线缓存）。\n\n\n\n\n没有具体用例很难做出选择，但我认为对于许多场景 Redis 是合理的选择，因为即使你不把它当作数据库使用，它功能更强大，能解决更多问题，不仅是缓存，还包括消息传递、排名等等。\n\n\n附注：当然我可能有偏见，因为我是 Redis 项目的首席开发者。",
+  "link": "https://stackoverflow.com/questions/2873249/is-memcached-a-dinosaur-in-comparison-to-redis"
+ },
+ {
+  "category": "redis",
+  "question": "Redis Sentinel 与集群",
+  "answer": "首先，我们来谈谈 Sentinel。\n\n\nSentinel 负责管理故障转移；它并不负责为 Redis 配置高可用性。这是一个重要的区别。其次，你发布的图表实际上是一个糟糕的配置。你不应该将 Sentinel 运行在它所管理的 Redis 节点所在的同一台机器上。一旦那台主机宕机，你会同时失去两者。\n\n\n至于“这是否浪费资源？”，这取决于你的使用场景。在那个配置中，你不需要三个 Redis 节点；你只需要两个。三个节点增加了冗余性，但并非必需。如果你需要额外的冗余，那就不是浪费资源。如果你不需要冗余，那么只需运行一个 Redis 实例即可，因为运行更多实例就是“浪费”。\n\n\n运行两个从节点的另一个原因是为了分担读操作。同样，如果你需要它，那就不是浪费。\n\n\n至于“是否有更好的方式来充分利用可用资源？”，我们无法回答，因为这很大程度上取决于你的具体场景和代码。话虽如此，如果要存储的数据量“很小”且命令速率不是特别高，那么请记住，你不需要为 Redis 专门分配一台主机。\n\n\n现在来谈“Redis 集群是否是 Redis Sentinel 的替代方案”。\n这完全取决于你的使用场景。Redis Cluster 不是高可用性解决方案。它是一个多写入器/内存大于 RAM 的解决方案。如果你的目标仅仅是高可用性，那么它可能不适合你。Redis Cluster 存在一些限制，特别是在多键操作方面，因此它并不一定是简单的“直接使用集群”的操作。\n\n\n如果你认为运行三个 Redis 主机（以及三个运行 Sentinel 的主机）是浪费的，那么你可能会认为 Cluster 更加浪费，因为它确实需要更多资源。\n\n\n你所提出的问题可能过于宽泛且基于主观意见，难以按原样保留。如果你有正在处理的具体案例或问题，请更新问题，以便我们提供具体的帮助和信息。\n\n\n具体来说：\n\n\n针对你的场景进行正确的故障转移管理，我会选择三个 Sentinel，其中一个运行在你的 JBoss 服务器上。如果你有三个 JBoss 节点，那么每个节点上运行一个。我会将 Redis pod（主节点+从节点）放在不同的节点上，并让 Sentinel 管理故障转移。\n\n\n接下来就是将 JBoss/Jedis 配置为使用 Sentinel 来获取信息和进行连接管理。由于我不使用这些，快速搜索发现 Jedis 支持它。你只需要正确配置即可。我找到的一些示例在 \nHow can I set up a connection to Redis Sentinel using Jedis library?\n 和 \nHow can I use the Jedis API to handle failover (i.e., when the master server goes down)? #725\n 中，它们讨论了 \n```JedisSentinelPool```\n 是使用连接池的途径。\n\n\n当 Sentinel 执行故障转移时，客户端将断开连接，Jedis 将（应该？）通过询问 Sentinel 当前的主节点来处理重连。",
+  "link": "https://stackoverflow.com/questions/31143072/redis-sentinel-vs-clustering"
+ },
+ {
+  "category": "redis",
+  "question": "如何为 Redis 设置密码？",
+  "answer": "要设置密码，请编辑你的 redis.conf 文件，找到这一行 \n\n\n```# requirepass foobared\n```\n\n\n然后取消注释，并将 foobared 改为你的密码。确保选择一个相当长的密码，32 个字符左右可能不错，正如配置文件中的注释所提到的，外部用户很容易每秒猜测超过 15 万个密码。\n\n\n使用 predis 以新密码进行身份验证时，你展示的语法是正确的。只需将 password 添加为连接参数之一。\n\n\n要关闭 redis……请检查你的配置文件中的 \n```pidfile```\n 设置，它可能是 \n\n\n```pidfile /var/run/redis.pid\n```\n\n\n从命令行运行：\n\n\n```cat /var/run/redis.pid\n```\n\n\n这将给出正在运行的服务器的进程 ID，然后使用该 pid 终止进程： \n\n\n```kill 3832\n```\n\n\n更新\n\n\n我还想补充一点，你也可以让 \n```/etc/init.d/redis-server stop```\n 在你习惯的实时服务器上工作。 /etc/init.d/ 中的所有文件都只是 shell 脚本，将你本地服务器上的 redis-server 脚本复制到实时服务器的相同位置，然后用 vi 或你喜欢的工具查看它的作用，你可能需要修改一些路径等，但应该相当简单。",
+  "link": "https://stackoverflow.com/questions/7537905/how-to-set-password-for-redis"
+ },
+ {
+  "category": "redis",
+  "question": "为远程连接开放 Redis 端口",
+  "answer": "你是否在 Redis 服务器上设置了 bind 选项以允许远程访问？\n\n\n修改前（文件\n```/etc/redis/redis.conf```\n）\n\n\n```bind 127.0.0.1\n```\n\n\n修改后\n\n\n```bind 0.0.0.0\n```\n\n\n然后运行\n```sudo service redis-server restart```\n来重启服务器。如果问题不在这里，你可能需要检查是否有防火墙阻止了访问。\n\n\n重要提示：\n如果你没有使用防火墙（iptables、ufw 等）来控制谁可以连接到正在使用的端口，那么任何人都可以连接到这个 Redis 实例。如果不使用\nRedis 的\n```AUTH```\n，就意味着任何人都可以访问、修改或删除你的数据。请注意安全！",
+  "link": "https://stackoverflow.com/questions/19091087/open-redis-port-for-remote-connections"
+ },
+ {
+  "category": "redis",
+  "question": "redis-py：StrictRedis() 和 Redis() 有什么区别？",
+  "answer": "编辑：它们现在等价了：\n\n\n\n\nredis-py 3.0 放弃了对旧版 \"Redis\" 客户端类的支持。\n\"StrictRedis\" 已重命名为 \"Redis\"，并提供了一个名为\n\"StrictRedis\" 的别名，以便之前使用 \"StrictRedis\" 的用户\n可以继续运行而无需修改。\n\n\n\n\n原始回答：\n\n这一点看起来相当清楚\n：\n\n\n``` redis-py 暴露了两个客户端类来实现这些命令\n StrictRedis 类尝试遵循官方命令语法。\n```\n\n\n以及\n\n\n```除了上述变更之外，Redis 类作为 StrictRedis 的子类，\n还重写了若干其他命令，以提供对旧版 redis-py 的向后兼容性\n```\n\n\n你需要向后兼容吗？那就使用\n```Redis```\n。不在意？那就使用\n```StrictRedis```\n。\n\n\n\n\n2017-03-31\n\n\n以下是向后兼容的具体细节，来自所引用的 github.com 链接：\n\n\n\n\n除了上述变更之外，Redis 类作为 StrictRedis 的子类，还重写了若干其他命令，以提供对旧版 redis-py 的向后兼容性：\n\n\nLREM：'num' 和 'value' 参数的顺序被反转，以便 'num' 可以提供默认值零。\n\n\nZADD：Redis 规定 'score' 参数在 'value' 之前。在实现时这两者被意外交换了，直到人们已经在使用它之后才被发现。Redis 类期望 *args 的形式为：name1, score1, name2, score2, ...\n\n\nSETEX：'time' 和 'value' 参数的顺序被反转。",
+  "link": "https://stackoverflow.com/questions/19021765/redis-py-whats-the-difference-between-strictredis-and-redis"
+ },
+ {
+  "category": "redis",
+  "question": "在 Redis 中，名称长度会影响性能吗？",
+  "answer": "你提到的那个键其实并不算太长。\n\n\n你给出的示例键是用于集合的，集合的查找方法是 O(1)。集合上更复杂的操作（SDIFF、SUNION、SINTER）是 O(N)。很可能填充 \n```$userId```\n 比使用更长的键开销更大。\n\n\nRedis 自带一个名为 \n```redis-benchmark```\n 的基准测试工具，如果你修改 src/redis-benchmark.c 中的 \"GET\" 测试，让键只是 \"foo\"，你可以在 \n```make install```\n 之后运行短键测试：\n\n\n```diff --git a/src/redis-benchmark.c b/src/redis-benchmark.c\n--- a/src/redis-benchmark.c\n+++ b/src/redis-benchmark.c\n@@ -475,11 +475,11 @@\n         benchmark(\"MSET (10 keys)\",cmd,len);\n         free(cmd);\n\n-        len = redisFormatCommand(&cmd,\"SET foo:rand:000000000000 %s\",data);\n+        len = redisFormatCommand(&cmd,\"SET foo %s\",data);\n         benchmark(\"SET\",cmd,len);\n         free(cmd);\n\n-        len = redisFormatCommand(&cmd,\"GET foo:rand:000000000000\");\n+        len = redisFormatCommand(&cmd,\"GET foo\");\n         benchmark(\"GET\",cmd,len);\n         free(cmd);\n```\n\n\n以下是短键 \"foo\" 连续 3 次运行的 GET 测试速度：\n\n\n```59880.24 requests per second\n58139.53 requests per second\n58479.53 requests per second\n```\n\n\n以下是再次修改源码、将键改为 \"set-allBooksBelongToUser:1234567890\" 后的 GET 测试速度：\n\n\n```60240.96 requests per second\n60606.06 requests per second\n58479.53 requests per second\n```\n\n\n再将键改为 \"ipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumloreipsumlorem:1234567890\" 得到如下结果：\n\n\n```58479.53 requests per second\n58139.53 requests per second\n56179.77 requests per second\n```\n\n\n所以即使是非常非常长的键，对 Redis 的速度也没有太大影响。而且这还是 GET，一个 O(1) 操作。更复杂的操作对此甚至更不敏感。\n\n\n我认为，使用能清晰标识其所存值的键，其价值远远超过使用缩写键所能获得的微不足道的速度提升。\n\n\n如果你想进一步测试，redis-benchmark 工具上还有一个 \n```-r [keyspacelen]```\n 参数，可以让它创建随机键（只要键中包含 ':rand:' 即可），你只需在测试代码中把前缀的大小增加到你想要的任意长度即可。",
+  "link": "https://stackoverflow.com/questions/6320739/does-name-length-impact-performance-in-redis"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 和 Kafka 的区别",
+  "answer": "Redis 的 pub-sub 大多像一个即发即忘（fire and forget）的系统，你生产的所有消息会立即投递给所有消费者，数据不会保留在任何地方。使用 Redis 时你会受到内存方面的限制。此外，生产者和消费者的数量会影响 Redis 的性能。\n\n\n而 Kafka 则是一个高吞吐量、分布式的日志，可以用作队列。在这里，任意数量的用户都可以生产消息，消费者可以在他们想要的任何时间消费。它还为通过队列发送的消息提供持久化。\n\n\n最终结论：\n\n\n使用 Redis：\n\n\n\n\n如果你想要一种即发即忘的系统，你生产的所有消息都会立即投递给消费者。\n\n\n如果速度是最重要的。\n\n\n如果你能接受数据丢失。\n\n\n如果你不希望系统保留已发送的消息。\n\n\n要处理的数据量不会很大。\n\n\n\n\n使用 Kafka：\n\n\n\n\n如果你想要可靠性。\n\n\n如果你希望系统在消息被消费后仍保留一份已发送消息的副本。\n\n\n如果你无法接受数据丢失。\n\n\n如果速度不是大问题。\n\n\n数据量巨大。",
+  "link": "https://stackoverflow.com/questions/37990784/difference-between-redis-and-kafka"
+ },
+ {
+  "category": "redis",
+  "question": "Redis：能否为数组或有序集合中的元素设置过期时间？",
+  "answer": "有一种常见的模式可以很好地解决这个问题。\n\n\n使用有序集合，并以时间戳作为分数。这样，通过分数范围删除元素就变得非常简单，可以定期执行，也可以仅在每次写入时执行，而读取时始终忽略超出范围的元素，只读取特定分数范围内的元素。\n\n\n更多信息请见：\nhttps://groups.google.com/forum/#!topic/redis-db/rXXMCLNkNSs",
+  "link": "https://stackoverflow.com/questions/7577923/redis-possible-to-expire-an-element-in-an-array-or-sorted-set"
+ },
+ {
+  "category": "redis",
+  "question": "在命令行获取 Redis 的键和值",
+  "answer": "没有直接用于此目的的命令，但你可以编写脚本来实现。\n\n\n你需要对每个键执行 \"type\" 命令：\n\n\n```> type <key>\n```\n\n\n然后根据返回的类型执行相应的操作：\n\n\n\n\n对于 \"string\" 类型：\n```get <key>```\n\n\n对于 \"hash\" 类型：\n```hgetall <key>```\n\n\n对于 \"list\" 类型：\n```lrange <key> 0 -1```\n\n\n对于 \"set\" 类型：\n```smembers <key>```\n\n\n对于 \"zset\" 类型：\n```zrange <key> 0 -1 withscores```\n\n\n\n\n请注意，对于哈希和有序集合，你将获取到键/分数和值。\n\n\n一个可能的 \n```sh```\n 实现如下：\n\n\n```#!/bin/sh -eu\nkeys=`redis-cli keys '*'`\nif [ \"$keys\" ]; then\n    echo \"$keys\" | while IFS= read -r key; do\n        type=`echo | redis-cli type \"$key\"`\n        case \"$type\" in\n            string) value=`echo | redis-cli get \"$key\"`;;\n            hash) value=`echo | redis-cli hgetall \"$key\"`;;\n            set) value=`echo | redis-cli smembers \"$key\"`;;\n            list) value=`echo | redis-cli lrange \"$key\" 0 -1`;;\n            zset) value=`echo | redis-cli zrange \"$key\" 0 -1 withscores`;;\n        esac\n        echo \"> $key ($type):\"\n        echo \"$value\" | sed -E 's/^/    /'\n    done\nfi\n```\n\n\n但请注意：\n\n\n\n\n警告：请将 \n```KEYS```\n 视为在生产环境中应极其谨慎使用的命令。当对大型数据库执行时，它可能会严重影响性能。此命令旨在用于调试和特殊操作，例如更改键空间布局。\n\n\n\n\nhttps://redis.io/commands/keys",
+  "link": "https://stackoverflow.com/questions/8078018/get-redis-keys-and-values-at-command-prompt"
+ },
+ {
+  "category": "redis",
+  "question": "Redis：显示数据库大小/键的大小",
+  "answer": "所以我对自己的问题的解决方案是：在玩了一会儿\n```redis-cli```\n之后，我发现\n```DEBUG OBJECT <key>```\n会揭示类似键的\n```serializedlength```\n这样的信息，这实际上正是我一直在寻找的...\n\n\n对于整个数据库，你需要聚合\n```KEYS *```\n的所有值，这用你选择的脚本语言应该不会太难...\n\n\n不好的地方是\nredis.io\n并没有太多关于\n```DEBUG OBJECT```\n的信息。",
+  "link": "https://stackoverflow.com/questions/7638542/redis-show-database-size-size-for-keys"
+ },
+ {
+  "category": "redis",
+  "question": "当 Redis 内存耗尽时会发生什么？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/5068518/what-does-redis-do-when-it-runs-out-of-memory"
+ },
+ {
+  "category": "redis",
+  "question": "如何清除卡住/过期的 Resque worker？",
+  "answer": "这些解决方案对我都不起作用，我在 redis-web 中仍然会看到：\n\n\n```0 out of 10 Workers Working\n```\n\n\n最终，这个方法对我有效，可以清除所有 worker：\n\n\n```Resque.workers.each {|w| w.unregister_worker}\n```",
+  "link": "https://stackoverflow.com/questions/7416318/how-do-i-clear-stuck-stale-resque-workers"
+ },
+ {
+  "category": "redis",
+  "question": "如何禁用 Redis 的持久化？",
+  "answer": "要禁用 Redis 中的\n所有\n数据持久化，请在\n```redis.conf```\n文件中执行以下操作：\n\n\n\n\n通过将\n```appendonly```\n配置指令设置为\n```no```\n来禁用 AOF（这是默认值）。如下所示：\n\n\n```appendonly no\n```\n\n\n\n\n通过注释掉所有\n```save```\n配置指令（默认定义了 3 个）并显式禁用保存来禁用 RDB 快照：\n\n\n```#save 900 1\n#save 300 10\n#save 60 10000\nsave \"\"\n```\n\n\n\n\n\n\n更改后，请确保重启 Redis 以应用这些设置。\n\n\n或者，你可以使用\n```CONFIG SET```\n命令在运行时应用这些更改（只需确保同时执行\n```CONFIG REWRITE```\n以持久化更改）。\n\n\n注意：根据你的 Redis 版本，还有其他调整可以阻止 Redis 因复制相关任务而访问磁盘。",
+  "link": "https://stackoverflow.com/questions/28785383/how-to-disable-persistence-with-redis"
+ },
+ {
+  "category": "redis",
+  "question": "如何使用 Redis 存储和检索字典",
+  "answer": "你可以通过 \n```hmset```\n 来实现（使用 \n```hmset```\n 可以设置多个键）。\n\n\n```hmset(\"RedisKey\", dictionaryToSet)```\n\n\n```import redis\nconn = redis.Redis('localhost')\n\nuser = {\"Name\":\"Pradeep\", \"Company\":\"SCTL\", \"Address\":\"Mumbai\", \"Location\":\"RCP\"}\n\nconn.hmset(\"pythonDict\", user)\n\nconn.hgetall(\"pythonDict\")\n\n{'Company': 'SCTL', 'Address': 'Mumbai', 'Location': 'RCP', 'Name': 'Pradeep'}\n```",
+  "link": "https://stackoverflow.com/questions/32276493/how-to-store-and-retrieve-a-dictionary-with-redis"
+ },
+ {
+  "category": "redis",
+  "question": "使用 Python 获取 Redis 数据库中的所有键",
+  "answer": "使用 \n```scan_iter()```\n\n\n对于大量键的情况，\n```scan_iter()```\n 优于 \n```keys()```\n，因为它返回一个迭代器供你使用，而不是试图将所有键加载到内存中。\n\n\n我的 Redis 中有 10 亿条记录，我根本无法获得足够的内存一次性返回所有键。\n\n\n逐个扫描键\n\n\n以下是一个使用 \n```scan_iter()```\n 从存储中获取所有匹配模式的键并逐个删除它们的 Python 代码片段：\n\n\n```import redis\nr = redis.StrictRedis(host='localhost', port=6379, db=0)\nfor key in r.scan_iter(\"user:*\"):\n    # delete the key\n    r.delete(key)\n```\n\n\n批量扫描\n\n\n如果你有非常大量的键需要扫描——例如超过 10 万个键——批量扫描会更高效，如下所示：\n\n\n```import redis\nfrom itertools import izip_longest\n\nr = redis.StrictRedis(host='localhost', port=6379, db=0)\n\n# iterate a list in batches of size n\ndef batcher(iterable, n):\n    args = [iter(iterable)] * n\n    return izip_longest(*args)\n\n# in batches of 500 delete keys matching user:*\nfor keybatch in batcher(r.scan_iter('user:*'),500):\n    r.delete(*keybatch)\n```\n\n\n我对这个脚本进行了基准测试，发现使用 500 的批量大小比逐个扫描键快 5 倍。我测试了不同的批量大小（3、50、500、1000、5000），发现 500 的批量大小似乎是最优的。\n\n\n请注意，无论你使用 \n```scan_iter()```\n 还是 \n```keys()```\n 方法，操作都不是原子的，可能会在中途失败。\n\n\n绝对要避免在命令行中使用 XARGS\n\n\n我不推荐我在其他地方反复看到的这个示例。它会在 unicode 键上失败，而且即使对于中等数量的键也极其缓慢：\n\n\n```redis-cli --raw keys \"user:*\"| xargs redis-cli del\n```\n\n\n在这个示例中，xargs 为每个键创建一个新的 redis-cli 进程！这很糟糕。\n\n\n我对这种方法进行了基准测试，发现它比第一个逐个删除每个键的 Python 示例慢 4 倍，比批量删除 500 个键慢 20 倍。",
+  "link": "https://stackoverflow.com/questions/22255589/get-all-keys-in-redis-database-with-python"
+ },
+ {
+  "category": "redis",
+  "question": "如何浏览/查看存储在 Redis 中的值",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/12292351/how-can-i-browse-view-the-values-stored-in-redis"
+ },
+ {
+  "category": "redis",
+  "question": "使用 Celery 与 RQ 的优缺点",
+  "answer": "以下是我在尝试回答这个完全相同的问题时发现的内容。这可能并不全面，甚至在某些点上可能不准确。\n\n简而言之，RQ 在设计上整体更简单。Celery 则设计得更为健壮。两者都非常优秀。\n\n文档。\nRQ 的文档全面而不复杂，与项目整体的简洁性相呼应——你永远不会感到迷失或困惑。\nCelery 的文档同样全面，但在初次设置时，你会频繁地回看它，因为有太多选项需要内化。\n\n监控。\nCelery 的 Flower 和 RQ dashboard 都非常容易设置，并且至少能提供你所需信息的 90%。\n\nBroker 支持。Celery 明显胜出，RQ 仅支持 Redis。这意味着关于“什么是 broker”的文档较少，但也意味着如果 Redis 不再适合你，你无法在未来切换 broker。例如，Instagram 在使用 Celery 时同时考虑了 Redis 和 RabbitMQ。这一点很重要，因为不同的 broker 有不同的保证，例如 Redis 在撰写本文时无法 100% 保证消息被送达。\n\n优先级队列。RQ 的优先级队列模型简单有效——worker 按顺序从队列中读取。Celery 需要启动多个 worker 来从不同队列消费。两种方法都可行。\n\n操作系统支持。Celery 在这里明显胜出，因为 RQ 仅运行在支持 ```fork``` 的系统上，例如 Unix 系统。\n\n语言支持。RQ 仅支持 Python，而 Celery 允许你从一种语言发送任务到另一种语言。\n\nAPI。Celery 极其灵活（多种结果后端、良好的配置格式、工作流画布支持），但自然这种强大也可能令人困惑。相比之下，RQ 的 API 很简单。\n\n子任务支持。Celery 支持子任务（例如在现有任务中创建新任务）。我不知道 RQ 是否支持。\n\n社区与稳定性。Celery 可能更成熟，但两者都是活跃项目。在撰写本文时，Celery 在 Github 上有约 3500 个 star，而 RQ 有约 2000 个，两个项目都显示出活跃的开发。\n\n在我看来，Celery 并不像其名声所暗示的那样复杂，但你必须阅读手册。\n\n那么，为什么有人愿意用（可以说功能更全的）Celery 换取 RQ？在我看来，一切都归结为简洁性。通过将自己限制在 Redis+Unix，RQ 提供了更简单的文档、更简单的代码库和更简单的 API。这意味着你（以及你项目的潜在贡献者）可以专注于你关心的代码，而不必将任务队列系统的细节记在工作记忆中。我们每个人一次能记住的细节都是有限的，通过消除记住任务队列细节的需要，RQ 让你能回到你关心的代码上。这种简洁性是以牺牲跨语言任务队列、广泛的操作系统支持、100% 可靠的消息保证以及轻松切换消息 broker 的能力为代价的。",
+  "link": "https://stackoverflow.com/questions/13440875/pros-and-cons-to-use-celery-vs-rq"
+ },
+ {
+  "category": "redis",
+  "question": "Redis - 连接到远程服务器",
+  "answer": "我一直被同样的问题困扰，前面的回答并没有帮到我（尽管写得很好）。\n\n\n解决方案在这里：检查你的\n```/etc/redis/redis.conf```\n，并确保将默认的\n\n\n```bind 127.0.0.1\n```\n\n\n改为\n\n\n```bind 0.0.0.0\n```\n\n\n然后重启服务（\n```service redis-server restart```\n）\n\n\n之后你可以检查 redis 是否正在非本地接口上监听：\n\n\n```redis-cli -h 192.168.x.x ping\n```\n\n\n（将 192.168.x.x 替换为你的 IP 地址）\n\n\n重要提示：\n正如多位用户所说，在暴露于互联网的服务器上设置这个\n不安全\n。你应该确保你的 redis 已通过符合你需求的任何方式得到保护。",
+  "link": "https://stackoverflow.com/questions/8537254/redis-connect-to-remote-server"
+ },
+ {
+  "category": "redis",
+  "question": "你能在 Amazon 之外连接到 Amazon ElastiСache Redis 吗？",
+  "answer": "SSH 端口转发应该可以解决问题。尝试在你的客户端上运行这个。\n\n\n```ssh -f -N -L 6379:<your redis node endpoint>:6379 <your EC2 node that you use to connect to redis>\n```\n\n\n然后从你的客户端\n\n\n```redis-cli -h 127.0.0.1 -p 6379\n```\n\n\n请注意 redis 的默认端口是\n```6379```\n而不是\n```6739```\n。另外，请确保你允许用于连接 redis 实例的 EC2 节点的安全组进入你的 Cache security group。\n\n\n此外，AWS 现在支持访问你的集群，更多信息见\n此处\n\n\n更新 2024/04/13：\n\n\n如今很多人在运行 Kubernetes。对于在 Kubernetes 中运行的服务访问 ElasticCache Redis 来说，这是一个非常典型的场景。\n\n\n因此有一种方法可以做到这一点（通过 Kubernetes 在本地测试你的 redis 连接），即使用\nkubectl ssh jump plugin\n。\n\n\n按照\n安装说明\n操作。然后查看\n这里的案例 2\n。\n\n\n例如：\n\n\n```kubectl ssh-jump sshjump \\\n  -i ~/.ssh/id_rsa_k8s -p ~/.ssh/id_rsa_k8s.pub \\\n  -a \"-L 6379:<your redis node endpoint>:6379\"\n```\n\n\n然后从你的客户端：\n\n\n```redis-cli -h 127.0.0.1 -p 6379\n```",
+  "link": "https://stackoverflow.com/questions/21917661/can-you-connect-to-amazon-elasti%d0%a1ache-redis-outside-of-amazon"
+ },
+ {
+  "category": "redis",
+  "question": "在 Logstash 和 Elasticsearch 之间作为数据代理/消息系统，Redis 与 RabbitMQ 的对比",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/29539443/redis-vs-rabbitmq-as-a-data-broker-messaging-system-in-between-logstash-and-elas"
+ },
+ {
+  "category": "redis",
+  "question": "无法加载文件或程序集 System.Runtime.CompilerServices.Unsafe",
+  "answer": "无法加载文件或程序集 System.Runtime.CompilerServices.Unsafe\n\n\n\n\n看起来你安装了 `System.Runtime.CompilerServices.Unsafe` NuGet 包的 `4.5.3` 版本。它对应 `System.Runtime.CompilerServices.Unsafe.dll` 程序集版本 `4.0.4.1`。\n\n\n建议\n\n\n1) 请尝试将 `System.Runtime.CompilerServices.Unsafe` 版本 `4.0.4.1` 注册到 GAC 中，以便系统能够加载它。\n\n\n\n\n以管理员身份运行 Developer Command Prompt for VS2019\n\n\n\n\n输入：\n\n\n```cd xxxxx (System.Runtime.CompilerServices.Unsafe 4.0.4.1 的路径)\n\ngacutil /i System.Runtime.CompilerServices.Unsafe.dll\n```\n\n\n\n\n\n\n2) 如果你使用的是带有 `xxx.config` 文件的 .NET Framework 项目，可以使用 bindingRedirect。\n\n\n在 `app.config` 文件或 `web.config` 文件中添加以下内容：\n\n\n```<configuration>  \n   <runtime>  \n      <assemblyBinding xmlns=\"urn:schemas-microsoft-com:asm.v1\">  \n         <dependentAssembly>  \n            <assemblyIdentity name=\"System.Runtime.CompilerServices.Unsafe\"  \n                              publicKeyToken=\"b03f5f7f11d50a3a\"  \n                              culture=\"neutral\" />  \n            <bindingRedirect oldVersion=\"0.0.0.0-4.0.4.1\"  \n                             newVersion=\"4.0.4.1\"/>  \n         </dependentAssembly>  \n      </assemblyBinding>  \n   </runtime>  \n</configuration> \n```\n\n\n此外，如果你将 `System.Runtime.CompilerServices.Unsafe` NuGet 包版本更新到更新的版本，你也应该更改 bindingRedirect 中的程序集版本。\n\n\n你可以参考以下 `System.Runtime.CompilerServices.Unsafe` 的程序集版本\n\n\n\n\n\n\n\n\nNuGet 包版本\n\n\n程序集版本\n\n\n\n\n\n\n\n\n\n\n4.5.0, 4.5.1, 4.5.2\n\n\n4.0.4.0\n\n\n\n\n\n\n4.5.3\n\n\n4.0.4.1\n\n\n\n\n\n\n4.6.0\n\n\n4.0.5.0\n\n\n\n\n\n\n4.7.0, 4.7.1\n\n\n4.0.6.0\n\n\n\n\n\n\n5.0.0\n\n\n5.0.0.0",
+  "link": "https://stackoverflow.com/questions/62764744/could-not-load-file-or-assembly-system-runtime-compilerservices-unsafe"
+ },
+ {
+  "category": "redis",
+  "question": "基于文档的数据库与基于键/值的数据库之间有什么区别？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/3554169/difference-between-document-based-and-key-value-based-databases"
+ },
+ {
+  "category": "redis",
+  "question": "使用密码的 redis-cli",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/35745481/redis-cli-with-password"
+ },
+ {
+  "category": "redis",
+  "question": "使用 Redis 存储会话有多安全？",
+  "answer": "Redis 非常适合存储会话。所有操作都在内存中执行，因此读写速度很快。\n\n\n第二个方面是会话状态的持久化。Redis 在如何将会话状态持久化到硬盘方面提供了很大的灵活性。你可以访问 \nhttp://redis.io/topics/persistence\n 了解更多信息，但从高层来看，你有以下选项 -\n\n\n\n\n如果你不能承受丢失任何会话，请在配置文件中设置 \n```appendfsync always```\n。这样，Redis 保证任何写操作都会保存到磁盘。缺点是写操作会变慢。\n\n\n如果你可以接受丢失大约 1 秒的数据，请使用 \n```appendfsync everysec```\n。这将在提供合理数据保证的同时带来出色的性能。",
+  "link": "https://stackoverflow.com/questions/10278683/how-safe-is-it-to-store-sessions-with-redis"
+ },
+ {
+  "category": "redis",
+  "question": "如何在 Redis 中获取所有键及其对应的值",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/19354826/how-to-get-all-keys-with-their-values-in-redis"
+ },
+ {
+  "category": "redis",
+  "question": "如何删除键？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/8799063/how-do-i-remove-keys"
+ },
+ {
+  "category": "redis",
+  "question": "如何使用官方 PHP Docker 镜像方法安装 php-redis 扩展？",
+  "answer": "Redis 不是包含在“php-src”中的扩展，因此你不能使用\n```docker-php-ext-install```\n。请使用\nPECL\n：\n\n\n```RUN pecl install --onlyreqdeps --force redis \\\n&& rm -rf /tmp/pear \\\n&& docker-php-ext-enable redis\n```\n\n\n在 alpine php 7.3.5 上，我们可以使用：\n\n\n```RUN apk add --no-cache pcre-dev $PHPIZE_DEPS \\\n&& pecl install redis \\\n&& docker-php-ext-enable redis.so\n```\n\n\n注意：在这些 RUN 命令中，\n```pecl```\n 安装器接受默认选项。请记住，如果需要，还可以使用其他配置选项。",
+  "link": "https://stackoverflow.com/questions/31369867/how-to-install-php-redis-extension-using-the-official-php-docker-image-approach"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 是如何让键过期的？",
+  "answer": "简而言之——每个 Redis 对象都有一个过期时间。除非你为对象设置了过期时间，否则该时间就是“永不过期”。\n\n\n现在，过期机制本身是半惰性的。惰性过期意味着只有在读取对象时才会真正使其过期。读取对象时，我们会检查其过期时间戳，如果已经过去，则不返回任何内容，并顺便删除该对象。但问题在于，如果一个键从未被访问，它就会无缘无故地占用内存。\n\n\n因此 Redis 增加了第二层随机主动过期机制。它会不断随机读取键，当遇到已过期的键时，就基于惰性机制将其删除。这不会影响过期行为，只是增加了对已过期键的“垃圾回收”。\n\n\n当然，实际实现比这更复杂，但这是主要思路。\n\n\n你可以在这里了解更多：\nhttp://redis.io/commands/expire\n\n\n主动过期循环的源代码可以在这里找到：\nhttps://github.com/antirez/redis/blob/a92921da135e38eedd89138e15fe9fd1ffdd9b48/src/expire.c#L98",
+  "link": "https://stackoverflow.com/questions/36172745/how-does-redis-expire-keys"
+ },
+ {
+  "category": "redis",
+  "question": "node.js 数据库",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/2750673/node-js-database"
+ },
+ {
+  "category": "redis",
+  "question": "MurmurHash 是什么？",
+  "answer": "Murmur 是一系列优秀的通用哈希函数，适用于非加密用途。正如 Austin Appleby 所述，MurmurHash 具有以下优点：\n\n\n\n\n简单（就生成的汇编指令数量而言）。\n\n\n良好的分布性（几乎对所有键集和桶大小都能通过卡方检验）。\n\n\n良好的雪崩效应（最大偏差为 0.5%）。\n\n\n良好的抗碰撞性（通过了 Bob Jenkin 的 frog.c 压力测试。对于 4 字节键不可能发生碰撞，不存在小的（1 到 7 位）差分）。\n\n\n在 Intel/AMD 硬件上性能出色，在哈希质量和 CPU 消耗之间取得了良好的平衡。\n\n\n\n\n你当然可以用它来哈希 UUID（就像任何其他高级哈希函数一样：CityHash、Jenkins、Paul Hsieh 的等等……）。不过，Redis 位图（bitset）被限制为 4 GB 位（512 MB）。因此你需要将 128 位数据（UUID）缩减为 32 位（哈希值）。无论哈希函数的质量如何，都会发生碰撞。\n\n\n使用像 Murmur 这样精心设计的哈希函数可以最大化分布质量，并最小化碰撞数量，但它不提供其他保证。\n\n\n以下是一些比较通用哈希函数质量的链接：\n\n\nhttp://www.azillionmonkeys.com/qed/hash.html\n\n\nhttp://www.strchr.com/hash_functions\n\n\nhttp://blog.aggregateknowledge.com/2011/12/05/choosing-a-good-hash-function-part-1/\n\n\nhttp://blog.aggregateknowledge.com/2011/12/29/choosing-a-good-hash-function-part-2/\n\n\nhttp://blog.aggregateknowledge.com/2012/02/02/choosing-a-good-hash-function-part-3/",
+  "link": "https://stackoverflow.com/questions/11899616/murmurhash-what-is-it"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 键的命名规范和有效字符",
+  "answer": "其中一部分已在\n此处\n回答，但这并不完全是重复问题，因为你问的是允许的字符以及命名规范。\n\n\n关于\nRedis 键中的有效字符\n，\n手册对此有完整的说明\n：\n\n\n\n\nRedis 键是二进制安全的，这意味着你可以使用任何二进制序列作为键，从像 \"foo\" 这样的字符串到 JPEG 文件的内容。空字符串也是一个有效的键。\n\n\n关于键的其他一些规则：\n\n\n非常长的键不是一个好主意，例如 1024 字节的键不仅从内存角度来说是个坏主意，而且因为在数据集中查找该键可能需要多次代价高昂的键比较。即使手头的任务是匹配一个大值是否存在，求助于对其哈希（例如使用 SHA1）也是更好的做法，尤其是从内存和带宽的角度来看。\n\n\n非常短的键通常也不是一个好主意。如果你可以写成 \"user:1000:followers\"，那么写成 \"u1000flw\" 作为键就没有什么意义。后者更具可读性，而且与键对象本身和值对象所占用的空间相比，增加的空间微不足道。虽然短键显然会消耗稍少的内存，但你的任务是找到合适的平衡点。\n\n\n尽量坚持一种模式。例如 \"object-type:id\" 是一个好主意，如 \"user:1000\"。点号或短横线常用于多词字段，如 \"comment:1234:reply.to\" 或 \"comment:1234:reply-to\"。\n\n\n允许的最大键大小为 512 MB。",
+  "link": "https://stackoverflow.com/questions/30271808/naming-convention-and-valid-characters-for-a-redis-key"
+ },
+ {
+  "category": "redis",
+  "question": "如何统计匹配某个模式的键的数量？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/20418529/how-to-count-the-number-of-keys-matching-a-pattern"
+ },
+ {
+  "category": "redis",
+  "question": "如何在 Django 中使用 Redis？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/3801379/how-can-i-use-redis-with-django"
+ },
+ {
+  "category": "redis",
+  "question": "Redis set 与 hash 的比较",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/13557075/redis-set-vs-hash"
+ },
+ {
+  "category": "redis",
+  "question": "如何从 Express 应用中移除调试信息？",
+  "answer": "更新\n\n\n要完全移除调试信息，请使用：\n\n\n```var io = require('socket.io').listen(app, { log: false });\n```\n\n\n其中 \n```app```\n 是 node.js http 服务器 / express 等。\n\n\n\n\n你忘了提到你还在使用 \nsocket.io\n。这些信息来自 \nsocket.io\n。你可以通过 \n配置\n 来禁用它：\n\n\n```io.set('log level', 1); // 减少日志输出\n```",
+  "link": "https://stackoverflow.com/questions/6807775/how-to-remove-debugging-from-an-express-app"
+ },
+ {
+  "category": "redis",
+  "question": "如何在 Redis 数据库之间切换？",
+  "answer": "默认情况下有 16 个数据库（索引从 0 到 15），你可以使用 select 命令在它们之间切换。数据库的数量可以通过 Redis 配置文件中的 ```databases``` 设置来更改。\n\n\n默认情况下，它会选择数据库 ```0```。要选择指定的数据库，请使用\n\n```redis-cli -n 2```\n（选择数据库 2）",
+  "link": "https://stackoverflow.com/questions/13386053/how-do-i-change-between-redis-database"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 键中的冒号有什么作用？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/3554888/what-is-the-purpose-of-colons-within-redis-keys"
+ },
+ {
+  "category": "redis",
+  "question": "如何保持 redis 服务器持续运行",
+  "answer": "另外，如果你想要一个快速选项，可以运行：\n```redis-server --daemonize yes```\n。",
+  "link": "https://stackoverflow.com/questions/14816892/how-to-keep-redis-server-running"
+ },
+ {
+  "category": "redis",
+  "question": "Golang 将接口转换为结构体",
+  "answer": "直接回答这个问题，即将一个\n```interface```\n转换为具体类型，你可以这样做：\n\n\n```v = i.(T)\n```\n\n\n其中\n```i```\n是接口，\n```T```\n是具体类型。如果底层类型不是 T，则会引发 panic。要进行安全的类型转换，你可以使用：\n\n\n```v, ok = i.(T)\n```\n\n\n如果底层类型不是\n```T```\n，则 ok 被设置为\n```false```\n，否则为\n```true```\n。注意，\n```T```\n也可以是一个接口类型，如果是这样，代码会将\n```i```\n转换为一个新的接口，而不是具体类型。\n\n\n另外请注意，转换接口可能是不良设计的标志。在你的代码中，你应该问自己，你的自定义接口\n```Connection```\n是否仅需要\n```GetClient```\n，还是总是需要一个\n```GetValue```\n？你的\n```GetRedisValue```\n函数是否需要\n```Connection```\n，还是总是需要一个具体的结构体？\n\n\n相应地修改你的代码。",
+  "link": "https://stackoverflow.com/questions/50939497/golang-cast-interface-to-struct"
+ },
+ {
+  "category": "redis",
+  "question": "删除 Redis 列表中的所有条目",
+  "answer": "删除键即可清除所有条目。列表不存在与列表中没有条目是类似的。当你尝试访问一个不存在的键时，Redis 不会抛出任何异常。\n\n\n```DEL key\n```\n\n\n以下是一些控制台日志。\n\n\n```\nredis> KEYS *\n(empty list or set)\nredis> LPUSH names John\n(integer) 1\nredis> LPUSH names Mary\n(integer) 2\nredis> LPUSH names Alice\n(integer) 3\nredis> LLEN names\n(integer) 3\nredis> LRANGE names 0 2\n1) \"Alice\"\n2) \"Mary\"\n3) \"John\"\nredis> DEL names\n(integer) 1\nredis> LLEN names\n(integer) 0\nredis> LRANGE names 0 2\n(empty list or set)\n```",
+  "link": "https://stackoverflow.com/questions/9828160/delete-all-entries-in-a-redis-list"
+ },
+ {
+  "category": "redis",
+  "question": "如何在 Node.js 中使用 Redis 的 PUBLISH/SUBSCRIBE 在数据值变化时通知客户端？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/4441798/how-to-use-redis-publish-subscribe-with-nodejs-to-notify-clients-when-data-value"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 如何在不迭代和不弹出的情况下获取列表的所有值",
+  "answer": "要在 Redis 中检索列表的所有项，你不需要迭代并逐个获取每个项。那样效率会非常低。\n\n\n你只需使用 \nLRANGE\n 命令一次性检索所有项。\n\n\n```elements = redis.lrange( \"supplier_id\", 0, -1 )\n```\n\n\n这将返回列表的所有项，而不会改变列表本身。",
+  "link": "https://stackoverflow.com/questions/10703019/redis-fetch-all-value-of-list-without-iteration-and-without-popping"
+ },
+ {
+  "category": "redis",
+  "question": "MongoDB 与 Redis 结合使用",
+  "answer": "Redis 和 MongoDB 可以一起使用并取得良好效果。一家以运行 MongoDB 和 Redis（以及 MySQL 和 Sphinx）而闻名的公司是 Craigslist。请参阅 Jeremy Zawodny 的 \n这个演示\n。\n\n\nMongoDB 在持久化、面向文档、以多种方式索引的数据方面很有优势。Redis 则更适合易失性数据，或对延迟敏感的半持久化数据。\n\n\n以下是在 MongoDB 之上使用 Redis 的一些具体示例。\n\n\n\n\n2.2 之前的 MongoDB 还没有过期机制。Capped collections 无法真正用于实现真正的 TTL。Redis 有基于 TTL 的过期机制，便于存储易失性数据。例如，用户会话通常存储在 Redis 中，而用户数据将存储并索引在 MongoDB 中。请注意，MongoDB 2.2 引入了集合级别的低精度过期机制（例如用于清除数据）。\n\n\nRedis 提供了方便的 set 数据类型及其相关操作（多个集合的并集、交集、差集等）。在此基础上实现基本的分面搜索或标签引擎非常容易，这是对 MongoDB 更传统索引能力的有趣补充。\n\n\nRedis 支持列表上的高效阻塞 pop 操作。这可用于实现临时的分布式队列系统。在我看来，它比 MongoDB 的 tailable cursors 更灵活，因为后端应用程序可以带超时地监听多个队列，原子地将项转移到另一个队列等。如果应用程序需要某种队列，将队列存储在 Redis 中，并将持久化的功能数据保留在 MongoDB 中是合理的。\n\n\nRedis 还提供 pub/sub 机制。在分布式应用程序中，事件传播系统可能很有用。这同样是 Redis 的绝佳用例，而持久化数据则保留在 MongoDB 中。\n\n\n\n\n由于使用 MongoDB 设计数据模型比使用 Redis 容易得多（Redis 更底层），因此受益于 MongoDB 的灵活性来处理主要持久化数据，以及 Redis 提供的额外特性（低延迟、项过期、队列、pub/sub、原子块等）是很有意思的。这确实是一个很好的组合。\n\n\n请注意，绝不应在同一台机器上运行 Redis 和 MongoDB 服务器。MongoDB 的内存设计为可换出，Redis 则不是。如果 MongoDB 触发一些交换活动，Redis 的性能将变得灾难性。它们应隔离在不同的节点上。",
+  "link": "https://stackoverflow.com/questions/10696463/mongodb-with-redis"
+ },
+ {
+  "category": "redis",
+  "question": "从宿主机连接到运行在 Docker 容器中的 Redis",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/41371402/connecting-to-redis-running-in-docker-container-from-host-machine"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 中的数据目录在哪里？",
+  "answer": "最快的方法：使用 redis-cli。\n\n\n```redis-cli config get dir\n```\n\n\n如果你配置了身份验证，你需要使用 \n```-a password```\n 传入密码，将 \"password\" 替换为你的密码。",
+  "link": "https://stackoverflow.com/questions/32284494/where-is-the-data-directory-in-redis"
+ },
+ {
+  "category": "redis",
+  "question": "在 Redis 中一次性删除整个 hashset",
+  "answer": "如果你想删除或清空 'myhash' 这个 hash。\n\n\n请使用以下命令：\n\n\n```redis-cli\n\nredis> del myhash\n```\n\n\n希望这能解决问题。",
+  "link": "https://stackoverflow.com/questions/16561379/remove-complete-hashset-at-once-in-redis"
+ },
+ {
+  "category": "redis",
+  "question": "如何在 Redis 中存储复杂对象（使用 redis-py）",
+  "answer": "实际上，你可以使用内置模块 pickle 将 Python 对象存储在 Redis 中。\n\n\n以下是示例。\n\n\n```import pickle\nimport redis\n\nr = redis.StrictRedis(host='localhost', port=6379, db=0)\nobj = ExampleObject()\npickled_object = pickle.dumps(obj)\nr.set('some_key', pickled_object)\nunpacked_object = pickle.loads(r.get('some_key'))\nobj == unpacked_object\n```",
+  "link": "https://stackoverflow.com/questions/15219858/how-to-store-a-complex-object-in-redis-using-redis-py"
+ },
+ {
+  "category": "redis",
+  "question": "在 Redis 中，可以存储的最大值大小是多少？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/5606106/what-is-the-maximum-value-size-you-can-store-in-redis"
+ },
+ {
+  "category": "redis",
+  "question": "在 Redis 中，缩写 AOF 和 RDB 分别代表什么？",
+  "answer": "```AOF```\n代表 Append Only File。这是一种变更日志风格的持久化格式。\n\n\n```RDB```\n代表 Redis Database File。这是一种快照风格的持久化格式。",
+  "link": "https://stackoverflow.com/questions/45040666/what-do-the-acronyms-aof-and-rdb-stand-for-in-redis"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 数据库中 HSET 和 HMSET 方法有什么区别？",
+  "answer": "HSET 过去只能设置一个键值对。如果需要一次设置多个，就必须使用 HMSET（M 代表 multi）。几年前这一点发生了改变，现在两个命令都可以接受多个键值对，因此 HMSET 已经变得多余。\n\n\n来自 \n官方文档\n：\n\n\n\n\n从 Redis 4.0.0 开始，HMSET 被视为已弃用。请在新代码中使用 HSET。",
+  "link": "https://stackoverflow.com/questions/15264480/what-is-the-difference-between-hset-and-hmset-method-in-redis-database"
+ },
+ {
+  "category": "redis",
+  "question": "如何从另一台机器复制的快照（rdb 文件）中恢复 Redis 数据？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/14497234/how-to-recover-redis-data-from-snapshotrdb-file-copied-from-another-machine"
+ },
+ {
+  "category": "redis",
+  "question": "在 Ubuntu 14.04 中运行 redis-server：绑定地址已被占用",
+  "answer": "```sudo service redis-server stop\n```",
+  "link": "https://stackoverflow.com/questions/32947076/redis-server-in-ubuntu14-04-bind-address-already-in-use"
+ },
+ {
+  "category": "redis",
+  "question": "集合成员的 TTL",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/17060672/ttl-for-a-set-member"
+ },
+ {
+  "category": "redis",
+  "question": "获取有序集合中的所有成员",
+  "answer": "你很幸运，因为\n```zrange```\n不接受分数，而是接受索引。\n```0```\n是第一个索引，而\n```-1```\n会被解释为最后一个索引：\n\n\n```zrange key 0 -1\n```\n\n\n如果要按分数获取范围，你应该调用\n```zrangebyscore```\n——正如 Didier Spezia 在评论中指出的，\n```-inf```\n和\n```+inf```\n可以分别用来表示负无穷和正无穷：\n\n\n```zrangebyscore key -inf +inf\n```",
+  "link": "https://stackoverflow.com/questions/11504154/get-all-members-in-sorted-set"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 和 Memcached，还是只用 Redis？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/4188620/redis-and-memcached-or-just-redis"
+ },
+ {
+  "category": "redis",
+  "question": "如何在 Redis 中清空/删除一个集合？",
+  "answer": "你可以使用\n```DEL```\n命令来完全删除这个集合。\n\n\n```DEL metasyn\n```\n\n\n在 redis 控制台中，\n\n\n```redis> SMEMBERS metasyn\n1) \"foo\"\n2) \"bar\"\nredis> DEL metasyn\n(integer) 1\nredis> SMEMBERS metasyn\n(empty list or set)\n```",
+  "link": "https://stackoverflow.com/questions/6301399/empty-delete-a-set-in-redis"
+ },
+ {
+  "category": "redis",
+  "question": "如果 Redis 已经是技术栈的一部分，为什么还会与 Redis 一起使用 Memcached？",
+  "answer": "我认为如今 Memcached 相对于 Redis 的主要使用场景是，在纯 HTML 片段缓存（或类似应用）中，Memcached 应该能提供更高的内存效率。如果你需要将对象的不同字段存储在不同的 Memcached 键中，那么 Redis 哈希在内存效率上会更高，但当你拥有大量 key -> simple_string 键值对时，Memcached 应该能在每兆字节中存储更多条目。\n\n\nMemcached 的其他优点包括：\n\n\n\n\n它是一个非常简单的代码库，所以如果你只需要它提供的功能，我认为它是一个合理的替代方案，但我从未在生产环境中使用过它。\n\n\n它是多线程的，因此如果你需要在单机环境中进行扩展，这是一个优势，而且你只需要与一个实例通信。\n\n\n\n\n我相信，随着人们转向智能缓存，或者尝试通过 Redis 数据结构保留缓存数据的结构，Redis 作为缓存越来越有意义。\n\n\nRedis LRU 与 Memcached LRU 的比较。\n\n\nMemcached 和 Redis 都不执行真正的 LRU 淘汰，而只是近似实现。\n\n\nMemcached 的淘汰是按大小类进行的，并取决于其 slab 分配器的实现细节。例如，如果你想添加一个适合某个大小类的条目，Memcached 会尝试移除该类中已过期/最近未使用的条目，而不是尝试全局判断哪个对象（无论其大小）是最佳候选。\n\n\n相反，Redis 在达到 \n```maxmemory```\n 限制时，会尝试从所有对象中挑选一个好的候选对象进行淘汰，而不考虑大小类，但只能提供一个近似好的对象，而不是空闲时间最长的 \n最佳对象\n。\n\n\nRedis 的做法是采样几个对象，选择空闲（未被访问）时间最长的那个。从 Redis 3.0（目前处于 beta 阶段）开始，算法得到了改进，还会在淘汰过程中维护一个好的候选池，因此近似效果得到了改善。在 \nRedis 文档中你可以找到关于其工作原理的描述和图表详情\n。\n\n\n为什么对于简单的 string -> string 映射，Memcached 比 Redis 具有更好的内存占用。\n\n\nRedis 是一个更复杂的软件，因此 Redis 中的值存储方式更类似于高级编程语言中的对象：它们有关联的类型、编码、用于内存管理的引用计数。这使得 Redis 的内部结构良好且易于管理，但与只处理字符串的 Memcached 相比，存在额外开销。\n\n\nRedis 何时在内存效率上更有优势\n\n\nRedis 能够以一种特殊的内存节省方式存储小型聚合数据类型。例如，一个表示对象的小型 Redis Hash 在内部不是用哈希表存储，而是作为一个二进制唯一 blob 存储。因此，将每个对象的多个字段设置到一个哈希中，比在 Memcached 中存储 N 个单独的键更高效。\n\n\n实际上，你也可以将对象作为单个 JSON（或二进制编码）blob 存储到 Memcached 中，但与 Redis 不同，这将不允许你获取或更新独立的字段。\n\n\nRedis 在智能缓存背景下的优势。\n\n\n由于 Redis 的数据结构，使用 Memcached 时常见的模式——在缓存失效时销毁对象，稍后从数据库重新创建——在 Redis 中是一种原始的使用方式。\n\n\n例如，假设你需要缓存发布到 Hacker News 的最新 N 条新闻，以便填充网站的“最新”部分。使用 Redis 的做法是，用一个列表（上限为 M 个条目）保存最新插入的新闻。如果你使用另一个存储来保存数据，并将 Redis 用作缓存，那么当有新条目发布时，你需要同时填充 \n两个\n 视图（Redis 和数据库）。这样就不存在缓存失效问题。\n\n\n然而，应用程序始终可以具有这样的逻辑：如果发现 Redis 列表为空（例如在启动后），则可以从数据库重新创建初始视图。\n\n\n通过使用智能缓存，与 Memcached 相比，可以用更高效的方式使用 Redis 进行缓存，但并非所有问题都适合这种模式。例如，HTML 片段缓存可能无法从这种技术中受益。",
+  "link": "https://stackoverflow.com/questions/23601622/if-redis-is-already-a-part-of-the-stack-why-is-memcached-still-used-alongside-r"
+ },
+ {
+  "category": "redis",
+  "question": "在 PHP 应用中，何时应该使用 Redis 而不是 MySQL？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/3966689/when-to-use-redis-instead-of-mysql-for-php-applications"
+ },
+ {
+  "category": "redis",
+  "question": "使用 redis cli 执行批量命令",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/10822877/executing-batches-of-commands-using-redis-cli"
+ },
+ {
+  "category": "redis",
+  "question": "如何访问 Redis 日志文件",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/16337107/how-to-access-redis-log-file"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 发布订阅与消息队列",
+  "answer": "测试本身是有效的，但结论部分有误。\n\n\nRedis 在 pub/sub 频道上不会对任何内容进行排队。相反，它倾向于从发布者 socket 读取条目，并将该条目写入所有订阅者 socket，理想情况下是在事件循环的同一次迭代中完成。Redis 数据结构中不会保留任何内容。\n\n\n不过，正如你所演示的，仍然存在某种缓冲。这是由于使用了 TCP/IP socket 以及 Redis 通信缓冲区。\n\n\nSocket 带有缓冲区，当然，TCP 也具备一些流量控制机制。它可以在缓冲区满时避免数据丢失。如果某个订阅者速度不够快，数据就会在其 socket 缓冲区中累积。当缓冲区满时，TCP 会阻塞通信，阻止 Redis 向该 socket 推送更多信息。\n\n\nRedis 还会管理输出通信缓冲区（位于 socket 缓冲区之上），用于生成符合 Redis 协议格式的数据。因此，当 socket 的输出缓冲区满时，事件循环会将该 socket 标记为不可写，数据将保留在 Redis 输出缓冲区中。\n\n\n只要 TCP 连接仍然有效，数据就可能在缓冲区中保留很长时间。不过，socket 和 Redis 输出缓冲区都是有上限的。如果订阅者实在太慢，并且累积了大量数据，Redis 最终会关闭与订阅者的连接（作为一种安全机制）。\n\n\n默认情况下，对于 pub/sub，Redis 对每个连接缓冲区设有 8 MB 的软限制和 32 MB 的硬限制。如果输出缓冲区达到硬限制，或者其在软限制与硬限制之间持续超过 60 秒，与慢速订阅者的连接将被关闭。\n\n\n要了解待处理消息的数量并不容易。可以通过查看 socket 缓冲区和 Redis 输出缓冲区中待处理信息的大小来进行估算。\n\n\n对于 Redis 输出缓冲区，你可以使用 \nCLIENT LIST 命令\n（通过 redis-cli）。输出缓冲区的大小会在 obl 和 oll 字段中返回（以字节为单位）。\n\n\n对于 socket 缓冲区，Redis 没有相应命令。不过，在 Linux 上，可以编写脚本来解析 /proc/net/tcp 文件的内容。参见 \n此处\n 的示例。该脚本可能需要根据你的系统进行调整。",
+  "link": "https://stackoverflow.com/questions/27745842/redis-pubsub-and-message-queueing"
+ },
+ {
+  "category": "redis",
+  "question": "如何在 Redis Docker 镜像中执行 HEALTHCHECK？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/67904609/how-do-you-perform-a-healthcheck-in-the-redis-docker-image"
+ },
+ {
+  "category": "redis",
+  "question": "想让 redis-server 在后台持续运行",
+  "answer": "从 Redis 2.6 开始，可以直接通过命令行传递 Redis 配置参数。这对于测试目的非常有用。\n\n\n```redis-server --daemonize yes\n```\n\n\n检查进程是否已启动：\n\n\n```ps aux | grep redis-server\n```",
+  "link": "https://stackoverflow.com/questions/24221449/want-to-run-redis-server-in-background-nonstop"
+ },
+ {
+  "category": "redis",
+  "question": "如何在 Flask 框架中实现服务器推送？",
+  "answer": "看看\nServer-Sent Events\n。Server-Sent Events 是一个\n浏览器 API，它允许你保持与服务器的套接字连接，订阅更新流。更多信息请阅读 Alex MacCaw（Juggernaut 的作者）关于\n为什么他放弃 Juggernaut\n以及为什么更简单的 Server-Sent Events 在许多情况下比 WebSockets 更适合这项工作的文章。\n\n\n该协议非常简单。只需在你的响应中添加 MIME 类型\n```text/event-stream```\n。浏览器将保持连接打开并监听更新。从服务器发送的事件是一行以\n```data:```\n开头的文本，后面跟一个换行符。\n\n\n```data: this is a simple message\n<blank line>\n```\n\n\n如果你想交换结构化数据，只需将数据序列化为 JSON 并通过网络发送。\n\n\n一个优势是你可以在 Flask 中使用 SSE，而无需额外的服务器。GitHub 上有一个简单的\n聊天应用示例\n，它使用 Redis 作为发布/订阅后端。\n\n\n```def event_stream():\n    pubsub = red.pubsub()\n    pubsub.subscribe('chat')\n    for message in pubsub.listen():\n        print message\n        yield 'data: %s\\n\\n' % message['data']\n\n\n@app.route('/post', methods=['POST'])\ndef post():\n    message = flask.request.form['message']\n    user = flask.session.get('user', 'anonymous')\n    now = datetime.datetime.now().replace(microsecond=0).time()\n    red.publish('chat', u'[%s] %s: %s' % (now.isoformat(), user, message))\n\n\n@app.route('/stream')\ndef stream():\n    return flask.Response(event_stream(),\n                          mimetype=\"text/event-stream\")\n```\n\n\n你不需要使用 gunicorn 来运行示例应用。只需确保在运行应用时使用多线程，否则 SSE 连接会阻塞你的开发服务器：\n\n\n```if __name__ == '__main__':\n    app.debug = True\n    app.run(threaded=True)\n```\n\n\n在客户端，你只需要一个 JavaScript 处理函数，当服务器推送新消息时它会被调用。\n\n\n```var source = new EventSource('/stream');\nsource.onmessage = function (event) {\n     alert(event.data);\n};\n```\n\n\nServer-Sent Events 在\n较新的 Firefox、Chrome 和 Safari 浏览器中\n受支持。Internet Explorer 尚未支持 Server-Sent Events，但预计将在\n版本 10 中支持。有两个推荐的 Polyfill 用于支持旧版浏览器\n\n\n\n\nEventSource.js\n\n\njquery.eventsource",
+  "link": "https://stackoverflow.com/questions/12232304/how-to-implement-server-push-in-flask-framework"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 管理面板",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/7716446/redis-administration-panel"
+ },
+ {
+  "category": "redis",
+  "question": "Celery：何时应选择 Redis 而非 RabbitMQ 作为消息代理？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/43264838/celery-when-should-you-choose-redis-as-a-message-broker-over-rabbitmq"
+ },
+ {
+  "category": "redis",
+  "question": "Redis 中的管道操作与事务对比",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/29327544/pipelining-vs-transaction-in-redis"
+ }
+]

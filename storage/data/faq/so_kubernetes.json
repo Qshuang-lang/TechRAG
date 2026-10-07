@@ -1,0 +1,602 @@
+[
+  {
+    "category": "kubernetes",
+    "question": "How can I use local Docker images with Minikube?",
+    "answer": "As \nthe handbook\n describes, you can reuse the Docker daemon from Minikube with \n```eval $(minikube docker-env)```\n.\n\n\nSo to use an image without uploading it, you can follow these steps:\n\n\n\n\nSet the environment variables with \n```eval $(minikube docker-env)```\n\n\nBuild the image with the Docker daemon of Minikube (e.g., \n```docker build -t my-image .```\n)\n\n\nSet the image in the pod specification like the build tag (e.g., \n```my-image```\n)\n\n\nSet the \n```imagePullPolicy```\n to \n```Never```\n, otherwise Kubernetes will try to download the image.\n\n\n\n\nImportant note:\n You have to run \n```eval $(minikube docker-env)```\n on each terminal you want to use, since it only sets the environment variables for the current shell session.",
+    "link": "https://stackoverflow.com/questions/42564058/how-can-i-use-local-docker-images-with-minikube"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Pods stuck in Terminating status",
+    "answer": "You can use following command to delete the POD forcefully.\n\n\n```kubectl delete pod <PODNAME> --grace-period=0 --force --namespace <NAMESPACE>\n```",
+    "link": "https://stackoverflow.com/questions/35453792/pods-stuck-in-terminating-status"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Difference between ClusterIP, NodePort and LoadBalancer service types in Kubernetes?",
+    "answer": "A ClusterIP exposes the following:\n\n\n\n\n```spec.clusterIp:spec.ports[*].port```\n\n\n\n\nYou can only access this service while inside the cluster. It is accessible from its \n```spec.clusterIp```\n port. If a \n```spec.ports[*].targetPort```\n is set it will route from the port to the targetPort. The CLUSTER-IP you get when calling \n```kubectl get services```\n is the IP assigned to this service within the cluster internally.\n\n\nA NodePort exposes the following:\n\n\n\n\n```<NodeIP>:spec.ports[*].nodePort```\n\n\n```spec.clusterIp:spec.ports[*].port```\n\n\n\n\nIf you access this service on a nodePort from the node's external IP, it will route the request to \n```spec.clusterIp:spec.ports[*].port```\n, which will in turn route it to your \n```spec.ports[*].targetPort```\n, if set. This service can also be accessed in the same way as ClusterIP.\n\n\nYour NodeIPs are the external IP addresses of the nodes. You cannot access your service from \n```spec.clusterIp:spec.ports[*].nodePort```\n.\n\n\nA LoadBalancer exposes the following:\n\n\n\n\n```spec.loadBalancerIp:spec.ports[*].port```\n\n\n```<NodeIP>:spec.ports[*].nodePort```\n\n\n```spec.clusterIp:spec.ports[*].port```\n\n\n\n\nYou can access this service from your load balancer's IP address, which routes your request to a nodePort, which in turn routes the request to the clusterIP port. You can access this service as you would a NodePort or a ClusterIP service as well.",
+    "link": "https://stackoverflow.com/questions/41509439/difference-between-clusterip-nodeport-and-loadbalancer-service-types-in-kuberne"
+  },
+  {
+    "category": "kubernetes",
+    "question": "kubectl apply vs kubectl create?",
+    "answer": "Those are two different approaches:\n\n\nImperative Management\n\n\n```kubectl create```\n is what we call \nImperative Management\n. On this approach you tell the Kubernetes API what you want to create, replace or delete, not how you want your K8s cluster world to look like.\n\n\nDeclarative Management\n\n\n```kubectl apply```\n is part of the \nDeclarative Management\n approach, where changes that you may have applied to a live object (i.e. through \n```scale```\n) are \"\nmaintained\n\" even if you \n```apply```\n other changes to the object.\n\n\n\n\nYou can read more about imperative and declarative management in the \nKubernetes Object Management\n documentation.\n\n\n\n\ntl:dr\n\n\nThey do different things. If the resource exists, \n```kubectl create```\n will error out and \n```kubectl apply```\n will not error out.",
+    "link": "https://stackoverflow.com/questions/47369351/kubectl-apply-vs-kubectl-create"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Ingress vs Load Balancer",
+    "answer": "Load Balancer:\n A kubernetes LoadBalancer service is a service that points to external load balancers that are NOT in your kubernetes cluster, but exist elsewhere. They can work with your pods, assuming that your pods are externally routable. Google and AWS provide this capability natively. In terms of Amazon, this maps directly with ELB and kubernetes when running in AWS can automatically provision and configure an ELB instance for each LoadBalancer service deployed.\n\n\nIngress:\n An ingress is really just a set of rules to pass to a controller that is listening for them. You can deploy a bunch of ingress rules, but nothing will happen unless you have a controller that can process them. A LoadBalancer service could listen for ingress rules, if it is configured to do so.\n\n\nYou can also create a \nNodePort\n service, which has an externally routable IP outside the cluster, but points to a pod that exists within your cluster. This could be an Ingress Controller.\n\n\nAn Ingress Controller is simply a pod that is configured to interpret ingress rules. One of the most popular ingress controllers supported by kubernetes is nginx. In terms of Amazon, ALB \ncan be used\n as an ingress controller.\n\n\nFor an example, \nthis\n nginx controller is able to ingest ingress rules you have defined and translate them to an nginx.conf file that it loads and starts in its pod.\n\n\nLet's for instance say you defined an ingress as follows:\n\n\n```apiVersion: extensions/v1beta1\nkind: Ingress\nmetadata:\n  annotations:\n   ingress.kubernetes.io/rewrite-target: /\n name: web-ingress\nspec:\n  rules:\n  - host: kubernetes.foo.bar\n    http:\n      paths:\n      - backend:\n          serviceName: appsvc\n          servicePort: 80\n        path: /app\n```\n\n\nIf you then inspect your nginx controller pod you'll see the following rule defined in \n```/etc/nginx.conf```\n:\n\n\n```server {\n    server_name kubernetes.foo.bar;\n    listen 80;\n    listen [::]:80;\n    set $proxy_upstream_name \"-\";\n    location ~* ^/web2\\/?(?<baseuri>.*) {\n        set $proxy_upstream_name \"apps-web2svc-8080\";\n        port_in_redirect off;\n\n        client_max_body_size                    \"1m\";\n\n        proxy_set_header Host                   $best_http_host;\n\n        # Pass the extracted client certificate to the backend\n\n        # Allow websocket connections\n        proxy_set_header                        Upgrade           $http_upgrade;\n        proxy_set_header                        Connection        $connection_upgrade;\n\n        proxy_set_header X-Real-IP              $the_real_ip;\n        proxy_set_header X-Forwarded-For        $the_x_forwarded_for;\n        proxy_set_header X-Forwarded-Host       $best_http_host;\n        proxy_set_header X-Forwarded-Port       $pass_port;\n        proxy_set_header X-Forwarded-Proto      $pass_access_scheme;\n        proxy_set_header X-Original-URI         $request_uri;\n        proxy_set_header X-Scheme               $pass_access_scheme;\n\n        # mitigate HTTPoxy Vulnerability\n        # https://www.nginx.com/blog/mitigating-the-httpoxy-vulnerability-with-nginx/\n        proxy_set_header Proxy                  \"\";\n\n        # Custom headers\n\n        proxy_connect_timeout                   5s;\n        proxy_send_timeout                      60s;\n        proxy_read_timeout                      60s;\n\n        proxy_redirect                          off;\n        proxy_buffering                         off;\n        proxy_buffer_size                       \"4k\";\n        proxy_buffers                           4 \"4k\";\n\n        proxy_http_version                      1.1;\n\n        proxy_cookie_domain                     off;\n        proxy_cookie_path                       off;\n\n    rewrite /app/(.*) /$1 break;\n    rewrite /app / break;\n    proxy_pass http://apps-appsvc-8080;\n    \n    }\n```\n\n\nNginx has just created a rule to route \n```http://kubernetes.foo.bar/app```\n to point to the service \n```appsvc```\n in your cluster.\n\n\nHere is \nan example\n of how to implement a kubernetes cluster with an nginx ingress controller.",
+    "link": "https://stackoverflow.com/questions/45079988/ingress-vs-load-balancer"
+  },
+  {
+    "category": "kubernetes",
+    "question": "What&#39;s the difference between Docker Compose and Kubernetes?",
+    "answer": "Containers\n:\n\n\n\n\nContainers are at the core of the other technologies listed here\n\n\n\n\nDocker\n:\n\n\n\n\nDocker is a popular implementation of the technology that allows applications to be bundled into a container.\n\n\n```docker```\n is a command-line tool to manage images, containers, volumes, and networks\n\n\n\n\nDocker Compose\n\n\n\n\nDocker Compose is the declarative version of the docker cli\n\n\nIt can start one or more containers\n\n\nIt can create one or more networks and attach containers to them\n\n\nIt can create one or more volumes and configure containers to mount them\n\n\nAll of this is for use on a \nsingle\n host\n\n\n\n\nDocker Classic Swarm\n\n\n\n\nDocker swarm has been abandoned by Docker Inc. and is not being actively maintained or supported.\n\n\nDocker Swarm is for running and connecting containers on \nmultiple\n hosts.\n\n\nDocker Swarm is a container cluster management and orchestration tool.\n\n\nIt manages containers running on multiple hosts and does things like scaling, starting a new container when one crashes, networking containers ...\n\n\nThe Docker Swarm file named stack file is very similar to a Docker Compose file\n\n\nThe only comparison between Kubernetes and Compose is at the most trivial and unimportant level: they both run containers, but this says nothing to help one understand what the two tools are and where they are useful. They are both useful for different things\n\n\n\n\nKubernetes\n\n\n\n\nKubernetes (K8S) is a \ndistributed container orchestration tool\n initially created by Google\n\n\nIt was open-sourced in 2014 and handed over to the Cloud Native Computing Foundation (CNCF) the following year\n\n\nThe CNCF is an industry body with \nhundreds of members drawn from the majority\n of large cloud, software and hardware companies\n\n\nAt the time of writing (late 2021) there are nearly a \nthousand K8S related projects\n split into around twenty classes with a total of over $21 billion dollars in funding\n\n\nKubernetes (2021) is the most popular distributed system orchestrator in the world with \n88% adoption\n\n\nBecause of its near ubiquity, K8S has become the most popular contemporary platform for innovative system development in 2021\n\n\nKubernetes is a competitor (more or less) to Docker swarm but does more stuff than docker swarm i.e a popular choice.",
+    "link": "https://stackoverflow.com/questions/47536536/whats-the-difference-between-docker-compose-and-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "What&#39;s the difference between Apache&#39;s Mesos and Google&#39;s Kubernetes",
+    "answer": "Kubernetes is an open source project that brings 'Google style' cluster management capabilities  to the world of virtual machines, or 'on the metal' scenarios.  It works very well with modern operating system environments (like CoreOS or Red Hat Atomic) that offer up lightweight computing 'nodes' that are managed for you.  It is written in Golang and is lightweight, modular, portable and extensible.  We (the Kubernetes team) are working with a number of different technology companies (including Mesosphere who curate the Mesos open source project) to establish Kubernetes as the standard way to interact with computing clusters.  The idea is to reproduce the patterns that we see people needing to build cluster applications based on our experience at Google. Some of these concepts include:\n\n\n\n\npods\n — a way to group containers together\n\n\nreplication controllers\n — a way to handle the lifecycle of containers\n\n\nlabels\n — a way to find and query containers, and\n\n\nservices\n — a set of containers performing a common function.  \n\n\n\n\nSo with Kubernetes alone you will have something that is simple, easy to get up-and-running, portable and extensible that adds 'cluster' as a noun to the things that you manage in the lightest weight manner possible.  Run an application on a cluster, and stop worrying about an individual machine.  In this case, cluster is a flexible resource just like a VM.  It is a logical computing unit.  Turn it up, use it, resize it, turn it down quickly and easily. \n\n\nWith Mesos, there is a fair amount of overlap in terms of the basic vision, but the products are at quite different points in their lifecycle and have different sweet spots.  Mesos is a distributed systems kernel that stitches together a lot of different machines into a logical computer. It was born for a world where you own a lot of physical resources to create a big static computing cluster.  The great thing about it is that lots of modern scalable data processing application run well on Mesos (Hadoop, Kafka, Spark) and it is nice because you can run them all on the same basic resource pool, along with your new age container packaged apps.  It is somewhat more heavy weight than the Kubernetes project, but is getting easier and easier to manage thanks to the work of folks like Mesosphere. \n\n\nNow what gets really interesting is that Mesos is currently being adapted to add a lot of the Kubernetes concepts and to support the Kubernetes API.  So it will be a gateway to getting more capabilities for your Kubernetes app (high availability master, more advanced scheduling semantics, ability to scale to a very large number of nodes) if you need them, and is well suited to run production workloads (Kubernetes is still in an alpha state).\n\n\nWhen asked, I tend to say:\n\n\n\n\nKubernetes is a great place to start if you are new to the clustering world;  it is the quickest, easiest and lightest way to kick the tires and start experimenting with cluster oriented development.  It offers a very high level of portability since it is being supported by a lot of different providers (Microsoft, IBM, Red Hat, CoreOs, MesoSphere, VMWare, etc).\n\n\nIf you have existing workloads (Hadoop, Spark, Kafka, etc), Mesos gives you a framework that let's you interleave those workloads with each other, and mix in a some of the new stuff including Kubernetes apps.\n\n\nMesos gives you an escape valve if you need capabilities that are not yet implemented by the community in the Kubernetes framework.",
+    "link": "https://stackoverflow.com/questions/26705201/whats-the-difference-between-apaches-mesos-and-googles-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "What is the difference between a pod and a deployment?",
+    "answer": "Radek's answer is very good, but I would like to pitch in from my experience, you will almost never use an \nobject\n with the \nkind\n \npod\n, because that doesn't make any sense in practice. \n\n\nBecause you need a \ndeployment\n object - or other Kubernetes API objects like a \nreplication controller\n or \nreplicaset\n - that needs to keep the \nreplicas\n (pods) alive (that's kind of the point of using kubernetes).\n\n\nWhat you will use in practice for a typical application are:\n\n\n\n\nDeployment object\n (where you will specify your apps container/containers) that will host your app's container with some other specifications.\n\n\nService object\n (that is like a grouping object and gives it a so-called virtual IP (cluster IP) for the \n```pods```\n that have a certain label - and those \n```pods```\n are basically the app containers that you deployed with the former \ndeployment\n object).\n\n\n\n\nYou need to have the \nservice\n object because the \n```pods```\n from the deployment object can be killed, scaled up and down, and you can't rely on their IP addresses because they will not be persistent.\n\n\nSo you need an object like a \nservice\n, that gives those \n```pods```\n a stable IP.\n\n\nJust wanted to give you some context around \n```pods```\n, so you know how things work together.\n\n\nHope that clears a few things for you, not long ago I was in your shoes :)",
+    "link": "https://stackoverflow.com/questions/41325087/what-is-the-difference-between-a-pod-and-a-deployment"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Command to delete all pods in all kubernetes namespaces",
+    "answer": "There is no command to do exactly what you asked.\n\n\nHere are some close matches.\n\n\nBe careful before running any of these commands.  Make sure you are connected to the right cluster, if you use multiple clusters.  Consider running. \n```kubectl config view```\n first.\n\n\nYou can delete all the pods in a single namespace with this command:\n\n\n```kubectl delete --all pods --namespace=foo\n```\n\n\nYou can also delete all deployments in namespace which will delete all pods attached with the deployments corresponding to the namespace\n\n\n```kubectl delete --all deployments --namespace=foo\n```\n\n\nYou can delete all namespaces and every object in every namespace (but not un-namespaced objects, like nodes and some events) with this command:\n\n\n```kubectl delete --all namespaces\n```\n\n\nHowever, the latter command is probably not something you want to do, since it will delete things in the kube-system namespace, which will make your cluster not usable.\n\n\nThis command will delete all the namespaces except kube-system, which might be useful:\n\n\n```for each in $(kubectl get ns -o jsonpath=\"{.items[*].metadata.name}\" | grep -v kube-system);\ndo\n  kubectl delete ns $each\ndone\n```",
+    "link": "https://stackoverflow.com/questions/33509194/command-to-delete-all-pods-in-all-kubernetes-namespaces"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Where does the convention of using /healthz for application health checks come from?",
+    "answer": "It historically comes from Google’s internal practices. They're called \"z-pages\".\n\n\nThe reason it ends with \n```z```\n is to reduce collisions with actual application endpoints with the same name (like \n```/status```\n). See this talk for more: \nhttps://vimeo.com/173610242\n (26:50-)\n\n\nSimilar endpoints (at least inside Google) are \n```/varz```\n, \n```/statusz```\n, \n```/rpcz```\n. Services developed at Google automatically get these endpoints to export their health and metrics and there are tools that collect the exposed metrics/statuses from all the deployed services.\n\n\nOpen source tools like Prometheus implement this pattern (since original authors of Prometheus are also ex-Googlers) by coming to a well-known endpoint to collect metrics from your application. Similarly \nOpenCensus\n allows you to expose z-pages from your app (ideally on a different port) to diagnose problems.",
+    "link": "https://stackoverflow.com/questions/43380939/where-does-the-convention-of-using-healthz-for-application-health-checks-come-f"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How do I force Kubernetes to re-pull an image?",
+    "answer": "Kubernetes will pull upon Pod creation if either (see \nupdating-images doc\n):\n\n\n\n\nUsing images tagged \n```:latest```\n\n\n```imagePullPolicy: Always```\n is specified\n\n\n\n\nThis is great if you want to always pull. But what if you want to do it \non demand\n: For example, if you want to use \n```some-public-image:latest```\n but only want to pull a newer version manually when you ask for it. You can currently:\n\n\n\n\nSet \n```imagePullPolicy```\n to \n```IfNotPresent```\n or \n```Never```\n and \npre-pull\n: Pull manually images on each cluster node so the latest is cached, then do a \n```kubectl rolling-update```\n or similar to restart Pods (ugly easily broken hack!)\n\n\nTemporarily\n change \n```imagePullPolicy```\n, do a \n```kubectl apply```\n, restart the pod (e.g. \n```kubectl rolling-update```\n), revert \n```imagePullPolicy```\n, redo a \n```kubectl apply```\n (ugly!)\n\n\nPull and push\n \n```some-public-image:latest```\n to your private repository and do a \n```kubectl rolling-update```\n (heavy!)\n\n\n\n\nNo good solution for on-demand pull. If that changes, please comment; I'll update this answer.",
+    "link": "https://stackoverflow.com/questions/33112789/how-do-i-force-kubernetes-to-re-pull-an-image"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How can I trigger a Kubernetes Scheduled Job manually?",
+    "answer": "The issue \n#47538\n that \n@jdf mentioned\n is now closed and this is now possible. The original implementation can be found \nhere\n but the syntax has changed.\n\n\nWith kubectl v1.10.1+ the command is:\n\n\n```kubectl create job --from=cronjob/<cronjob-name> <job-name> -n <namespace-name>```\n\n\nIt seems to be backwardly compatible with older clusters as it worked for me on v0.8.x.",
+    "link": "https://stackoverflow.com/questions/40401795/how-can-i-trigger-a-kubernetes-scheduled-job-manually"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Namespace &quot;stuck&quot; as Terminating. How do I remove it?",
+    "answer": "Assuming you've already tried to force-delete resources like: \n\nPods stuck at terminating status\n, and your at your wits' end trying to recover the namespace...\n\n\nYou can force-delete the namespace (perhaps leaving dangling resources):\n\n\n```(\nNAMESPACE=your-rogue-namespace\nkubectl proxy &\nkubectl get namespace $NAMESPACE -o json |jq '.spec = {\"finalizers\":[]}' >temp.json\ncurl -k -H \"Content-Type: application/json\" -X PUT --data-binary @temp.json 127.0.0.1:8001/api/v1/namespaces/$NAMESPACE/finalize\n)\n```\n\n\n\n\nThis is a refinement of the answer \nhere\n, which is based on the comment \nhere\n.\n\n\nI'm using the \n```jq```\n utility to programmatically delete elements in the finalizers section.  You could do that manually instead.\n\n\n```kubectl proxy```\n creates the listener at \n```127.0.0.1:8001```\n \nby default\n.  If you know the hostname/IP of your cluster master, you may be able to use that instead.\n\n\nThe funny thing is that this approach seems to work even when using \n```kubectl edit```\n making the same change has no effect.",
+    "link": "https://stackoverflow.com/questions/52369247/namespace-stuck-as-terminating-how-do-i-remove-it"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How do I get logs from all pods of a Kubernetes replication controller?",
+    "answer": "You can use labels\n\n\n```kubectl logs -l app=elasticsearch\n```\n\n\nAnd you'd probably want to specify \n```--max-log-requests --all-containers --ignore-errors```\n in order to:\n\n\n\n\nSpecify the number of concurrent log streams (default is 5)\n\n\nInclude logs from pods with multiple containers\n\n\nContinue to next pod on fatal error (e.g. logs could not be retrieved)",
+    "link": "https://stackoverflow.com/questions/33069736/how-do-i-get-logs-from-all-pods-of-a-kubernetes-replication-controller"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to switch namespace in kubernetes",
+    "answer": "I like my answers short, to the point and with references to official documentation:\n\n\nAnswer\n:\n\n\nThis is the command, but please consider that \nit will edit your kubeconfig file\n\n\n```kubectl config set-context --current --namespace=my-namespace\n```\n\n\nFrom\n:\n\n\nhttps://kubernetes.io/docs/reference/kubectl/cheatsheet/",
+    "link": "https://stackoverflow.com/questions/55373686/how-to-switch-namespace-in-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Difference between targetPort and port in Kubernetes Service definition",
+    "answer": "Service:\n This directs the traffic to a pod.\n\n\nTargetPort:\n This is the actual port on which your application is running inside the container.\n\n\nPort:\n Sometimes your application inside the container serves different services on a different port.\n\n\nExample:\n The actual application can run on port 8080 and health checks for this application can run on port 8089 of the container.\nSo if you hit the service without a port, it doesn't know to which port of the container it should redirect the request. The service needs to have a mapping so that it can hit the specific port of the container.\n\n\n```kind: Service\napiVersion: v1\nmetadata:\n  name: my-service\nspec:\n  selector:\n    app: MyApp\n  ports:\n    - name: http\n      nodePort: 30475\n      port: 8089\n      protocol: TCP\n      targetPort: 8080\n    - name: metrics\n      nodePort: 31261\n      port: 5555\n      protocol: TCP\n      targetPort: 5555\n    - name: health\n      nodePort: 30013\n      port: 8443\n      protocol: TCP\n      targetPort: 8085 \n```\n\n\nif you hit my-service:8089, the traffic is routed to 8080 of the container(\n```targetPort```\n). Similarly, if you hit my-service:8443, then it is redirected to 8085 of the container(\n```targetPort```\n). But this myservice:8089 is internal to the kubernetes cluster and can be used when one application wants to communicate with another application. So, to hit the service from outside the cluster someone needs to expose the port on the host machine on which kubernetes is running\nso that the traffic is redirected to a port of the container. This is \n```nodePort```\n(port exposed on the host machine).\nFrom the above example, you can hit the service from outside the cluster(Postman or any rest-client) by \n```host_ip:nodePort```\n\n\nSay your host machine ip is 10.10.20.20 you can hit the http, metrics, health services by 10.10.20.20:30475, 10.10.20.20:31261, 10.10.20.20:30013.",
+    "link": "https://stackoverflow.com/questions/49981601/difference-between-targetport-and-port-in-kubernetes-service-definition"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes service external ip pending",
+    "answer": "If you are using Minikube, there is a magic command!\n\n\n```$ minikube tunnel\n```\n\n\nHopefully someone can save a few minutes with this.\n\n\nReference link\n\nhttps://minikube.sigs.k8s.io/docs/handbook/accessing/#using-minikube-tunnel",
+    "link": "https://stackoverflow.com/questions/44110876/kubernetes-service-external-ip-pending"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How can I keep a container running on Kubernetes?",
+    "answer": "Containers are meant to run to completion.  You need to provide your container with a task that will never finish.  Something like this should work:\n\n\n```apiVersion: v1\nkind: Pod\nmetadata:\n  name: ubuntu\nspec:\n  containers:\n  - name: ubuntu\n    image: ubuntu:latest\n    # Just spin & wait forever\n    command: [ \"/bin/bash\", \"-c\", \"--\" ]\n    args: [ \"while true; do sleep 30; done;\" ]\n```",
+    "link": "https://stackoverflow.com/questions/31870222/how-can-i-keep-a-container-running-on-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes pod gets recreated when deleted",
+    "answer": "You need to delete the deployment, which should in turn delete the pods and the replica sets \nhttps://github.com/kubernetes/kubernetes/issues/24137\n\n\nTo list all deployments:\n\n\n```kubectl get deployments --all-namespaces\n```\n\n\nThen to delete the deployment:\n\n\n```kubectl delete -n NAMESPACE deployment DEPLOYMENT\n```\n\n\nWhere NAMESPACE is the namespace it's in, and DEPLOYMENT is the name of the deployment. If NAMESPACE is \n```default```\n, leave off the \n```-n```\n option altogether.\n\n\nIn some cases it could also be running due to a job or daemonset.\nCheck the following and run their appropriate delete command.\n\n\n```kubectl get jobs\n\nkubectl get daemonsets.app --all-namespaces\n\nkubectl get daemonsets.extensions --all-namespaces\n```",
+    "link": "https://stackoverflow.com/questions/40686151/kubernetes-pod-gets-recreated-when-deleted"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to copy files from Kubernetes Pods to local system",
+    "answer": "As stated in\n```kubectl```\n help:\n\n\n```kubectl cp --help\nCopy files and directories to and from containers.\nExamples:\n# !!!Important Note!!!\n# Requires that the 'tar' binary is present in your container\n# image.  If 'tar' is not present, 'kubectl cp' will fail.\n\n# Copy /tmp/foo_dir local directory to /tmp/bar_dir in a remote pod in the default namespace\nkubectl cp /tmp/foo_dir <some-pod>:/tmp/bar_dir\n\n# Copy /tmp/foo local file to /tmp/bar in a remote pod in a specific container\nkubectl cp /tmp/foo <some-pod>:/tmp/bar -c <specific-container>\n\n# Copy /tmp/foo local file to /tmp/bar in a remote pod in namespace <some-namespace>\nkubectl cp /tmp/foo <some-namespace>/<some-pod>:/tmp/bar\n\n# Copy /tmp/foo from a remote pod to /tmp/bar locally\nkubectl cp <some-namespace>/<some-pod>:/tmp/foo /tmp/bar\n\nOptions:\n-c, --container='': Container name. If omitted, the first container in the pod will be chosen\n\nUsage:\nkubectl cp <file-spec-src> <file-spec-dest> [options]\n\nUse \"kubectl options\" for a list of global command-line options (applies to all commands).\n```\n\n\nYou can also login to your \n```Containter```\n and check if file is there:\n\n\n```kubectl exec -it aks-ssh2-6cd4948f6f-fp9tl /bin/bash\nls -la /home/azureuser/test.cap\n```\n\n\nIf this still doesn't work, try:\n\n\n\n\nYou may try to copy your files to workdir and then retry to copy them using just their names. It's weird, but it works for now.\n\n\n\n\nConsider advice of \nkchugalinskiy\n here \n#58692\n.",
+    "link": "https://stackoverflow.com/questions/52407277/how-to-copy-files-from-kubernetes-pods-to-local-system"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Get YAML for deployed Kubernetes services?",
+    "answer": "To get the yaml for a deployment (service, pod, secret, etc):\n\n\n```kubectl get deploy deploymentname -o yaml\n```",
+    "link": "https://stackoverflow.com/questions/43941772/get-yaml-for-deployed-kubernetes-services"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Service located in another namespace",
+    "answer": "I stumbled over the same issue and found a nice solution which does not need any static ip configuration:\n\n\nYou can access a service via it's \nDNS name\n (as mentioned by you): \nservicename.namespace.svc.cluster.local\n\n\nYou can use that DNS name to reference it in \nanother namespace via a local service\n:\n\n\n```kind: Service\napiVersion: v1\nmetadata:\n  name: service-y\n  namespace: namespace-a\nspec:\n  type: ExternalName\n  externalName: service-y.namespace-b.svc.cluster.local\n  ports:\n  - port: 80\n```",
+    "link": "https://stackoverflow.com/questions/37221483/service-located-in-another-namespace"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to switch kubectl clusters between gcloud and minikube",
+    "answer": "You can switch from local (minikube) to gcloud and back with:\n\n\n```kubectl config use-context CONTEXT_NAME```\n\n\nto list all contexts:\n\n\n```kubectl config get-contexts```\n\n\nYou can create different enviroments for local and gcloud and put it in separate yaml files.\n\n\nRelated documentation.",
+    "link": "https://stackoverflow.com/questions/43643463/how-to-switch-kubectl-clusters-between-gcloud-and-minikube"
+  },
+  {
+    "category": "kubernetes",
+    "question": "kubectl logs - continuously",
+    "answer": "```kubectl logs -f <pod-id>\n```\n\n\nYou can use the \n```-f```\n flag:\n\n\n```-f, --follow=false: Specify if the logs should be streamed.```\n\n\nhttps://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands#logs",
+    "link": "https://stackoverflow.com/questions/39454962/kubectl-logs-continuously"
+  },
+  {
+    "category": "kubernetes",
+    "question": "At least one invalid signature was encountered",
+    "answer": "There are a few reasons why you encounter these errors:\n\n\n\n\nThere might be an issue with the existing cache and/or disc space. In order to fix it you need to clear the APT cache by executing: \n```sudo apt-get clean```\n and \n```sudo apt-get update```\n.\n\n\n\n\nThe same goes with existing docker images. Execute: \n```docker image prune -f```\n and \n```docker container prune -f```\n in order to remove unused data and free disc space. Executing \n```docker image prune -f```\n will delete all the unused images. To delete some selective images of large size, run \n```docker images```\n and identify the images you want to remove, and then run \n```docker rmi -f <IMAGE-ID1> <IMAGE-ID2> <IMAGE-ID3>```\n.\n\n\n\n\nIf you don't care about the security risks, you can try to run the \n```apt-get```\n command with the \n```--allow-unauthenticated```\n or \n```--allow-insecure-repositories```\n flag. According to the \ndocs\n:\n\n\n\n\nIgnore if packages can't be authenticated and don't prompt about it. This can be useful while working with local repositories, but is a huge security risk if data authenticity isn't ensured in another way by the user itself.",
+    "link": "https://stackoverflow.com/questions/62473932/at-least-one-invalid-signature-was-encountered"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes API - Get Pods on Specific Nodes",
+    "answer": "As mentioned in the accepted answer the PR is now merged and you can get pods by node as follows:\n\n\n```kubectl get pods --all-namespaces -o wide --field-selector spec.nodeName=<node>\n```",
+    "link": "https://stackoverflow.com/questions/39231880/kubernetes-api-get-pods-on-specific-nodes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes how to make Deployment to update image",
+    "answer": "You can configure your pod with a grace period (for example 30 seconds or more, depending on container startup time and image size) and set \n```\"imagePullPolicy: \"Always\"```\n. And use \n```kubectl delete pod pod_name```\n.\nA new container will be created and the latest image automatically downloaded, then the old container terminated.\n\n\nExample:\n\n\n```spec:\n  terminationGracePeriodSeconds: 30\n  containers:\n  - name: my_container\n    image: my_image:latest\n    imagePullPolicy: \"Always\"\n```\n\n\nI'm currently using Jenkins for automated builds and image tagging and it looks something like this:\n\n\n```kubectl --user=\"kube-user\" --server=\"https://kubemaster.example.com\"  --token=$ACCESS_TOKEN set image deployment/my-deployment mycontainer=myimage:\"$BUILD_NUMBER-$SHORT_GIT_COMMIT\"\n```\n\n\nAnother trick is to intially run:\n\n\n```kubectl set image deployment/my-deployment mycontainer=myimage:latest\n```\n\n\nand then:\n\n\n```kubectl set image deployment/my-deployment mycontainer=myimage\n```\n\n\nIt will actually be triggering the rolling-update but be sure you have also \n```imagePullPolicy: \"Always\"```\n set.\n\n\nUpdate:\n\n\nanother trick I found, where you don't have to change the image name, is to change the value of a field that will trigger a rolling update, like \n```terminationGracePeriodSeconds```\n. You can do this using \n```kubectl edit deployment your_deployment```\n or \n```kubectl apply -f your_deployment.yaml```\n or using a patch like this:\n\n\n```kubectl patch deployment your_deployment -p \\\n  '{\"spec\":{\"template\":{\"spec\":{\"terminationGracePeriodSeconds\":31}}}}'\n```\n\n\nJust make sure you always change the number value.",
+    "link": "https://stackoverflow.com/questions/40366192/kubernetes-how-to-make-deployment-to-update-image"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Restart pods when configmap updates in Kubernetes?",
+    "answer": "The current best solution to this problem (referenced deep in \nhttps://github.com/kubernetes/kubernetes/issues/22368\n linked in the sibling answer) is to use Deployments, and consider your ConfigMaps to be immutable.\n\n\nWhen you want to change your config, create a new ConfigMap with the changes you want to make, and point your deployment at the new ConfigMap. If the new config is broken, the Deployment will refuse to scale down your working ReplicaSet. If the new config works, then your old ReplicaSet will be scaled to 0 replicas and deleted, and new pods will be started with the new config.\n\n\nNot quite as quick as just editing the ConfigMap in place, but much safer.",
+    "link": "https://stackoverflow.com/questions/37317003/restart-pods-when-configmap-updates-in-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Is there a way to share secrets across namespaces in Kubernetes?",
+    "answer": "Secret API objects reside in a namespace. They can only be referenced by pods in that same namespace. Basically, you will have to create the secret for every namespace.\n\n\nFor more details, see this: \nKubernetes Documentation / Concepts / Configuration / Secrets",
+    "link": "https://stackoverflow.com/questions/46297949/is-there-a-way-to-share-secrets-across-namespaces-in-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes: How do I delete clusters and contexts from kubectl config?",
+    "answer": "```kubectl config unset```\n takes a dot-delimited path. You can delete cluster/context/user entries by name. E.g.\n\n\n```kubectl config unset users.gke_project_zone_name\n\nkubectl config unset contexts.aws_cluster1-kubernetes\n\nkubectl config unset clusters.foobar-baz\n```\n\n\nSide note, if you teardown your cluster using \n```cluster/kube-down.sh```\n (or \ngcloud\n if you use Container Engine), it will delete the associated kubeconfig entries. There is also a planned \n```kubectl config```\n \nrework\n for a future release to make the commands more intuitive/usable/consistent.",
+    "link": "https://stackoverflow.com/questions/37016546/kubernetes-how-do-i-delete-clusters-and-contexts-from-kubectl-config"
+  },
+  {
+    "category": "kubernetes",
+    "question": "What is a headless service, what does it do/accomplish, and what are some legitimate use cases for it?",
+    "answer": "Well, I think you need some theory. There are many explanations (including the official docs) across the whole internet, but I think Marco Luksa did it the best:\n\n\n\n\nEach connection to the service is forwarded to one randomly selected\nbacking pod. But what if the client needs to connect to all of those\npods? What if the backing pods themselves need to each connect to all\nthe other backing pods. Connecting through the service clearly isn’t\nthe way to do this. What is?\n\n\nFor a client to connect to all pods, it needs to figure out the IP\nof each individual pod. One option is to have the client call the\nKubernetes API server and get the list of pods and their IP addresses\nthrough an API call, but because you should always strive to keep your\napps Kubernetes-agnostic, using the API server isn’t ideal\n\n\nLuckily, Kubernetes allows clients to discover pod IPs through DNS\nlookups. Usually, when you perform a DNS lookup for a service, the DNS\nserver returns a single IP — the service’s cluster IP. But if you tell\nKubernetes you don’t need a cluster IP for your service (you do this\nby setting the clusterIP field to None in the service specification ),\nthe DNS server will return the pod IPs instead of the single service\nIP.  Instead of returning a single DNS A record, the DNS server will\nreturn multiple A records for the service, each pointing to the IP of\nan individual pod backing the service at that moment. Clients can\ntherefore do a simple DNS A record lookup and get the IPs of all the\npods that are part of the service. The client can then use that\ninformation to connect to one, many, or all of them.\n\n\nSetting the clusterIP field in a service spec to None makes the\nservice headless, as Kubernetes won’t assign it a cluster IP through\nwhich clients could connect to the pods backing it.\n\n\n\n\n\"Kubernetes in Action\" by Marco Luksa",
+    "link": "https://stackoverflow.com/questions/52707840/what-is-a-headless-service-what-does-it-do-accomplish-and-what-are-some-legiti"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Checking Kubernetes pod CPU and memory utilization",
+    "answer": "CHECK WITHOUT METRICS SERVER or ANY THIRD PARTY TOOL\n\n\n\n\n\n\nIf you want to check pods cpu/memory usage without installing any third party tool then you can get memory and cpu usage of pod from cgroup.\n\n\n\n\nGo to pod's exec mode \n```kubectl exec -it pod_name -n namespace -- /bin/bash```\n\n\nRun \n```cat /sys/fs/cgroup/cpu/cpuacct.usage```\n for cpu usage\n\n\nRun \n```cat /sys/fs/cgroup/memory/memory.usage_in_bytes```\n for memory usage\n\n\n\n\nMake Sure you have added the resources section (requests and limits) to deployment so that it can calculate the usage based on cgroup and container will respect the limits set on pod level\n\n\n\n\nNOTE: This usage is in bytes. This can vary upon pod usage and these values changes frequently.",
+    "link": "https://stackoverflow.com/questions/54531646/checking-kubernetes-pod-cpu-and-memory-utilization"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to delete all resources from Kubernetes one time?",
+    "answer": "Method 1\n: To delete everything from the current namespace (which is normally the \ndefault\n namespace) using \n```kubectl delete```\n:\n\n\n```kubectl delete all --all\n```\n\n\n```all```\n refers to all resource types such as pods, deployments, services, etc. \n```--all```\n is used to delete every object of that resource type instead of specifying it using its name or label.  \n\n\nTo delete everything from a certain namespace you use the -n flag:\n\n\n```kubectl delete all --all -n {namespace}\n```\n\n\nMethod 2\n: You can also delete a namespace and re-create it. This will delete everything that belongs to it:\n\n\n```kubectl delete namespace {namespace}\nkubectl create namespace {namespace}\n```\n\n\nNote\n (thanks \n@Marcus\n): \n```all```\n in kubernetes \ndoes not refers to every kubernetes object\n, such as admin level resources (limits, quota, policy, authorization rules). If you really want to make sure to delete eveything, it's better to delete the namespace and re-create it. Another way to do that is to use \n```kubectl api-resources```\n to get all resource types, \nas seen here\n:\n\n\n```kubectl delete \"$(kubectl api-resources --namespaced=true --verbs=delete -o name | tr \"\\n\" \",\" | sed -e 's/,$//')\" --all\n```",
+    "link": "https://stackoverflow.com/questions/47128586/how-to-delete-all-resources-from-kubernetes-one-time"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How does kubectl port-forward create a connection?",
+    "answer": "To start, it's useful to note and remember that in Kubernetes, \nevery\n pod gets its own ip address from 10.*, that is usable only within the cluster. Now, the \n```port-forward```\n feature of kubectl simply tunnels the traffic from a specified port at your local host machine to the specified port on the specified pod. API server then becomes, in a sense, a temporary gateway between your local port and the Kubernetes cluster.\n\n\n```kubectl port-forward```\n forwards connections to a local port to a port on a pod. Compared to \n```kubectl proxy```\n, \n```kubectl port-forward```\n is more generic as it can forward TCP traffic while \n```kubectl proxy```\n can only forward HTTP traffic.\n\n\n```kubectl port-forward```\n is useful for testing/debugging purposes so you can access your service locally without exposing it.\n\n\nBelow is the name of the \n```pod```\n and it will forward it's port \n```6379```\n to \n```localhost:6379```\n.\n\n\n```kubectl port-forward redis-master-765d459796-258hz 6379:6379 \n```\n\n\nwhich is the same as\n\n\n```kubectl port-forward pods/redis-master-765d459796-258hz 6379:6379\n```\n\n\nor\n\n\n```kubectl port-forward deployment/redis-master 6379:6379 \n```\n\n\nor\n\n\n```kubectl port-forward rs/redis-master 6379:6379 \n```\n\n\nor\n\n\n```kubectl port-forward svc/redis-master 6379:6379\n```",
+    "link": "https://stackoverflow.com/questions/51468491/how-does-kubectl-port-forward-create-a-connection"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Listing all resources in a namespace",
+    "answer": "Based on \nthis comment\n , the supported way to list all resources is to iterate through all the api versions listed by \n```kubectl api-resources```\n:\n\n\n\n\nkubectl api-resources enumerates the resource types available in your cluster.\n\n\nthis means you can combine it with kubectl get to actually list every instance of every resource type in a namespace:\n\n\n\n\n```kubectl api-resources --verbs=list --namespaced -o name \\\n  | xargs -n 1 kubectl get --show-kind --ignore-not-found -l <label>=<value> -n <namespace>\n```",
+    "link": "https://stackoverflow.com/questions/47691479/listing-all-resources-in-a-namespace"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How can I debug &quot;ImagePullBackOff&quot;?",
+    "answer": "You can use the '\ndescribe pod\n' syntax\n\n\nFor OpenShift use:\n\n\n```oc describe pod <pod-id>  \n```\n\n\nFor vanilla Kubernetes:\n\n\n```kubectl describe pod <pod-id>  \n```\n\n\nExamine the events of the output.\nIn my case it shows \n```Back-off pulling image unreachableserver/nginx:1.14.22222```\n\n\nIn this case the image \n```unreachableserver/nginx:1.14.22222```\n can not be pulled from the Internet because there is no Docker registry unreachableserver and the image \n```nginx:1.14.22222```\n does not exist.\n\n\nNB: If you do not see any events of interest and the pod has been in the 'ImagePullBackOff' status for a while (seems like more than 60 minutes), you need to delete the pod and look at the events from the new pod.\n\n\nFor OpenShift use:\n\n\n```oc delete pod <pod-id>\noc get pods\noc get pod <new-pod-id>\n```\n\n\nFor vanilla Kubernetes:\n\n\n```kubectl delete pod <pod-id>  \nkubectl get pods\nkubectl get pod <new-pod-id>\n```\n\n\nSample output:\n\n\n```  Type     Reason     Age                From               Message\n  ----     ------     ----               ----               -------\n  Normal   Scheduled  32s                default-scheduler  Successfully assigned rk/nginx-deployment-6c879b5f64-2xrmt to aks-agentpool-x\n  Normal   Pulling    17s (x2 over 30s)  kubelet            Pulling image \"unreachableserver/nginx:1.14.22222\"\n  Warning  Failed     16s (x2 over 29s)  kubelet            Failed to pull image \"unreachableserver/nginx:1.14.22222\": rpc error: code = Unknown desc = Error response from daemon: pull access denied for unreachableserver/nginx, repository does not exist or may require 'docker login': denied: requested access to the resource is denied\n  Warning  Failed     16s (x2 over 29s)  kubelet            Error: ErrImagePull\n  Normal   BackOff    5s (x2 over 28s)   kubelet            Back-off pulling image \"unreachableserver/nginx:1.14.22222\"\n  Warning  Failed     5s (x2 over 28s)   kubelet            Error: ImagePullBackOff\n```\n\n\nAdditional debugging steps\n\n\n\n\ntry to pull the docker image and tag manually on your computer\n\n\nIdentify the node by doing a 'kubectl/oc get pods -o wide'\n\n\nssh into the node (if you can) that can not pull the docker image\n\n\ncheck that the node can resolve the DNS of the docker registry by performing a ping.\n\n\ntry to pull the docker image manually on the node\n\n\nIf you are using a private registry, check that your \nsecret\n exists and the secret is correct. Your secret should also be in the same namespace. Thanks \nswenzel\n\n\nSome registries have firewalls that limit ip address access. The firewall may block the pull\n\n\nSome CIs create deployments with temporary docker secrets. So the secret expires after a few days (You are asking for production failures...)",
+    "link": "https://stackoverflow.com/questions/34848422/how-can-i-debug-imagepullbackoff"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Decoding Kubernetes secret",
+    "answer": "You can use \n```kubectl get secrets/db-user-pass -o yaml```\n or \n```-o json```\n where you'll see the base64-encoded \n```username```\n and \n```password```\n.  You can then copy the value and decode it with something like \n```echo <ENCODED_VALUE> | base64 -d```\n.\n\n\nA more compact one-liner for this:\n\n\n```kubectl get secrets/db-user-pass --template={{.data.password}} | base64 -d\n```\n\n\nand likewise for the username:\n\n\n```kubectl get secrets/db-user-pass --template={{.data.username}} | base64 -d\n```",
+    "link": "https://stackoverflow.com/questions/56909180/decoding-kubernetes-secret"
+  },
+  {
+    "category": "kubernetes",
+    "question": "What&#39;s the best way to share/mount one file into a pod?",
+    "answer": "For example you have a configmap which contain 2 config files:\n\n\n```kubectl create configmap config --from-file <file1> --from-file <file2>\n```\n\n\nYou could use subPath like this to mount single file into existing directory:\n\n\n```---\n        volumeMounts:\n        - name: \"config\"\n          mountPath: \"/<existing folder>/<file1>\"\n          subPath: \"<file1>\"\n        - name: \"config\"\n          mountPath: \"/<existing folder>/<file2>\"\n          subPath: \"<file2>\"\n      restartPolicy: Always\n      volumes:\n        - name: \"config\"\n          configMap:\n            name: \"config\"\n---\n```\n\n\nFull example \nhere",
+    "link": "https://stackoverflow.com/questions/33415913/whats-the-best-way-to-share-mount-one-file-into-a-pod"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to set multiple commands in one yaml file with Kubernetes?",
+    "answer": "```command: [\"/bin/sh\",\"-c\"]\nargs: [\"command one; command two && command three\"]\n```\n\n\nExplanation:\n The \n```command [\"/bin/sh\", \"-c\"]```\n says \"run a shell, and execute the following instructions\". The args are then passed as commands to the shell. In shell scripting a semicolon separates commands, and \n```&&```\n conditionally runs the following command if the first succeed. In the above example, it always runs \n```command one```\n followed by \n```command two```\n, and only runs \n```command three```\n if \n```command two```\n succeeded.\n\n\nAlternative:\n In many cases, some of the commands you want to run are probably setting up the final command to run. In this case, building your own \nDockerfile\n is the way to go. Look at the \nRUN\n directive in particular.",
+    "link": "https://stackoverflow.com/questions/33887194/how-to-set-multiple-commands-in-one-yaml-file-with-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "My kubernetes pods keep crashing with &quot;CrashLoopBackOff&quot; but I can&#39;t find any log",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/41604499/my-kubernetes-pods-keep-crashing-with-crashloopbackoff-but-i-cant-find-any-lo"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Multiple environments (Staging, QA, production, etc) with Kubernetes",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/43212836/multiple-environments-staging-qa-production-etc-with-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Restart container within pod",
+    "answer": "Is it possible to restart a single container\n\n\n\n\nNot through \n```kubectl```\n, although depending on the setup of your cluster you can \"cheat\" and \n```docker kill the-sha-goes-here```\n, which will cause kubelet to restart the \"failed\" container (assuming, of course, the restart policy for the Pod says that is what it should do)\n\n\n\n\nhow do I restart the pod\n\n\n\n\nThat depends on how the Pod was created, but based on the Pod name you provided, it appears to be under the oversight of a ReplicaSet, so you can just \n```kubectl delete pod test-1495806908-xn5jn```\n and kubernetes will create a new one in its place (the new Pod will have a different name, so do not expect \n```kubectl get pods```\n to return \n```test-1495806908-xn5jn```\n ever again)",
+    "link": "https://stackoverflow.com/questions/46123457/restart-container-within-pod"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes Deployments vs StatefulSets",
+    "answer": "Deployments and ReplicationControllers are meant for stateless usage and are rather lightweight. \nStatefulSets\n are used when state has to be persisted. Therefore the latter use \n```volumeClaimTemplates```\n / claims on persistent volumes to ensure they can keep the state across component restarts.\n\n\nSo if your application is stateful or if you want to deploy stateful storage on top of Kubernetes use a StatefulSet.\n\n\nIf your application is stateless or if state can be built up from backend-systems during the start then use Deployments.\n\n\nFurther details about running stateful application can be found in \n2016 kubernetes' blog entry about stateful applications",
+    "link": "https://stackoverflow.com/questions/41583672/kubernetes-deployments-vs-statefulsets"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How do you cleanly list all the containers in a kubernetes pod?",
+    "answer": "Answer\n\n\n```kubectl get pods POD_NAME_HERE -o jsonpath='{.spec.containers[*].name}'\n```\n\n\nExplanation\n\n\nThis gets the JSON object representing the pod. It then uses kubectl's \nJSONpath\n to extract the name of each container from the pod.",
+    "link": "https://stackoverflow.com/questions/33924198/how-do-you-cleanly-list-all-the-containers-in-a-kubernetes-pod"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Clean up &quot;Replica Sets&quot; when updating deployments?",
+    "answer": "Removing old replicasets is part of the Deployment object, but it is optional. You can set \n```.spec.revisionHistoryLimit```\n to tell the Deployment how many old replicasets to keep around.\n\n\nHere is a YAML example:\n\n\n```apiVersion: apps/v1\nkind: Deployment\n# ...\nspec:\n  # ...\n  revisionHistoryLimit: 0 # Default to 10 if not specified\n  # ...\n```",
+    "link": "https://stackoverflow.com/questions/37255731/clean-up-replica-sets-when-updating-deployments"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How can I update a secret on Kubernetes when it is generated from a file?",
+    "answer": "This should work:\n\n\n```kubectl create secret generic production-tls \\\n--save-config \\\n--dry-run=client \\\n--from-file=./tls.key --from-file=./tls.crt \\\n-o yaml | \\\nkubectl apply -f -\n```",
+    "link": "https://stackoverflow.com/questions/45879498/how-can-i-update-a-secret-on-kubernetes-when-it-is-generated-from-a-file"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes: list all pods and its nodes",
+    "answer": "You can do that with \ncustom columns\n:\n\n\n```kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,NODE:.spec.nodeName --all-namespaces\n```\n\n\nor just:\n\n\n```kubectl get pod -o=custom-columns=NODE:.spec.nodeName,NAME:.metadata.name --all-namespaces\n```",
+    "link": "https://stackoverflow.com/questions/48983354/kubernetes-list-all-pods-and-its-nodes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to sign in kubernetes dashboard?",
+    "answer": "As of release 1.7 Dashboard supports user authentication based on:\n\n\n\n\n```Authorization: Bearer <token>```\n header passed in every request to Dashboard. Supported from release 1.6. Has the highest priority. If present, login view will not be shown.\n\n\nBearer Token\n that can be used on Dashboard \nlogin view\n.\n\n\nUsername/password\n that can be used on Dashboard \nlogin view\n.\n\n\nKubeconfig\n file that can be used on Dashboard \nlogin view\n.\n\n\n\n\n\n\n— \nDashboard on Github\n\n\nToken\n\n\nHere \n```Token```\n can be \n```Static Token```\n, \n```Service Account Token```\n, \n```OpenID Connect Token```\n from \nKubernetes Authenticating\n, but not the kubeadm \n```Bootstrap Token```\n.\n\n\nWith kubectl, we can get an service account (eg. deployment controller) created in kubernetes by default.\n\n\n```$ kubectl -n kube-system get secret\n# All secrets with type 'kubernetes.io/service-account-token' will allow to log in.\n# Note that they have different privileges.\nNAME                                     TYPE                                  DATA      AGE\ndeployment-controller-token-frsqj        kubernetes.io/service-account-token   3         22h\n\n$ kubectl -n kube-system describe secret deployment-controller-token-frsqj\nName:         deployment-controller-token-frsqj\nNamespace:    kube-system\nLabels:       <none>\nAnnotations:  kubernetes.io/service-account.name=deployment-controller\n              kubernetes.io/service-account.uid=64735958-ae9f-11e7-90d5-02420ac00002\n\nType:  kubernetes.io/service-account-token\n\nData\n====\nca.crt:     1025 bytes\nnamespace:  11 bytes\ntoken:      eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJrdWJlLXN5c3RlbSIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VjcmV0Lm5hbWUiOiJkZXBsb3ltZW50LWNvbnRyb2xsZXItdG9rZW4tZnJzcWoiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC5uYW1lIjoiZGVwbG95bWVudC1jb250cm9sbGVyIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQudWlkIjoiNjQ3MzU5NTgtYWU5Zi0xMWU3LTkwZDUtMDI0MjBhYzAwMDAyIiwic3ViIjoic3lzdGVtOnNlcnZpY2VhY2NvdW50Omt1YmUtc3lzdGVtOmRlcGxveW1lbnQtY29udHJvbGxlciJ9.OqFc4CE1Kh6T3BTCR4XxDZR8gaF1MvH4M3ZHZeCGfO-sw-D0gp826vGPHr_0M66SkGaOmlsVHmP7zmTi-SJ3NCdVO5viHaVUwPJ62hx88_JPmSfD0KJJh6G5QokKfiO0WlGN7L1GgiZj18zgXVYaJShlBSz5qGRuGf0s1jy9KOBt9slAN5xQ9_b88amym2GIXoFyBsqymt5H-iMQaGP35tbRpewKKtly9LzIdrO23bDiZ1voc5QZeAZIWrizzjPY5HPM1qOqacaY9DcGc7akh98eBJG_4vZqH2gKy76fMf0yInFTeNKr45_6fWt8gRM77DQmPwb3hbrjWXe1VvXX_g\n```\n\n\nKubeconfig\n\n\nThe dashboard needs the user in the kubeconfig file to have either \n```username & password```\n or \n```token```\n, but \n```admin.conf```\n only has \n```client-certificate```\n.  You can edit the config file to add the token that was extracted using the method above.\n\n\n```\n$ kubectl config set-credentials cluster-admin --token=bearer_token```\n\n\nAlternative (Not recommended for Production)\n\n\nHere are two ways to bypass the authentication, but use for caution. \n\n\nDeploy dashboard with HTTP\n\n\n```$ kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/master/src/deploy/alternative/kubernetes-dashboard.yaml\n```\n\n\nDashboard can be loaded at \nhttp://localhost:8001/ui\n with \n```kubectl proxy```\n.\n\n\nGranting admin privileges to Dashboard's Service Account\n\n\n```$ cat <<EOF | kubectl create -f -\napiVersion: rbac.authorization.k8s.io/v1beta1\nkind: ClusterRoleBinding\nmetadata:\n  name: kubernetes-dashboard\n  labels:\n    k8s-app: kubernetes-dashboard\nroleRef:\n  apiGroup: rbac.authorization.k8s.io\n  kind: ClusterRole\n  name: cluster-admin\nsubjects:\n- kind: ServiceAccount\n  name: kubernetes-dashboard\n  namespace: kube-system\nEOF\n```\n\n\nAfterwards you can use \nSkip\n option on login page to access Dashboard.\n\n\nIf you are using dashboard version v1.10.1 or later, you must also add \n```--enable-skip-login```\n to the deployment's command line arguments. You can do so by adding it to the \n```args```\n in \n```kubectl edit deployment/kubernetes-dashboard --namespace=kube-system```\n.\n\n\nExample:\n\n\n```      containers:\n      - args:\n        - --auto-generate-certificates\n        - --enable-skip-login            # <-- add this line\n        image: k8s.gcr.io/kubernetes-dashboard-amd64:v1.10.1\n```",
+    "link": "https://stackoverflow.com/questions/46664104/how-to-sign-in-kubernetes-dashboard"
+  },
+  {
+    "category": "kubernetes",
+    "question": "kubectl get events only for a pod",
+    "answer": "You can use the \n```event```\n command of \n```kubectl```\n.\n\n\nTo filter for a specific pod you can use a field-selector:\n\n\n```kubectl get event --namespace abc-namespace --field-selector involvedObject.name=my-pod-zl6m6\n```\n\n\nTo see what fields are possible you can use \n```kubectl describe```\n on any event.",
+    "link": "https://stackoverflow.com/questions/51931113/kubectl-get-events-only-for-a-pod"
+  },
+  {
+    "category": "kubernetes",
+    "question": "What will happen to evicted pods in kubernetes?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/46419163/what-will-happen-to-evicted-pods-in-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "how to stop/pause a pod in kubernetes",
+    "answer": "So, like others have pointed out, Kubernetes doesn't support stop/pause of current state of pod and resume when needed. However, you can still achieve it by having no working deployments which is setting number of replicas to 0.\n\n\n```kubectl scale --replicas=0 deployment/<your-deployment>\n```\n\n\nsee the help\n\n\n```# Set a new size for a Deployment, ReplicaSet, Replication Controller, or StatefulSet.\nkubectl scale --help\n\n```\n\n\nScale also allows users to specify one or more preconditions for the scale action.\n\n\nIf \n```--current-replicas```\n or \n```--resource-version```\n is specified, it is validated before the scale is attempted, and it is\nguaranteed that the precondition holds true when the scale is sent to the server.\n\n\nExamples:\n\n\n```  # Scale a replicaset named 'foo' to 3.\n  kubectl scale --replicas=3 rs/foo\n\n  # Scale a resource identified by type and name specified in \"foo.yaml\" to 3.\n  kubectl scale --replicas=3 -f foo.yaml\n\n  # If the deployment named mysql's current size is 2, scale mysql to 3.\n  kubectl scale --current-replicas=2 --replicas=3 deployment/mysql\n\n  # Scale multiple replication controllers.\n  kubectl scale --replicas=5 rc/foo rc/bar rc/baz\n\n  # Scale statefulset named 'web' to 3.\n  kubectl scale --replicas=3 statefulset/web\n```",
+    "link": "https://stackoverflow.com/questions/54821044/how-to-stop-pause-a-pod-in-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "pod has unbound PersistentVolumeClaims",
+    "answer": "You have to define a \nPersistentVolume\n providing disc space to be consumed by the \nPersistentVolumeClaim\n.\n\n\nWhen using \n```storageClass```\n Kubernetes is going to enable \n\"Dynamic Volume Provisioning\"\n which is not working with the local file system.\n\n\n\n\nTo solve your issue:\n\n\n\n\nProvide a \nPersistentVolume\n fulfilling the constraints of the claim (a size >= 100Mi)\n\n\nRemove the \n```storageClass```\n from the \nPersistentVolumeClaim\n or provide it with an empty value (\n```\"\"```\n)\n\n\nRemove the \nStorageClass\n from your cluster\n\n\n\n\n\n\nHow do these pieces play together?\n\n\nAt creation of the deployment state-description it is usually known which kind (amount, speed, ...) of storage that application will need.\n\nTo make a deployment versatile you'd like to avoid a hard dependency on storage. Kubernetes' volume-abstraction allows you to provide and consume storage in a standardized way.\n\n\nThe \nPersistentVolumeClaim\n is used to provide a storage-constraint alongside the deployment of an application.\n\n\nThe \nPersistentVolume\n offers cluster-wide volume-instances ready to be consumed (\"\n```bound```\n\"). One PersistentVolume will be bound to \none\n claim. But since multiple instances of that claim may be run on multiple nodes, that volume may be \naccessed\n by multiple nodes.\n\n\nA \nPersistentVolume without StorageClass\n is considered to be \nstatic\n.\n\n\n\"Dynamic Volume Provisioning\"\n alongside \nwith\n a \nStorageClass\n allows the cluster to provision PersistentVolumes on demand.\nIn order to make that work, the given storage provider must support \nprovisioning\n - this allows the cluster to request the provisioning of a \"new\" \nPersistentVolume\n when an unsatisfied \nPersistentVolumeClaim\n pops up.\n\n\n\n\nExample PersistentVolume\n\n\nIn order to find how to specify things you're best advised to take a look at the \nAPI for your Kubernetes version\n, so the following example is build from the \nAPI-Reference of K8S 1.17\n:\n\n\n```apiVersion: v1\nkind: PersistentVolume\nmetadata:\n  name: ckan-pv-home\n  labels:\n    type: local\nspec:\n  capacity:\n    storage: 100Mi\n  hostPath:\n    path: \"/mnt/data/ckan\"\n```\n\n\nThe \nPersistentVolumeSpec\n allows us to define multiple attributes.\nI chose a \n```hostPath```\n volume which maps a local directory as content for the volume. The capacity allows the resource scheduler to recognize this volume as applicable in terms of resource needs.\n\n\n\n\nAdditional Resources:\n\n\n\n\nConfigure PersistentVolume Guide",
+    "link": "https://stackoverflow.com/questions/52668938/pod-has-unbound-persistentvolumeclaims"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to automatically remove completed Kubernetes Jobs created by a CronJob?",
+    "answer": "You can now set history limits, or disable history altogether, so that failed or successful CronJobs are not kept around indefinitely.  See my answer \nhere\n. Documentation is \nhere\n.\n\n\nTo set the \nhistory limits\n:\n\n\n\n\nThe \n```.spec.successfulJobsHistoryLimit```\n and \n```.spec.failedJobsHistoryLimit```\n fields are optional. These fields specify how many completed and failed jobs should be kept. By default, they are set to 3 and 1 respectively. Setting a limit to \n```0```\n corresponds to keeping none of the corresponding kind of jobs after they finish.\n\n\n\n\nThe config with 0 limits would look like:\n\n\n```apiVersion: batch/v1beta1\nkind: CronJob\nmetadata:\n  name: hello\nspec:\n  schedule: \"*/1 * * * *\"\n  successfulJobsHistoryLimit: 0\n  failedJobsHistoryLimit: 0\n  jobTemplate:\n    spec:\n      template:\n        spec:\n          containers:\n          - name: hello\n            image: busybox\n            args:\n            - /bin/sh\n            - -c\n            - date; echo Hello from the Kubernetes cluster\n          restartPolicy: OnFailure\n```",
+    "link": "https://stackoverflow.com/questions/41385403/how-to-automatically-remove-completed-kubernetes-jobs-created-by-a-cronjob"
+  },
+  {
+    "category": "kubernetes",
+    "question": "For a helm chart, what versions are available?",
+    "answer": "Short Answer\n\n\nYou can list all available versions of a chart using the \n```search repo```\n functionality together with the \n```--versions```\n flag:\n\n\n```helm search repo <reponame>/<chartname> --versions```\n\n\nThis requires that the repo was added previously and is up to date. If your repo was added some time ago, please make sure to keep the local cache updated using \n```helm repo update```\n to also see recently released versions.\n\n\nThe behaviour of managing charts in a repository changed slightly between Helm v2 and Helm v3. So please refer to the corresponding section for details.\n\n\nHelm v3\n\n\nHelm v3 changed to a more decentralized management of charts, so you might have added a certain repository upfront compared to obtaining many of them directly from the preconfigured \n```stable```\n repository. Listing the versions of a certain chart can be accomplished running the command \n```helm search repo```\n and specifying the full path of the chart (specifying repo and chart name) in combination with the \n```--versions```\n flag (or shorthand \n```-l```\n) like so:\n\n\n```helm search repo <reponame>/<chartname> --versions```\n\n\nIf you are interested in pre-release builds like \n```1.1.0-rc.1```\n or \n```3.0.0-alpha.2```\n, you have to add the \n```--devel```\n flag to also include those.\n\n\n```helm search repo <reponame>/<chartname> --versions --devel```\n\n\nYou can limit the amount of results by specifying a version constraint using SEMVER notation with the \n```--version```\n flag in addition to \n```--versions```\n. This allows for example limiting the results to e.g. only v1 charts:\n\n\n```helm search repo <reponame>/<chartname> --versions --version ^v1.0```\n\n\nDepending on your shell, it can be required to put the version string in single quotes (\n```'```\n) due to special characters like \n```^```\n.\n\n\nExample\n\n\nOne concrete example using jetstack's charts for cert-manager:\n\n\n```$ helm repo add jetstack https://charts.jetstack.io\n\"jetstack\" has been added to your repositories\n```\n\n\nRegular search for results that contain \n```jetstack```\n\n\n```$ helm search repo jetstack\nNAME                    CHART VERSION   APP VERSION DESCRIPTION\njetstack/cert-manager   v1.0.4          v1.0.4      A Helm chart for cert-manager\njetstack/tor-proxy      0.1.1                       A Helm chart for Kubernetes\n```\n\n\nRegular search for a specific chart\n\n\n```$ helm search repo jetstack/cert-manager\nNAME                    CHART VERSION   APP VERSION DESCRIPTION\njetstack/cert-manager   v1.0.4          v1.0.4      A Helm chart for cert-manager\n```\n\n\nListing all the versions for one specific chart\n\n\n```$ helm search repo jetstack/cert-manager --versions\nNAME                    CHART VERSION   APP VERSION DESCRIPTION\njetstack/cert-manager   v1.0.4          v1.0.4      A Helm chart for cert-manager\njetstack/cert-manager   v1.0.3          v1.0.3      A Helm chart for cert-manager\njetstack/cert-manager   v1.0.2          v1.0.2      A Helm chart for cert-manager\njetstack/cert-manager   v1.0.1          v1.0.1      A Helm chart for cert-manager\n...\n```\n\n\nListing unstable/pre-release builds will also include the alpha versions.\n\n\n```$ helm search repo jetstack/cert-manager --versions --devel\nNAME                    CHART VERSION   APP VERSION     DESCRIPTION\njetstack/cert-manager   v1.1.0-alpha.1  v1.1.0-alpha.1  A Helm chart for cert-manager\njetstack/cert-manager   v1.1.0-alpha.0  v1.1.0-alpha.0  A Helm chart for cert-manager\njetstack/cert-manager   v1.0.4          v1.0.4          A Helm chart for cert-manager\njetstack/cert-manager   v1.0.3          v1.0.3          A Helm chart for cert-manager\n...\n```\n\n\nAs listing the versions is integrated into the search, using \n```--versions```\n is not limited to a single chart. Specifying this flag will list all available versions for all charts that match the query string.\n\n\nFor additional information, please check the helm docs at \nhttps://helm.sh/docs/helm/helm_search_repo/\n\n\nHelm v2\n\n\nFor Helm v2, many artifacts were accessible through the \n```stable```\n repo which came preconfigured with the Helm CLI. Listing all versions was done in a similar way but with a different command. To list the available versions of the chart with Helm v2 use the following command:\n\n\n```helm search -l stable/<some_chart>```\n\n\nThe \n```-l```\n or \n```--versions```\n flag is used to display all and not only the latest version per chart.\n\n\nWith Helm v2 you were able to keep your repos updated using the \n```helm update```\n command.\n\n\nReference: \nhttps://v2.helm.sh/docs/helm/#helm-search",
+    "link": "https://stackoverflow.com/questions/51031294/for-a-helm-chart-what-versions-are-available"
+  },
+  {
+    "category": "kubernetes",
+    "question": "kubernetes list all running pods name",
+    "answer": "Personally I prefer this method because it relies only on kubectl, is not very verbose and we don't get the pod/ prefix in the output:\n\n\n```kubectl get pods --no-headers -o custom-columns=\":metadata.name\"\n```",
+    "link": "https://stackoverflow.com/questions/35797906/kubernetes-list-all-running-pods-name"
+  },
+  {
+    "category": "kubernetes",
+    "question": "kubectl error You must be logged in to the server (Unauthorized) when accessing EKS cluster",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/50791303/kubectl-error-you-must-be-logged-in-to-the-server-unauthorized-when-accessing"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes sort pods by age",
+    "answer": "Pods have status, which you can use to find out startTime.\n\n\nI guess something like \n```kubectl get po --sort-by=.status.startTime```\n should work.\n\n\nYou could also try:\n\n\n\n\n```kubectl get po --sort-by='{.firstTimestamp}'```\n.\n\n\n```kubectl get pods --sort-by=.metadata.creationTimestamp```\n Thanks @chris\n\n\n\n\nAlso apparently in Kubernetes 1.7 release, sort-by is broken.\n\n\nhttps://github.com/kubernetes/kubectl/issues/43\n\n\nHere's the bug report : \nhttps://github.com/kubernetes/kubernetes/issues/48602\n\n\nHere's the PR: \nhttps://github.com/kubernetes/kubernetes/pull/48659/files",
+    "link": "https://stackoverflow.com/questions/45310287/kubernetes-sort-pods-by-age"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How do I ssh into the VM for Minikube?",
+    "answer": "You can use the Minikube binary for this, \n```minikube ssh```\n.",
+    "link": "https://stackoverflow.com/questions/38870277/how-do-i-ssh-into-the-vm-for-minikube"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes: how to set VolumeMount user group and file permissions",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/43544370/kubernetes-how-to-set-volumemount-user-group-and-file-permissions"
+  },
+  {
+    "category": "kubernetes",
+    "question": "What is the difference between persistent volume (PV) and persistent volume claim (PVC) in simple terms?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/48956049/what-is-the-difference-between-persistent-volume-pv-and-persistent-volume-clai"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to gracefully remove a node from Kubernetes?",
+    "answer": "List the nodes and get the \n```<node-name>```\n you want to drain or (remove from cluster) \n\n\n```kubectl get nodes\n```\n\n\n1) First drain the node\n\n\n```kubectl drain <node-name>\n```\n\n\nYou might have to ignore daemonsets and local-data in the machine\n\n\n```kubectl drain <node-name> --ignore-daemonsets --delete-local-data\n```\n\n\n2) Edit instance group for nodes (Only if you are using kops)\n\n\n```kops edit ig nodes\n```\n\n\nSet the MIN and MAX size to whatever it is -1\n   Just save the file (nothing extra to be done)\n\n\nYou still might see some pods in the drained node that are related to daemonsets like networking plugin, fluentd for logs, kubedns/coredns etc\n\n\n3) Finally delete the node\n\n\n```kubectl delete node <node-name>\n```\n\n\n4) Commit the state for KOPS in s3: (Only if you are using kops)\n\n\n```kops update cluster --yes\n```\n\n\nOR (if you are using kubeadm)\n\n\nIf you are using kubeadm and would like to reset the machine to a state which was there before running \n```kubeadm join```\n then run\n\n\n```kubeadm reset\n```",
+    "link": "https://stackoverflow.com/questions/35757620/how-to-gracefully-remove-a-node-from-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Difference between Docker ENTRYPOINT and Kubernetes container spec COMMAND?",
+    "answer": "Kubernetes provides us with multiple options on how to use these commands:\n\n\nWhen you override the default Entrypoint and Cmd in Kubernetes .yaml file, these rules apply:\n\n\n\n\nIf you do not supply command or args for a Container, the defaults\ndefined in the Docker image are used.\n\n\nIf you supply only args for a Container, the default Entrypoint\ndefined in the Docker image is run with the args that you supplied.\n\n\nIf you supply a command for a Container, only the\nsupplied command is used. The default EntryPoint and the default Cmd\ndefined in the Docker image are ignored. Your command is\nrun with the args supplied (or no args if none supplied).\n\n\n\n\nHere is an example:\n\n\nDockerfile:\n\n\n```FROM alpine:latest\nCOPY \"executable_file\" /\nENTRYPOINT [ \"./executable_file\" ]\n```\n\n\nKubernetes yaml file:\n\n\n``` spec:\n    containers:\n      - name: container_name\n        image: image_name\n        args: [\"arg1\", \"arg2\", \"arg3\"]\n```\n\n\nhttps://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/",
+    "link": "https://stackoverflow.com/questions/44316361/difference-between-docker-entrypoint-and-kubernetes-container-spec-command"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Docker-Swarm, Kubernetes, Mesos &amp; Core-OS Fleet",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/27640633/docker-swarm-kubernetes-mesos-core-os-fleet"
+  },
+  {
+    "category": "kubernetes",
+    "question": "What does Kubernetes actually do?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/28086732/what-does-kubernetes-actually-do"
+  },
+  {
+    "category": "kubernetes",
+    "question": "What is an &#39;endpoint&#39; in Kubernetes?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/52857825/what-is-an-endpoint-in-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "What is the reverse of &quot;kubectl apply&quot;?",
+    "answer": "One way would be \n```kubectl delete -f <filename>```\n but it implies few things:\n\n\n\n\nThe resources were first created. It simply removes all of those, if you really want to \"revert to the previous state\" I'm not sure there are built-in tools in Kubernetes to do that (so you really would restore from a backup, if you have one)\n\n\nThe containers did not modify the host machines: containers may mount root filesystem and change it, or kernel subsystems (iptables, etc). The \n```delete```\n command would not revert it either, and in that case you really need to check the documentation for the product to see if they offer any official way to guarantees a proper cleanup",
+    "link": "https://stackoverflow.com/questions/57683206/what-is-the-reverse-of-kubectl-apply"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes Pod Warning: 1 node(s) had volume node affinity conflict",
+    "answer": "The error \"volume node affinity conflict\" happens when the persistent volume claims that the pod is using, are scheduled on different zones, rather than on one zone, and so the actual pod was not able to be scheduled because it cannot connect to the volume from another zone. To check this, you can see the details of all the Persistent Volumes.\nTo check that, first get your PVCs:\n\n\n```$ kubectl get pvc -n <namespace>\n```\n\n\nThen get the details of the Persistent Volumes (not Volume claims)\n\n\n```$  kubectl get pv\n```\n\n\nFind the PVs, that correspond to your PVCs and describe them\n\n\n```$  kubectl describe pv <pv1> <pv2>\n```\n\n\nYou can check the Source.VolumeID for each of the PV, most likely they will be different availability zone, and so your pod gives the affinity error.\nTo fix this, create a storageclass for a single zone and use that storageclass in your PVC.\n\n\n```kind: StorageClass\napiVersion: storage.k8s.io/v1\nmetadata:\n  name: region1storageclass\nprovisioner: kubernetes.io/aws-ebs\nparameters:\n  type: gp2\n  encrypted: \"true\" # if encryption required\nvolumeBindingMode: WaitForFirstConsumer\nallowedTopologies:\n- matchLabelExpressions:\n  - key: failure-domain.beta.kubernetes.io/zone\n    values:\n    - eu-west-2b # this is the availability zone, will depend on your cloud provider\n    # multi-az can be added, but that defeats the purpose in our scenario\n```",
+    "link": "https://stackoverflow.com/questions/51946393/kubernetes-pod-warning-1-nodes-had-volume-node-affinity-conflict"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Exec commands on kubernetes pods with root access",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/42793382/exec-commands-on-kubernetes-pods-with-root-access"
+  },
+  {
+    "category": "kubernetes",
+    "question": "What is the difference between a Kubernetes Controller and a Kubernetes Operator?",
+    "answer": "I believe the term \"kubernetes operator\" was introduced by \nthe CoreOS people here\n\n\n\n\nAn Operator is an application-specific controller that extends the Kubernetes API to create, configure and manage instances of complex stateful applications on behalf of a Kubernetes user. It builds upon the basic Kubernetes resource and controller concepts, but also includes domain or application-specific knowledge to automate common tasks better managed by computers.\n\n\n\n\nSo basically, a kubernetes operator is the name of a pattern that consists of a kubernetes controller that adds new objects to the Kubernetes API, in order to configure and manage an application, such as Prometheus or etcd.\n\n\nIn one sentence: An operator is a domain specific controller.\n\n\nUpdate\n\n\nThere is \na new discussion on Github\n about this very same topic, linking to the same blog post. Relevant bits of the discussion are:\n\n\n\n\nAll Operators use the controller pattern, but not all controllers are Operators. It's only an Operator if it's got: controller pattern + API extension + single-app focus.\n\n\nOperator is a customized controller implemented with CRD. It follows the same pattern as built-in controllers (i.e. watch, diff, action).\n\n\n\n\nUpdate 2\n\n\nI found \na new blog post\n that tries to explain the difference as well.",
+    "link": "https://stackoverflow.com/questions/47848258/what-is-the-difference-between-a-kubernetes-controller-and-a-kubernetes-operator"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Disabling cronjob in Kubernetes",
+    "answer": "If you want to suspend cronjob via patch, use:\n\n\n```kubectl patch cronjobs <job-name> -p '{\"spec\" : {\"suspend\" : true }}'\n```\n\n\nYou may need to escape \" and/or specify namespace\n\n\n``` kubectl patch cronjob <job-name> [-n namespace] -p '{\\\"spec\\\" : {\\\"suspend\\\" : true }}'\n```",
+    "link": "https://stackoverflow.com/questions/52776690/disabling-cronjob-in-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Update k8s ConfigMap or Secret without deleting the existing one",
+    "answer": "You can get YAML from the \n```kubectl create configmap```\n command and pipe it to \n```kubectl apply```\n, like this:\n\n\n```kubectl create configmap foo --from-file foo.properties -o yaml --dry-run=client | kubectl apply -f -\n```",
+    "link": "https://stackoverflow.com/questions/38216278/update-k8s-configmap-or-secret-without-deleting-the-existing-one"
+  },
+  {
+    "category": "kubernetes",
+    "question": "UPGRADE FAILED: another operation (install/upgrade/rollback) is in progress",
+    "answer": "This  error can happen for few reasons, but it most commonly occurs when there is an interruption during the upgrade/install process as you already mentioned.\n\n\nTo fix this one may need to, \nfirst rollback to another version, then reinstall\n or helm upgrade again.\n\n\nTry below command to list\n\n\n```helm ls --namespace <namespace>\n```\n\n\nbut you may note that when running that command ,it may not show any columns with  information\n\n\nTry to check the history of the previous deployment\n\n\n```helm history <release> --namespace <namespace>\n```\n\n\nThis provides with information mostly like the original installation was never completed successfully and is \npending state\n something like STATUS: pending-upgrade state.\n\n\nTo escape from this state, use the rollback command:\n\n\n```helm rollback <release> <revision> --namespace <namespace>\n```\n\n\nrevision is optional, but you should try to provide it.\n\n\nYou may then try to issue your original command again to upgrade or reinstall.\n\n\nrefer: \nhelm-upgrade-failed-another-operation-is-in-progress-how-to-fix-it-",
+    "link": "https://stackoverflow.com/questions/71599858/upgrade-failed-another-operation-install-upgrade-rollback-is-in-progress"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to pull environment variables with Helm charts",
+    "answer": "You can \n```export```\n the variable and use it while running \n```helm install```\n.\n\n\nBefore that, you have to modify your chart so that the value can be \n```set```\n while installation. \n\n\nSkip this part, if you already know, how to setup template fields.\n\n\n\n\nAs you don't want to expose the data, so it's better to have it saved as secret in kubernetes. \n\n\nFirst of all, add this two lines in your \n```Values```\n file, so that these two values can be set from outside.\n\n\n```username: root\npassword: password\n```\n\n\nNow, add a \n```secret.yaml```\n file inside your \n```template```\n folder. and, copy this code snippet into that file. \n\n\n```apiVersion: v1\nkind: Secret\nmetadata:\n  name: {{ .Release.Name }}-auth\ndata:\n  password: {{ .Values.password | b64enc }}\n  username: {{ .Values.username | b64enc }}\n```\n\n\nNow tweak your deployment yaml template and make changes in \n```env```\n section, like this\n\n\n```...\n...\n    spec:\n      restartPolicy: Always\n      containers:\n        - name: sample-app\n          image: \"sample-app:latest\"\n          imagePullPolicy: Always\n          env:          \n          - name: \"USERNAME\"\n            valueFrom:\n              secretKeyRef:\n                key:  username\n                name: {{ .Release.Name }}-auth\n          - name: \"PASSWORD\"\n            valueFrom:\n              secretKeyRef:\n                key:  password\n                name: {{ .Release.Name }}-auth\n...\n...\n```\n\n\n\n\nIf you have modified your template correctly for \n```--set```\n flag,\nyou can set this using environment variable.\n\n\n```$ export USERNAME=root-user\n```\n\n\nNow use this variable while running helm install,\n\n\n```$ helm install --set username=$USERNAME ./mychart\n```\n\n\nIf you run this \n```helm install```\n in \n```dry-run```\n mode, you can verify the changes,\n\n\n```$ helm install --dry-run --set username=$USERNAME --debug ./mychart\n[debug] Created tunnel using local port: '44937'\n\n[debug] SERVER: \"127.0.0.1:44937\"\n\n[debug] Original chart version: \"\"\n[debug] CHART PATH: /home/maruf/go/src/github.com/the-redback/kubernetes-yaml-drafts/helm-charts/mychart\n\nNAME:   irreverant-meerkat\nREVISION: 1\nRELEASED: Fri Apr 20 03:29:11 2018\nCHART: mychart-0.1.0\nUSER-SUPPLIED VALUES:\nusername: root-user\n\nCOMPUTED VALUES:\npassword: password\nusername: root-user\n\nHOOKS:\nMANIFEST:\n\n---\n# Source: mychart/templates/secret.yaml\napiVersion: v1\nkind: Secret\nmetadata:\n  name: irreverant-meerkat-auth\ndata:\n  password: password\n  username: root-user\n---\n# Source: mychart/templates/deployment.yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: irreverant-meerkat\n  labels:\n    app: irreverant-meerkat\nspec:\n  replicas: 1\n  template:\n    metadata:\n      name: irreverant-meerkat\n      labels:\n        app: irreverant-meerkat\n    spec:\n      containers:\n      - name: irreverant-meerkat\n        image: alpine\n        env:\n        - name: \"USERNAME\"\n          valueFrom:\n            secretKeyRef:\n              key:  username\n              name: irreverant-meerkat-auth\n        - name: \"PASSWORD\"\n          valueFrom:\n            secretKeyRef:\n              key:  password\n              name: irreverant-meerkat-auth\n\n        imagePullPolicy: IfNotPresent\n      restartPolicy: Always\n  selector:\n    matchLabels:\n      app: irreverant-meerkat\n```\n\n\nYou can see that the data of username in secret has changed to \n```root-user```\n.\n\n\nI have added \nthis example\n into github repo.\n\n\nThere is also some discussion in \nkubernetes/helm\n repo regarding this. You can see \nthis issue\n to know about all other ways to use environment variables.",
+    "link": "https://stackoverflow.com/questions/49928819/how-to-pull-environment-variables-with-helm-charts"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Get error &quot;unknown field &quot;serviceName&quot; in io.k8s.api.networking.v1.IngressBackend&quot; when switch from v1beta1 to v1 in Kubernetes Ingress",
+    "answer": "I think that this \nPR\n contains the change you're asking about.\n\n\n````Ingress` and `IngressClass` resources have graduated to `networking.k8s.io/v1`. Ingress and IngressClass types in the `extensions/v1beta1` and `networking.k8s.io/v1beta1` API versions are deprecated and will no longer be served in 1.22+. Persisted objects can be accessed via the `networking.k8s.io/v1` API. Notable changes in v1 Ingress objects (v1beta1 field names are unchanged):\n* `spec.backend` -> `spec.defaultBackend`\n* `serviceName` -> `service.name`\n* `servicePort` -> `service.port.name` (for string values)\n* `servicePort` -> `service.port.number` (for numeric values)\n* `pathType` no longer has a default value in v1; \"Exact\", \"Prefix\", or \"ImplementationSpecific\" must be specified\nOther Ingress API updates:\n* backends can now be resource or service backends\n* `path` is no longer required to be a valid regular expression\n```\n\n\nIf you look in the \n1.19 Ingress doc\n, it looks like the new syntax would be:\n\n\n```apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: minimal-ingress\n  annotations:\n    nginx.ingress.kubernetes.io/rewrite-target: /\nspec:\n  rules:\n  - http:\n      paths:\n      - path: /testpath\n        pathType: Prefix\n        backend:\n          service:\n            name: test\n            port:\n              number: 80\n```\n\n\nI unfortunately don't have a 1.19 cluster to test myself, but I think this is what you're running into.",
+    "link": "https://stackoverflow.com/questions/64125048/get-error-unknown-field-servicename-in-io-k8s-api-networking-v1-ingressbacken"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to know a Pod&#39;s own IP address from inside a container in the Pod?",
+    "answer": "The simplest answer is to ensure that your pod or replication controller yaml/json files add the pod IP as an environment variable by adding the config block defined below. (the block below additionally makes the name and namespace available to the pod)\n\n\n```env:\n- name: MY_POD_NAME\n  valueFrom:\n    fieldRef:\n      fieldPath: metadata.name\n- name: MY_POD_NAMESPACE\n  valueFrom:\n    fieldRef:\n      fieldPath: metadata.namespace\n- name: MY_POD_IP\n  valueFrom:\n    fieldRef:\n      fieldPath: status.podIP\n```\n\n\nRecreate the pod/rc and then try\n\n\n```echo $MY_POD_IP\n```\n\n\nalso run \n```env```\n to see what else kubernetes provides you with.",
+    "link": "https://stackoverflow.com/questions/30746888/how-to-know-a-pods-own-ip-address-from-inside-a-container-in-the-pod"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How do I access the Kubernetes api from within a pod container?",
+    "answer": "In the official documentation I found this: \n\n\nhttps://kubernetes.io/docs/tasks/access-application-cluster/access-cluster/#accessing-the-api-from-a-pod\n\n\nApparently I was missing a security token that I didn't need in a previous version of Kubernetes. From that, I devised what I think is a simpler solution than running a proxy or installing golang on my container. See this example that gets the information, from the api, for the current container:\n\n\n```KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\ncurl -sSk -H \"Authorization: Bearer $KUBE_TOKEN\" \\\n      https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_PORT_443_TCP_PORT/api/v1/namespaces/default/pods/$HOSTNAME\n```\n\n\nI also use include a simple binary, jq (\nhttp://stedolan.github.io/jq/download/\n), to parse the json for use in bash scripts.",
+    "link": "https://stackoverflow.com/questions/30690186/how-do-i-access-the-kubernetes-api-from-within-a-pod-container"
+  },
+  {
+    "category": "kubernetes",
+    "question": "no matches for kind &quot;Deployment&quot; in version &quot;extensions/v1beta1&quot;",
+    "answer": "In Kubernetes 1.16 some \n```api```\ns have been changed. \n\n\nYou can check which apis support current Kubernetes object using \n\n\n```$ kubectl api-resources | grep deployment\ndeployments                       deploy       apps                           true         Deployment\n```\n\n\nThis means that only apiVersion with \n```apps```\n is correct for Deployments (\n```extensions```\n is not supporting \n```Deployment```\n). The same situation with StatefulSet. \n\n\nYou need to change Deployment and StatefulSet apiVersion to \n```apiVersion: apps/v1```\n.\n\n\nIf this does not help, please add your YAML to the question.\n\n\nEDIT\n\nAs issue is caused by HELM templates included old apiVersions in Deployments which are not supported in version 1.16, there are 2 possible solutions:\n\n\n1.\n \n```git clone```\n whole repo and replace apiVersion to \n```apps/v1```\n in all templates/deployment.yaml using script \n\n\n2.\n Use older version of Kubernetes (1.15) when validator accept \n```extensions```\n as \n```apiVersion```\n for \n```Deployment```\n and \n```StatefulSet```\n.",
+    "link": "https://stackoverflow.com/questions/58481850/no-matches-for-kind-deployment-in-version-extensions-v1beta1"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to set dynamic values with Kubernetes yaml file",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/48296082/how-to-set-dynamic-values-with-kubernetes-yaml-file"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Scale down Kubernetes Pods",
+    "answer": "You are doing the correct action; \ntraditionally\n the \n```scale```\n verb is applied just to the resource name, as in \n```kubectl scale deploy my-awesome-deployment --replicas=0```\n, which removes the need to always point at the \nspecific file\n that describes that deployment, but there's nothing wrong (that I know of) with using the file if that is more convenient for you.",
+    "link": "https://stackoverflow.com/questions/47572597/scale-down-kubernetes-pods"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes equivalent of env-file in Docker",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/33478555/kubernetes-equivalent-of-env-file-in-docker"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes size definitions: What&#39;s the difference of &quot;Gi&quot; and &quot;G&quot;?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/50804915/kubernetes-size-definitions-whats-the-difference-of-gi-and-g"
+  },
+  {
+    "category": "kubernetes",
+    "question": "What is the meaning of ImagePullBackOff status on a Kubernetes pod?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/37302776/what-is-the-meaning-of-imagepullbackoff-status-on-a-kubernetes-pod"
+  },
+  {
+    "category": "kubernetes",
+    "question": "did you specify the right host or port? error on Kubernetes",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/36650642/did-you-specify-the-right-host-or-port-error-on-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Docker Detached Mode",
+    "answer": "You can start a docker container in detached mode with a \n```-d```\n option. So the container starts up and run in background. That means, you start up the container and could use the console after startup for other commands.\n\n\nThe opposite of detached mode is foreground mode. That is the default mode, when \n```-d```\n option is not used. In this mode, the console you are using to execute \n```docker run```\n will be attached to standard input, output and error. That means your console is attached to the container's process.\n\n\nIn detached mode, you can follow the standard output of your docker container with \n```docker logs -f <container_ID>```\n.\n\n\nJust try both options. I always use the detached mode to run my containers. I hope I could explain it a little bit clearer.",
+    "link": "https://stackoverflow.com/questions/34029680/docker-detached-mode"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Tailing few lines from huge logs of kubectl logs -f",
+    "answer": "In a cluster best practices are to gather all logs in a single point through an aggregator and analyze them with a dedicated tool. For that reason in K8S, log command is quite basic.\n\n\nAnyway \n```kubectl logs -h```\n shows some options useful for you:\n\n\n```# Display only the most recent 20 lines of output in pod nginx\nkubectl logs --tail=20 nginx\n\n# Show all logs from pod nginx written in the last hour\nkubectl logs --since=1h nginx\n```\n\n\nSome tools with your requirements (and more) are available on github, some of which are:\n\n\n\n\nhttps://github.com/boz/kail\n\n\n\n\nhttps://github.com/stern/stern\n\n\n\n\nhttps://github.com/rogosprojects/klogs",
+    "link": "https://stackoverflow.com/questions/51835066/tailing-few-lines-from-huge-logs-of-kubectl-logs-f"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to get the current namespace of current context using kubectl",
+    "answer": "This works if you have a namespace selected in your context:\n\n\n```kubectl config view --minify -o jsonpath='{..namespace}'\n```\n\n\nAlso, \nkube-ps1\n can be used to display your current context and namespace in your shell prompt.",
+    "link": "https://stackoverflow.com/questions/55853977/how-to-get-the-current-namespace-of-current-context-using-kubectl"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Tell when Job is Complete",
+    "answer": "Since version 1.11, you can do:\n\n\n```kubectl wait --for=condition=complete job/myjob\n```\n\n\nand you can also set a timeout:\n\n\n```kubectl wait --for=condition=complete --timeout=30s job/myjob\n```",
+    "link": "https://stackoverflow.com/questions/44686568/tell-when-job-is-complete"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to create a local development environment for Kubernetes?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/29746926/how-to-create-a-local-development-environment-for-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to merge kubectl config file with ~/.kube/config?",
+    "answer": "Do this:\n\n\n```export KUBECONFIG=~/.kube/config:~/someotherconfig \nkubectl config view --flatten\n```\n\n\nYou can then pipe that out to a new file if needed.",
+    "link": "https://stackoverflow.com/questions/46184125/how-to-merge-kubectl-config-file-with-kube-config"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How can I list the taints on Kubernetes nodes?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/43379415/how-can-i-list-the-taints-on-kubernetes-nodes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to delete a node label by command and api?",
+    "answer": "create labels for the nodes:\n\n\n```kubectl label node <nodename> <labelname>=allow```\n\n\ndelete above labels from its respecitve nodes:\n\n\n```kubectl label node <nodename> <labelname>-```",
+    "link": "https://stackoverflow.com/questions/34067979/how-to-delete-a-node-label-by-command-and-api"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Can you connect to Amazon ElastiСache Redis outside of Amazon?",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/21917661/can-you-connect-to-amazon-elasti%d0%a1ache-redis-outside-of-amazon"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes Helm stuck with an update in progress",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/65006907/kubernetes-helm-stuck-with-an-update-in-progress"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to find the url of a service in kubernetes?",
+    "answer": "URL of service is in the below format:\n\n\n```<service-name>.<namespace>.svc.cluster.local:<service-port>\n```\n\n\nIn your case it is:\n\n\n```helloworldsvc.test.svc.cluster.local:9111\n```",
+    "link": "https://stackoverflow.com/questions/59558303/how-to-find-the-url-of-a-service-in-kubernetes"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Ingress configuration for k8s in different namespaces",
+    "answer": "I would like to simplify the answer a bit for those who are relatively new to Kubernetes and its ingress options. There are 2 separate things that need to be present for ingress(es) to work:\n\n\n\n\nIngress Controller\n: a separate \n```DaemonSet```\n (a controller which runs on all nodes, including any future ones) along with a \n```Service```\n that can be used to utilize routing and proxying. It's based for example on NGINX which acts as the old-school reverse proxy receiving incoming traffic and forwarding it to HTTP(S) routes defined in the \n```Ingress```\n resources in point 2 below (distinguished by their different routes/URLs);\n\n\nIngress rules\n: separate Kubernetes resources with \n```kind: Ingress```\n. Will only take effect if Ingress Controller is already \ndeployed\n on that node.\n\n\n\n\nWhile \nIngress Controller can be deployed in any namespace\n it is usually deployed in a namespace separate from your app services (e.g. \n```ingress```\n or \n```kube-system```\n). It can see \n```Ingress```\n rules in all other namespaces and pick them up. However, each of the \nIngress rules must reside in the namespace where the app that they configure reside.\n\n\nThere are some workarounds for that, but this is the most common approach.",
+    "link": "https://stackoverflow.com/questions/59844622/ingress-configuration-for-k8s-in-different-namespaces"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Helm install unknown flag --name",
+    "answer": "In Helm v3, the release name is now mandatory as part of the commmand, see \n```helm install --help```\n:\n\n\n\n\nUsage:\n\n    helm install [NAME] [CHART] [flags]\n\n\n\n\nYour command should be\n:\n\n\n```helm install my-nginx stable/nginx-ingress```\n\n\n\n\nFurthermore, Helm will not auto-generate names for releases anymore. If you want the \"old behavior\", you can use the \n```--generate-name```\n flag. e.g:\n\n\n```helm install --generate-name stable/nginx-ingress```\n\n\nThe v3 docs are available at \nhttps://v3.helm.sh/docs/\n, but as it is a beta version, the docs will not be accurate for a while. It's better to rely on the CLI \n```--help```\n, that is auto-generated by Go/\nCobra\n.",
+    "link": "https://stackoverflow.com/questions/57961162/helm-install-unknown-flag-name"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Execute bash command in pod with kubectl?",
+    "answer": "The double dash symbol \"--\" is used to separate the command you want to run inside the container from the kubectl arguments.\nSo the correct way is:\n\n\n```kubectl exec -it --namespace=tools mongo-pod -- bash -c \"mongo\"\n```\n\n\nYou forgot a space between \"--\" and \"bash\".\n\n\nTo execute multiple commands you may want:\n\n\n\n\nto create a script and mount it as a volume in your pod and execute it\n\n\n\n\nto launch a side container with the script and run it",
+    "link": "https://stackoverflow.com/questions/51247619/execute-bash-command-in-pod-with-kubectl"
+  },
+  {
+    "category": "kubernetes",
+    "question": "How to get Kubernetes cluster name from K8s API",
+    "answer": "",
+    "link": "https://stackoverflow.com/questions/38242062/how-to-get-kubernetes-cluster-name-from-k8s-api"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes vs. CloudFoundry",
+    "answer": "As both a CloudFoundry (past) and Kubernetes (present) commiter, I'm probably uniquely qualified to answer this one.\n\n\nPaaS-like\n\n\nI like to call CloudFoundry an \"Application PaaS\" and Kubernetes a \"Container PaaS\", but the distinction is fairly subtle and fluid, given that both projects change over time to compete in the same markets.\n\n\nThe distinction between the two is that CF has a staging layer that takes a (12-factor) user app (e.g. jar or gem) and a Heroku-style buildpack (e.g. Java+Tomcat or Ruby) and produces a droplet (analogous to a Docker image). CF doesn't expose the containerization interface to the user, but Kubernetes does.\n\n\nAudience\n\n\nCloudFoundry's primary audience is enterprise application devs who want to deploy 12-factor stateless apps using Heroku-style buildpacks.\n\n\nKubernetes' audience is a little broader, including both stateless application and stateful service developers who provide their own containers.\n\n\nThis distinction could change in the future:\n\n\n\n\nCloudFoundry could start to accept docker images (\nLattice accepts Docker images\n).\n\n\nKubernetes could add an image generation layer (\nOpenShift does something like this\n).\n\n\n\n\nFeature Comparison\n\n\nAs both projects mature and compete, their similarities and differences will change. So take the following feature comparison with a grain of salt. \n\n\nBoth CF and K8s share many similar features, like containerization, namespacing, authentication, \n\n\nKubernetes competitive advantages:\n\n\n\n\nGroup and scale pods of containers that share a networking stack, rather than just scaling independently\n\n\nBring your own container\n\n\nStateful persistance layer\n\n\nLarger, more active OSS community\n\n\nMore extensible architecture with replacable components and 3rd party plugins\n\n\nFree web GUI\n\n\n\n\nCloudFoundry competitive advantages:\n\n\n\n\nMature authentication, user grouping, and multi-tenancy support [x]\n\n\nBring your own app\n\n\nIncluded load balancer\n\n\nDeployed, scaled, and kept alive by BOSH [x]\n\n\nRobust logging and metrics aggregation [x]\n\n\nEnterprise web GUI [x]\n\n\n\n\n[x] These features are not part of Diego or included in Lattice.\n\n\nDeployment\n\n\nOne of CloudFoundry's competitive advantages is that it has a mature deployment engine, BOSH, which enables features like scaling, resurrection and monitoring of core CF components. BOSH also supports many IaaS layers with a pluggable cloud provider abstraction. Unfortunately, BOSH's learning curve and deployment configuration management are nightmarish. (As a BOSH committer, I think I can say this with accuracy.)\n\n\nKubernetes' deployment abstraction is still in its infancy. Multiple target environments are available in the core repo, but they're not all working, well tested, or supported by the primary developers. This is mostly a maturity thing. One might expect this to improve over time and increase in abstraction. For example, \nKubernetes on DCOS\n allows deploying Kubernetes to an existing \nDCOS\n cluster with a single command.\n\n\nHistorical Context\n\n\nDiego is a rewrite of CF's Droplet Execution Agent. It was originally developed before Kubernetes was announced and has taken on more feature scope as the competitive landscape has evolved. Its original goal was to generate droplets (user application + CF buildpack) and run them in Warden (renamed Garden when rewritten in Go) containers. Since its inception it's also been repackaged as \nLattice\n, which is somewhat of a CloudFoundry-lite (although that name was taken by an \nexisting project\n). For that reason, Lattice is somewhat toy-like, in that it has deliberately reduced user audience and scope, explicitly missing features that would make it \"enterprise-ready\". Features that CF already provides. This is partly because Lattice is used to test the core components, without some of the overhead from the more complex CF, but you can also use Lattice in internal high-trust environments where security and multi-tenancy aren't as much of a concern.\n\n\nIt's also worth mentioning that CloudFoundry and Warden (its container engine) predate Docker as well, by a couple years.\n\n\nKubernetes on the other hand, is a relatively new project that was developed by Google based on years of container usage with BORG and Omega. Kubernetes could be thought of as 3rd generation container orchestration at Google, the same way Diego is 3rd generation container orchestration at Pivotal/VMware (v1 written at VMware; v2 at VMware with Pivotal Labs help; v3 at Pivotal after it took over the project).",
+    "link": "https://stackoverflow.com/questions/32047563/kubernetes-vs-cloudfoundry"
+  },
+  {
+    "category": "kubernetes",
+    "question": "Kubernetes: Can&#39;t delete PersistentVolumeClaim (pvc)",
+    "answer": "This happens when persistent volume is protected. You should be able to cross verify this: \n\n\nCommand:\n\n\n```kubectl describe pvc PVC_NAME | grep Finalizers```\n\n\nOutput: \n\n\n```Finalizers:    [kubernetes.io/pvc-protection]```\n\n\nYou can fix this by setting finalizers to null using \n```kubectl patch```\n:\n\n\n```kubectl patch pvc PVC_NAME -p '{\"metadata\":{\"finalizers\": []}}' --type=merge\n```\n\n\nRef; \nStorage Object in Use Protection",
+    "link": "https://stackoverflow.com/questions/51358856/kubernetes-cant-delete-persistentvolumeclaim-pvc"
+  }
+]

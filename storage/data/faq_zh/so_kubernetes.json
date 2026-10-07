@@ -1,0 +1,602 @@
+[
+ {
+  "category": "kubernetes",
+  "question": "如何在 Minikube 中使用本地 Docker 镜像？",
+  "answer": "正如手册所述，你可以通过 `eval $(minikube docker-env)` 来复用 Minikube 的 Docker 守护进程。\n\n因此，要使用一个镜像而不上传它，你可以按照以下步骤操作：\n\n1. 使用 `eval $(minikube docker-env)` 设置环境变量。\n2. 使用 Minikube 的 Docker 守护进程构建镜像（例如，`docker build -t my-image .`）。\n3. 在 Pod 规范中设置镜像，如同构建标签一样（例如，`my-image`）。\n4. 将 `imagePullPolicy` 设置为 `Never`，否则 Kubernetes 会尝试下载该镜像。\n\n重要提示：你必须在每个想要使用的终端上运行 `eval $(minikube docker-env)`，因为它仅设置当前 shell 会话的环境变量。",
+  "link": "https://stackoverflow.com/questions/42564058/how-can-i-use-local-docker-images-with-minikube"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Pod 卡在 Terminating 状态",
+  "answer": "你可以使用以下命令强制删除 Pod。\n\n```kubectl delete pod <PODNAME> --grace-period=0 --force --namespace <NAMESPACE>\n```",
+  "link": "https://stackoverflow.com/questions/35453792/pods-stuck-in-terminating-status"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes 中 ClusterIP、NodePort 和 LoadBalancer 服务类型之间的区别是什么？",
+  "answer": "ClusterIP 暴露以下内容：\n\n\n\n\n```spec.clusterIp:spec.ports[*].port```\n\n\n\n\n你只能在集群内部访问此服务。它可以通过其 \n```spec.clusterIp```\n 端口访问。如果设置了 \n```spec.ports[*].targetPort```\n，它将从端口路由到 targetPort。当你调用 \n```kubectl get services```\n 时获得的 CLUSTER-IP 是分配给此服务在集群内部的 IP。\n\n\nNodePort 暴露以下内容：\n\n\n\n\n```<NodeIP>:spec.ports[*].nodePort```\n\n\n```spec.clusterIp:spec.ports[*].port```\n\n\n\n\n如果你从节点的外部 IP 访问此服务的 nodePort，它会将请求路由到 \n```spec.clusterIp:spec.ports[*].port```\n，然后将其路由到你的 \n```spec.ports[*].targetPort```\n（如果设置了）。此服务也可以像 ClusterIP 一样访问。\n\n\n你的 NodeIP 是节点的外部 IP 地址。你不能从 \n```spec.clusterIp:spec.ports[*].nodePort```\n 访问你的服务。\n\n\nLoadBalancer 暴露以下内容：\n\n\n\n\n```spec.loadBalancerIp:spec.ports[*].port```\n\n\n```<NodeIP>:spec.ports[*].nodePort```\n\n\n```spec.clusterIp:spec.ports[*].port```\n\n\n\n\n你可以从负载均衡器的 IP 地址访问此服务，它会将你的请求路由到 nodePort，然后将其路由到 clusterIP 端口。你也可以像访问 NodePort 或 ClusterIP 服务一样访问此服务。",
+  "link": "https://stackoverflow.com/questions/41509439/difference-between-clusterip-nodeport-and-loadbalancer-service-types-in-kuberne"
+ },
+ {
+  "category": "kubernetes",
+  "question": "kubectl apply 与 kubectl create 的区别是什么？",
+  "answer": "这是两种不同的方法：\n\n\n命令式管理\n\n\n```kubectl create```\n 是我们所说的 \n命令式管理\n。在这种方法中，你告诉 Kubernetes API 你想要创建、替换或删除什么，而不是你希望你的 K8s 集群世界看起来如何。\n\n\n声明式管理\n\n\n```kubectl apply```\n 是 \n声明式管理\n 方法的一部分，其中你可能对活动对象所做的更改（例如通过 \n```scale```\n）会被“\n维护\n”，即使你对对象 \n```apply```\n 其他更改。\n\n\n\n\n你可以在 \nKubernetes 对象管理\n 文档中阅读更多关于命令式和声明式管理的内容。\n\n\n\n\ntl:dr\n\n\n它们做不同的事情。如果资源存在，\n```kubectl create```\n 会报错，而 \n```kubectl apply```\n 不会报错。",
+  "link": "https://stackoverflow.com/questions/47369351/kubectl-apply-vs-kubectl-create"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Ingress 与 Load Balancer 的区别",
+  "answer": "Load Balancer：\n Kubernetes 的 LoadBalancer 服务是一种指向外部负载均衡器的服务，这些负载均衡器不在你的 Kubernetes 集群中，而是存在于其他地方。它们可以与你的 Pod 协同工作，前提是你的 Pod 可以从外部路由。Google 和 AWS 原生提供此功能。就 Amazon 而言，这直接映射到 ELB，在 AWS 中运行时，Kubernetes 可以为每个部署的 LoadBalancer 服务自动配置和设置 ELB 实例。\n\n\nIngress：\n Ingress 实际上只是一组传递给正在监听它们的控制器的规则。你可以部署一堆 Ingress 规则，但除非你有一个能够处理它们的控制器，否则什么都不会发生。如果配置得当，LoadBalancer 服务可以监听 Ingress 规则。\n\n\n你还可以创建一个 \nNodePort\n 服务，它在集群外部有一个可路由的 IP，但指向集群内存在的 Pod。这可以是一个 Ingress Controller。\n\n\nIngress Controller 只是一个配置为解释 Ingress 规则的 Pod。Kubernetes 支持的最流行的 Ingress Controller 之一是 nginx。就 Amazon 而言，ALB \n可以用作\n Ingress Controller。\n\n\n例如，\n这个\n nginx 控制器能够接收你定义的 Ingress 规则，并将它们转换为 nginx.conf 文件，然后在其 Pod 中加载并启动。\n\n\n假设你定义了一个如下所示的 Ingress：\n\n\n```apiVersion: extensions/v1beta1\nkind: Ingress\nmetadata:\n  annotations:\n   ingress.kubernetes.io/rewrite-target: /\n name: web-ingress\nspec:\n  rules:\n  - host: kubernetes.foo.bar\n    http:\n      paths:\n      - backend:\n          serviceName: appsvc\n          servicePort: 80\n        path: /app\n```\n\n\n如果你随后检查你的 nginx 控制器 Pod，你会在 \n```/etc/nginx.conf```\n 中看到以下规则定义：\n\n\n```server {\n    server_name kubernetes.foo.bar;\n    listen 80;\n    listen [::]:80;\n    set $proxy_upstream_name \"-\";\n    location ~* ^/web2\\/?(?<baseuri>.*) {\n        set $proxy_upstream_name \"apps-web2svc-8080\";\n        port_in_redirect off;\n\n        client_max_body_size                    \"1m\";\n\n        proxy_set_header Host                   $best_http_host;\n\n        # Pass the extracted client certificate to the backend\n\n        # Allow websocket connections\n        proxy_set_header                        Upgrade           $http_upgrade;\n        proxy_set_header                        Connection        $connection_upgrade;\n\n        proxy_set_header X-Real-IP              $the_real_ip;\n        proxy_set_header X-Forwarded-For        $the_x_forwarded_for;\n        proxy_set_header X-Forwarded-Host       $best_http_host;\n        proxy_set_header X-Forwarded-Port       $pass_port;\n        proxy_set_header X-Forwarded-Proto      $pass_access_scheme;\n        proxy_set_header X-Original-URI         $request_uri;\n        proxy_set_header X-Scheme               $pass_access_scheme;\n\n        # mitigate HTTPoxy Vulnerability\n        # https://www.nginx.com/blog/mitigating-the-httpoxy-vulnerability-with-nginx/\n        proxy_set_header Proxy                  \"\";\n\n        # Custom headers\n\n        proxy_connect_timeout                   5s;\n        proxy_send_timeout                      60s;\n        proxy_read_timeout                      60s;\n\n        proxy_redirect                          off;\n        proxy_buffering                         off;\n        proxy_buffer_size                       \"4k\";\n        proxy_buffers                           4 \"4k\";\n\n        proxy_http_version                      1.1;\n\n        proxy_cookie_domain                     off;\n        proxy_cookie_path                       off;\n\n    rewrite /app/(.*) /$1 break;\n    rewrite /app / break;\n    proxy_pass http://apps-appsvc-8080;\n    \n    }\n```\n\n\nNginx 刚刚创建了一条规则，将 \n```http://kubernetes.foo.bar/app```\n 路由到集群中的服务 \n```appsvc```。\n\n\n这里有一个\n示例\n，展示了如何实现带有 nginx Ingress Controller 的 Kubernetes 集群。",
+  "link": "https://stackoverflow.com/questions/45079988/ingress-vs-load-balancer"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Docker Compose 和 Kubernetes 有什么区别？",
+  "answer": "容器\n：\n\n\n\n\n容器是这里列出的其他技术的核心\n\n\n\n\nDocker\n：\n\n\n\n\nDocker 是允许将应用程序打包到容器中的技术的一种流行实现。\n\n\n```docker```\n 是一个命令行工具，用于管理镜像、容器、卷和网络\n\n\n\n\nDocker Compose\n\n\n\n\nDocker Compose 是 docker cli 的声明式版本\n\n\n它可以启动一个或多个容器\n\n\n它可以创建一个或多个网络并将容器连接到它们\n\n\n它可以创建一个或多个卷并配置容器挂载它们\n\n\n所有这些都用于\n单\n主机上\n\n\n\n\nDocker Classic Swarm\n\n\n\n\nDocker swarm 已被 Docker Inc. 放弃，不再积极维护或支持。\n\n\nDocker Swarm 用于在\n多\n主机上运行和连接容器。\n\n\nDocker Swarm 是一个容器集群管理和编排工具。\n\n\n它管理运行在多个主机上的容器，并执行诸如扩缩容、当一个容器崩溃时启动新容器、容器网络连接等操作...\n\n\nDocker Swarm 文件（称为 stack 文件）与 Docker Compose 文件非常相似\n\n\nKubernetes 和 Compose 之间的唯一比较是在最琐碎和不重要的层面上：它们都运行容器，但这并不能帮助人们理解这两个工具是什么以及它们在哪里有用。它们各自适用于不同的事情\n\n\n\n\nKubernetes\n\n\n\n\nKubernetes (K8S) 是一个\n分布式容器编排工具\n，最初由 Google 创建\n\n\n它于 2014 年开源，并于次年移交给云原生计算基金会 (CNCF)\n\n\nThe CNCF 是一个行业机构，拥有\n来自大多数\n大型云、软件和硬件公司的数百名成员\n\n\n在撰写本文时（2021 年底），有近\n一千个与 K8S 相关的项目\n，分为约二十个类别，总资金超过 210 亿美元\n\n\nKubernetes (2021) 是世界上最流行的分布式系统编排器，\n采用率达 88%\n\n\n由于其几乎无处不在，K8S 已成为 2021 年创新系统开发的最流行的当代平台\n\n\nKubernetes 是 Docker swarm 的竞争对手（或多或少），但比 Docker swarm 做更多的事情，即一个流行的选择。",
+  "link": "https://stackoverflow.com/questions/47536536/whats-the-difference-between-docker-compose-and-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Apache 的 Mesos 和 Google 的 Kubernetes 有什么区别？",
+  "answer": "Kubernetes 是一个开源项目，它将“Google 风格”的集群管理能力带到了虚拟机世界，或者说是“裸金属”场景中。它与现代操作系统环境（如 CoreOS 或 Red Hat Atomic）配合得非常好，这些环境提供了轻量级的计算“节点”，并为你进行管理。它使用 Golang 编写，轻量、模块化、可移植且可扩展。我们（Kubernetes 团队）正在与多家不同的技术公司（包括负责维护 Mesos 开源项目的 Mesosphere）合作，以将 Kubernetes 确立为与计算集群交互的标准方式。其理念是，根据我们在 Google 的经验，复现人们构建集群应用时所需要的模式。其中一些概念包括：\n\n\n\n\npods\n — 一种将容器分组在一起的方式\n\n\nreplication controllers\n — 一种处理容器生命周期的方式\n\n\nlabels\n — 一种查找和查询容器的方式，以及\n\n\nservices\n — 一组执行共同功能的容器。\n\n\n\n\n因此，仅使用 Kubernetes，你就能获得一个简单、易于启动和运行、可移植且可扩展的东西，它以尽可能轻量的方式将“集群”作为你管理对象中的一个名词加入进来。在集群上运行应用，不必再担心某台单独的机器。在这种情况下，集群就像 VM 一样是一种灵活的资源。它是一个逻辑计算单元。你可以快速轻松地启动它、使用它、调整其规模、关闭它。\n\n\n对于 Mesos，在基本愿景方面存在相当多的重叠，但这两个产品处于生命周期中相当不同的阶段，并且各有不同的最佳适用场景。Mesos 是一个分布式系统内核，它将大量不同的机器拼接成一台逻辑计算机。它诞生于这样一个世界：你拥有大量物理资源，用来创建一个大型静态计算集群。它的优点在于，许多现代可扩展数据处理应用都能在 Mesos 上良好运行（Hadoop、Kafka、Spark），而且很好的一点是，你可以将它们以及你新时代的容器打包应用都运行在同一个基础资源池上。它比 Kubernetes 项目在某种程度上更重量级，但得益于 Mesosphere 等团队的工作，它正变得越来越容易管理。\n\n\n真正有趣的是，Mesos 目前正在被改造，以加入许多 Kubernetes 概念并支持 Kubernetes API。因此，如果你需要的话，它将成为为你的 Kubernetes 应用获得更多能力的入口（高可用 master、更高级的调度语义、扩展到极大量节点的能力），并且非常适合运行生产工作负载（Kubernetes 仍处于 alpha 阶段）。\n\n\n当被问到时，我倾向于说：\n\n\n\n\n如果你是集群领域的新手，Kubernetes 是一个很好的起点；它是快速、简单且轻量地试水和开始进行面向集群开发的最快方式。它提供了非常高水平的可移植性，因为它得到了许多不同提供商的支持（Microsoft、IBM、Red Hat、CoreOs、MesoSphere、VMWare 等）。\n\n\n如果你已有现成的工作负载（Hadoop、Spark、Kafka 等），Mesos 为你提供了一个框架，让你可以将这些工作负载彼此交错运行，并混入一些新东西，包括 Kubernetes 应用。\n\n\n如果你需要社区尚未在 Kubernetes 框架中实现的能力，Mesos 为你提供了一个泄压阀。",
+  "link": "https://stackoverflow.com/questions/26705201/whats-the-difference-between-apaches-mesos-and-googles-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "pod 和 deployment 有什么区别？",
+  "answer": "Radek 的回答非常好，但我想根据我的经验补充一下：在实践中，你几乎永远不会使用 \nkind\n 为 \npod\n 的 \nobject\n，因为那在实际中没有意义。\n\n\n因为你需要一个 \ndeployment\n 对象——或者其他 Kubernetes API 对象，比如 \nreplication controller\n 或 \nreplicaset\n ——来让 \nreplicas\n（pods）保持存活（这某种程度上就是使用 kubernetes 的意义所在）。\n\n\n对于典型应用，你在实践中会使用的是：\n\n\n\n\nDeployment object\n（你将在其中指定应用的 container/containers），它会承载你应用的容器以及一些其他规格。\n\n\nService object\n（它像一个分组对象，并为具有特定 label 的 \n```pods```\n 提供一个所谓的虚拟 IP（cluster IP）——而这些 \n```pods```\n 基本上就是你用前面的 \ndeployment\n 对象部署的应用容器）。\n\n\n\n\n你需要 \nservice\n 对象，因为来自 deployment 对象的 \n```pods```\n 可能会被杀死、扩缩容，而且你不能依赖它们的 IP 地址，因为这些地址不会是持久的。\n\n\n所以你需要一个像 \nservice\n 这样的对象，为这些 \n```pods```\n 提供一个稳定的 IP。\n\n\n我只是想给你提供一些关于 \n```pods```\n 的背景，这样你就知道这些东西是如何协同工作的。\n\n\n希望这能帮你理清一些事情，不久前我也和你一样 :)",
+  "link": "https://stackoverflow.com/questions/41325087/what-is-the-difference-between-a-pod-and-a-deployment"
+ },
+ {
+  "category": "kubernetes",
+  "question": "删除所有 Kubernetes 命名空间中所有 Pod 的命令",
+  "answer": "没有命令可以完全满足你的要求。\n\n\n以下是一些接近的方案。\n\n\n在运行任何这些命令之前请小心。如果你使用多个集群，请确保你连接到了正确的集群。考虑先运行：\n```kubectl config view```\n\n\n你可以使用以下命令删除单个命名空间中的所有 Pod：\n\n\n```kubectl delete --all pods --namespace=foo```\n\n\n你也可以删除命名空间中的所有 Deployment，这将删除与该命名空间对应的 Deployment 关联的所有 Pod：\n\n\n```kubectl delete --all deployments --namespace=foo```\n\n\n你可以使用以下命令删除所有命名空间以及每个命名空间中的每个对象（但不包括没有命名空间的对象，如节点和某些事件）：\n\n\n```kubectl delete --all namespaces```\n\n\n然而，后一个命令可能不是你想要的，因为它会删除 kube-system 命名空间中的内容，这会使你的集群无法使用。\n\n\n以下命令将删除除 kube-system 之外的所有命名空间，这可能有用：\n\n\n```for each in $(kubectl get ns -o jsonpath=\"{.items[*].metadata.name}\" | grep -v kube-system);\ndo\n  kubectl delete ns $each\ndone\n```",
+  "link": "https://stackoverflow.com/questions/33509194/command-to-delete-all-pods-in-all-kubernetes-namespaces"
+ },
+ {
+  "category": "kubernetes",
+  "question": "使用 /healthz 进行应用健康检查的惯例从何而来？",
+  "answer": "它历史上源自 Google 的内部实践。它们被称为 \"z-pages\"。\n\n\n以 \n```z```\n 结尾的原因是为了减少与同名的实际应用端点（如 \n```/status```\n）的冲突。更多信息请参见这个演讲：\nhttps://vimeo.com/173610242\n（26:50 起）\n\n\n类似的端点（至少在 Google 内部）有 \n```/varz```\n、\n```/statusz```\n、\n```/rpcz```\n。在 Google 开发的服务会自动获得这些端点，用于导出其健康状况和指标，并且有工具从所有已部署的服务中收集暴露的指标/状态。\n\n\n像 Prometheus 这样的开源工具实现了这种模式（因为 Prometheus 的原始作者也是前 Google 员工），通过访问一个众所周知的端点来从你的应用收集指标。类似地，\nOpenCensus\n 允许你从应用中暴露 z-pages（最好在不同的端口上）来诊断问题。",
+  "link": "https://stackoverflow.com/questions/43380939/where-does-the-convention-of-using-healthz-for-application-health-checks-come-f"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何强制 Kubernetes 重新拉取镜像？",
+  "answer": "在创建 Pod 时，Kubernetes 会在以下情况下拉取镜像（参见\nupdating-images 文档\n）：\n\n\n\n\n使用带有 \n```:latest```\n 标签的镜像\n\n\n指定了 \n```imagePullPolicy: Always```\n\n\n\n\n如果你希望总是拉取，这很好。但如果你想按需拉取呢？例如，你想使用 \n```some-public-image:latest```\n，但只想在你要求时手动拉取更新的版本。目前你可以：\n\n\n\n\n将 \n```imagePullPolicy```\n 设置为 \n```IfNotPresent```\n 或 \n```Never```\n，并预先拉取：在每个集群节点上手动拉取镜像，以便最新版本被缓存，然后执行 \n```kubectl rolling-update```\n 或类似操作来重启 Pod（丑陋且容易出错的 hack！）\n\n\n临时\n 更改 \n```imagePullPolicy```\n，执行 \n```kubectl apply```\n，重启 Pod（例如 \n```kubectl rolling-update```\n），还原 \n```imagePullPolicy```\n，再次执行 \n```kubectl apply```\n（丑陋！）\n\n\n拉取并推送\n \n```some-public-image:latest```\n 到你的私有仓库，然后执行 \n```kubectl rolling-update```\n（繁重！）\n\n\n\n\n没有好的按需拉取解决方案。如果情况有变，请评论；我会更新这个答案。",
+  "link": "https://stackoverflow.com/questions/33112789/how-do-i-force-kubernetes-to-re-pull-an-image"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何手动触发 Kubernetes 的 Scheduled Job？",
+  "answer": "之前由 \n@jdf 提到的\n 问题 \n#47538\n 现在已经关闭，并且现在可以实现了。最初的实现可以在\n这里\n找到，但语法已经改变。\n\n\n使用 kubectl v1.10.1+ 时，命令是：\n\n\n```kubectl create job --from=cronjob/<cronjob-name> <job-name> -n <namespace-name>```\n\n\n它似乎向后兼容较旧的集群，因为它在 v0.8.x 上对我有效。",
+  "link": "https://stackoverflow.com/questions/40401795/how-can-i-trigger-a-kubernetes-scheduled-job-manually"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Namespace 卡在 Terminating 状态，如何删除？",
+  "answer": "假设你已经尝试强制删除诸如以下资源：\n\n处于 terminating 状态的 Pods\n，并且你已经黔驴技穷，试图恢复该 namespace...\n\n\n你可以强制删除该 namespace（可能会留下悬空资源）：\n\n\n```(\nNAMESPACE=your-rogue-namespace\nkubectl proxy &\nkubectl get namespace $NAMESPACE -o json |jq '.spec = {\"finalizers\":[]}' >temp.json\ncurl -k -H \"Content-Type: application/json\" -X PUT --data-binary @temp.json 127.0.0.1:8001/api/v1/namespaces/$NAMESPACE/finalize\n)\n```\n\n\n\n\n这是对\n此处\n答案的改进，该答案基于\n此处\n的评论。\n\n\n我使用 \n```jq```\n 工具来以编程方式删除 finalizers 部分中的元素。你也可以手动完成。\n\n\n```kubectl proxy```\n 默认在 \n```127.0.0.1:8001```\n 创建监听器。如果你知道集群 master 的主机名/IP，也可以使用它。\n\n\n有趣的是，即使使用 \n```kubectl edit```\n 进行相同的更改也没有效果，但这种方法似乎有效。",
+  "link": "https://stackoverflow.com/questions/52369247/namespace-stuck-as-terminating-how-do-i-remove-it"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何从 Kubernetes replication controller 的所有 pod 中获取日志？",
+  "answer": "你可以使用标签\n\n\n```kubectl logs -l app=elasticsearch\n```\n\n\n并且你可能想要指定 \n```--max-log-requests --all-containers --ignore-errors```\n 以便：\n\n\n\n\n指定并发日志流的数量（默认是 5）\n\n\n包括来自具有多个容器的 pod 的日志\n\n\n在致命错误（例如无法检索日志）时继续到下一个 pod",
+  "link": "https://stackoverflow.com/questions/33069736/how-do-i-get-logs-from-all-pods-of-a-kubernetes-replication-controller"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何在 Kubernetes 中切换命名空间",
+  "answer": "我喜欢简洁、直接并附有官方文档引用的回答：\n\n\n答案：\n\n\n这是命令，但请注意它会编辑你的 kubeconfig 文件\n\n\n```kubectl config set-context --current --namespace=my-namespace\n```\n\n\n来源：\n\n\nhttps://kubernetes.io/docs/reference/kubectl/cheatsheet/",
+  "link": "https://stackoverflow.com/questions/55373686/how-to-switch-namespace-in-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes Service 定义中 targetPort 和 port 的区别",
+  "answer": "Service：\n 它将流量导向 Pod。\n\n\nTargetPort：\n 这是容器内应用程序实际运行的端口。\n\n\nPort：\n 有时容器内的应用程序会在不同端口上提供不同的服务。\n\n\n示例：\n 实际应用程序可以运行在容器的 8080 端口上，而该应用程序的健康检查可以运行在容器的 8089 端口上。\n因此，如果你访问 Service 时不指定端口，它就不知道应该将请求重定向到容器的哪个端口。Service 需要有一个映射，以便能够访问容器的特定端口。\n\n\n```kind: Service\napiVersion: v1\nmetadata:\n  name: my-service\nspec:\n  selector:\n    app: MyApp\n  ports:\n    - name: http\n      nodePort: 30475\n      port: 8089\n      protocol: TCP\n      targetPort: 8080\n    - name: metrics\n      nodePort: 31261\n      port: 5555\n      protocol: TCP\n      targetPort: 5555\n    - name: health\n      nodePort: 30013\n      port: 8443\n      protocol: TCP\n      targetPort: 8085 \n```\n\n\n如果你访问 my-service:8089，流量会被路由到容器的 8080 端口（\n```targetPort```\n）。类似地，如果你访问 my-service:8443，那么它会被重定向到容器的 8085 端口（\n```targetPort```\n）。但是这个 myservice:8089 是 Kubernetes 集群内部的，可以在一个应用程序需要与另一个应用程序通信时使用。因此，要从集群外部访问该 Service，就需要在运行 Kubernetes 的主机上暴露端口，\n以便将流量重定向到容器的某个端口。这就是 \n```nodePort```\n（在主机上暴露的端口）。\n从上面的示例来看，你可以通过 \n```host_ip:nodePort```\n 从集群外部（Postman 或任何 rest-client）访问该 Service。\n\n\n假设你的主机 IP 是 10.10.20.20，那么你可以通过 10.10.20.20:30475、10.10.20.20:31261、10.10.20.20:30013 访问 http、metrics、health 服务。",
+  "link": "https://stackoverflow.com/questions/49981601/difference-between-targetport-and-port-in-kubernetes-service-definition"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes service external ip pending",
+  "answer": "如果你使用的是 Minikube，有一个神奇的命令！\n\n\n```$ minikube tunnel\n```\n\n\n希望这能帮某人节省几分钟时间。\n\n\n参考链接\n\nhttps://minikube.sigs.k8s.io/docs/handbook/accessing/#using-minikube-tunnel",
+  "link": "https://stackoverflow.com/questions/44110876/kubernetes-service-external-ip-pending"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何在 Kubernetes 中保持容器持续运行？",
+  "answer": "容器的设计初衷是运行至完成。你需要为容器提供一个永远不会结束的任务。类似这样的配置应该可以：\n\n\n```apiVersion: v1\nkind: Pod\nmetadata:\n  name: ubuntu\nspec:\n  containers:\n  - name: ubuntu\n    image: ubuntu:latest\n    # 只是空转并永久等待\n    command: [ \"/bin/bash\", \"-c\", \"--\" ]\n    args: [ \"while true; do sleep 30; done;\" ]\n```",
+  "link": "https://stackoverflow.com/questions/31870222/how-can-i-keep-a-container-running-on-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes pod 被删除后会被重新创建",
+  "answer": "你需要删除 deployment，这样会依次删除 pod 和 replica set。\nhttps://github.com/kubernetes/kubernetes/issues/24137\n\n\n列出所有 deployment：\n\n\n```kubectl get deployments --all-namespaces\n```\n\n\n然后删除 deployment：\n\n\n```kubectl delete -n NAMESPACE deployment DEPLOYMENT\n```\n\n\n其中 NAMESPACE 是它所在的命名空间，DEPLOYMENT 是 deployment 的名称。如果 NAMESPACE 是 \n```default```\n，则完全省略 \n```-n```\n 选项。\n\n\n在某些情况下，它也可能是由于 job 或 daemonset 而运行。\n检查以下内容并运行相应的删除命令。\n\n\n```kubectl get jobs\n\nkubectl get daemonsets.app --all-namespaces\n\nkubectl get daemonsets.extensions --all-namespaces\n```",
+  "link": "https://stackoverflow.com/questions/40686151/kubernetes-pod-gets-recreated-when-deleted"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何从 Kubernetes Pod 复制文件到本地系统",
+  "answer": "如\n```kubectl```\n 帮助中所述：\n\n\n```kubectl cp --help\nCopy files and directories to and from containers.\nExamples:\n# !!!Important Note!!!\n# Requires that the 'tar' binary is present in your container\n# image.  If 'tar' is not present, 'kubectl cp' will fail.\n\n# Copy /tmp/foo_dir local directory to /tmp/bar_dir in a remote pod in the default namespace\nkubectl cp /tmp/foo_dir <some-pod>:/tmp/bar_dir\n\n# Copy /tmp/foo local file to /tmp/bar in a remote pod in a specific container\nkubectl cp /tmp/foo <some-pod>:/tmp/bar -c <specific-container>\n\n# Copy /tmp/foo local file to /tmp/bar in a remote pod in namespace <some-namespace>\nkubectl cp /tmp/foo <some-namespace>/<some-pod>:/tmp/bar\n\n# Copy /tmp/foo from a remote pod to /tmp/bar locally\nkubectl cp <some-namespace>/<some-pod>:/tmp/foo /tmp/bar\n\nOptions:\n-c, --container='': Container name. If omitted, the first container in the pod will be chosen\n\nUsage:\nkubectl cp <file-spec-src> <file-spec-dest> [options]\n\nUse \"kubectl options\" for a list of global command-line options (applies to all commands).\n```\n\n\n你也可以登录到你的 \n```Containter```\n 并检查文件是否存在：\n\n\n```kubectl exec -it aks-ssh2-6cd4948f6f-fp9tl /bin/bash\nls -la /home/azureuser/test.cap\n```\n\n\n如果这仍然不起作用，请尝试：\n\n\n\n\n你可以尝试将文件复制到工作目录，然后仅使用它们的名称重试复制。这很奇怪，但目前有效。\n\n\n\n\n考虑 \nkchugalinskiy\n 在此处的建议 \n#58692\n。",
+  "link": "https://stackoverflow.com/questions/52407277/how-to-copy-files-from-kubernetes-pods-to-local-system"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何获取已部署的 Kubernetes 服务的 YAML？",
+  "answer": "要获取 deployment（service、pod、secret 等）的 yaml：\n\n\n```kubectl get deploy deploymentname -o yaml\n```",
+  "link": "https://stackoverflow.com/questions/43941772/get-yaml-for-deployed-kubernetes-services"
+ },
+ {
+  "category": "kubernetes",
+  "question": "位于另一个命名空间中的服务",
+  "answer": "我遇到了同样的问题，并找到了一个不错的解决方案，无需任何静态 IP 配置：\n\n\n你可以通过其 DNS 名称访问服务（如你所提到的）：\nservicename.namespace.svc.cluster.local\n\n\n你可以使用该 DNS 名称，通过本地服务在另一个命名空间中引用它：\n\n\n```kind: Service\napiVersion: v1\nmetadata:\n  name: service-y\n  namespace: namespace-a\nspec:\n  type: ExternalName\n  externalName: service-y.namespace-b.svc.cluster.local\n  ports:\n  - port: 80\n```",
+  "link": "https://stackoverflow.com/questions/37221483/service-located-in-another-namespace"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何在 gcloud 和 minikube 之间切换 kubectl 集群",
+  "answer": "你可以使用以下命令在本地（minikube）和 gcloud 之间切换：\n\n\n```kubectl config use-context CONTEXT_NAME```\n\n\n列出所有上下文：\n\n\n```kubectl config get-contexts```\n\n\n你可以为本地和 gcloud 创建不同的环境，并将它们放在单独的 yaml 文件中。\n\n\n相关文档。",
+  "link": "https://stackoverflow.com/questions/43643463/how-to-switch-kubectl-clusters-between-gcloud-and-minikube"
+ },
+ {
+  "category": "kubernetes",
+  "question": "kubectl logs - 持续输出",
+  "answer": "```kubectl logs -f <pod-id>\n```\n\n\n你可以使用 \n```-f```\n 标志：\n\n\n```-f, --follow=false: Specify if the logs should be streamed.```\n\n\nhttps://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands#logs",
+  "link": "https://stackoverflow.com/questions/39454962/kubectl-logs-continuously"
+ },
+ {
+  "category": "kubernetes",
+  "question": "至少遇到一个无效签名",
+  "answer": "遇到这些错误可能有几个原因：\n\n\n\n\n可能是现有缓存或磁盘空间的问题。要解决这个问题，你需要通过执行以下命令来清除 APT 缓存：\n```sudo apt-get clean```\n和\n```sudo apt-get update```\n。\n\n\n\n\n对于现有的 docker 镜像也是如此。执行：\n```docker image prune -f```\n和\n```docker container prune -f```\n以删除未使用的数据并释放磁盘空间。执行\n```docker image prune -f```\n将删除所有未使用的镜像。要删除一些选择性的大尺寸镜像，请运行\n```docker images```\n并识别你想要删除的镜像，然后运行\n```docker rmi -f <IMAGE-ID1> <IMAGE-ID2> <IMAGE-ID3>```\n。\n\n\n\n\n如果你不关心安全风险，你可以尝试使用\n```--allow-unauthenticated```\n或\n```--allow-insecure-repositories```\n标志来运行\n```apt-get```\n命令。根据\n文档\n：\n\n\n\n\n如果软件包无法认证，则忽略并且不提示。这在处理本地仓库时可能有用，但如果用户本身没有以其他方式确保数据真实性，则存在巨大的安全风险。",
+  "link": "https://stackoverflow.com/questions/62473932/at-least-one-invalid-signature-was-encountered"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes API - 获取特定节点上的 Pods",
+  "answer": "如已接受的答案所述，PR 现已合并，你可以按如下方式按节点获取 pods：\n\n\n```kubectl get pods --all-namespaces -o wide --field-selector spec.nodeName=<node>\n```",
+  "link": "https://stackoverflow.com/questions/39231880/kubernetes-api-get-pods-on-specific-nodes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes 如何让 Deployment 更新镜像",
+  "answer": "你可以为 Pod 配置一个优雅终止期（例如 30 秒或更长，具体取决于容器启动时间和镜像大小），并设置\n```\"imagePullPolicy: \"Always\"```\n。然后使用\n```kubectl delete pod pod_name```\n。\n新容器将被创建并自动下载最新镜像，随后旧容器被终止。\n\n\n示例：\n\n\n```spec:\n  terminationGracePeriodSeconds: 30\n  containers:\n  - name: my_container\n    image: my_image:latest\n    imagePullPolicy: \"Always\"\n```\n\n\n我目前使用 Jenkins 进行自动化构建和镜像打标签，大致如下：\n\n\n```kubectl --user=\"kube-user\" --server=\"https://kubemaster.example.com\"  --token=$ACCESS_TOKEN set image deployment/my-deployment mycontainer=myimage:\"$BUILD_NUMBER-$SHORT_GIT_COMMIT\"\n```\n\n\n另一个技巧是初始运行：\n\n\n```kubectl set image deployment/my-deployment mycontainer=myimage:latest\n```\n\n\n然后：\n\n\n```kubectl set image deployment/my-deployment mycontainer=myimage\n```\n\n\n这实际上会触发滚动更新，但请确保你也设置了\n```imagePullPolicy: \"Always\"```\n。\n\n\n更新：\n\n\n我发现的另一个技巧是，无需更改镜像名称，而是更改某个字段的值来触发滚动更新，例如\n```terminationGracePeriodSeconds```\n。你可以使用\n```kubectl edit deployment your_deployment```\n或\n```kubectl apply -f your_deployment.yaml```\n或使用如下 patch 来实现：\n\n\n```kubectl patch deployment your_deployment -p \\\n  '{\"spec\":{\"template\":{\"spec\":{\"terminationGracePeriodSeconds\":31}}}}'\n```\n\n\n只需确保你每次都更改数值。",
+  "link": "https://stackoverflow.com/questions/40366192/kubernetes-how-to-make-deployment-to-update-image"
+ },
+ {
+  "category": "kubernetes",
+  "question": "在 Kubernetes 中，当 ConfigMap 更新时如何重启 Pod？",
+  "answer": "目前针对该问题的最佳解决方案（在 https://github.com/kubernetes/kubernetes/issues/22368 中有深入讨论，该链接在相邻回答中也有引用）是使用 Deployment，并将 ConfigMap 视为不可变的。\n\n\n当你想要更改配置时，创建一个包含所需更改的新 ConfigMap，并将你的 Deployment 指向新的 ConfigMap。如果新配置有问题，Deployment 将拒绝缩减你正在工作的 ReplicaSet。如果新配置正常工作，那么你的旧 ReplicaSet 将被缩减为 0 个副本并删除，新 Pod 将使用新配置启动。\n\n\n这不如直接就地编辑 ConfigMap 那么快捷，但安全得多。",
+  "link": "https://stackoverflow.com/questions/37317003/restart-pods-when-configmap-updates-in-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "在Kubernetes中，是否有办法跨命名空间共享secrets？",
+  "answer": "Secret API对象存在于某个命名空间中，只能被同一命名空间中的pods引用。基本上，你需要为每个命名空间创建secret。\n\n\n更多详情，请参阅：\nKubernetes文档 / 概念 / 配置 / Secrets",
+  "link": "https://stackoverflow.com/questions/46297949/is-there-a-way-to-share-secrets-across-namespaces-in-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes：如何从kubectl配置中删除集群和上下文？",
+  "answer": "```kubectl config unset```\n 接受点分隔的路径。你可以按名称删除集群/上下文/用户条目。例如：\n\n\n```kubectl config unset users.gke_project_zone_name\n\nkubectl config unset contexts.aws_cluster1-kubernetes\n\nkubectl config unset clusters.foobar-baz\n```\n\n\n附带说明，如果你使用 \n```cluster/kube-down.sh```\n（或者如果你使用Container Engine，则使用 \ngcloud\n）来拆除集群，它将删除相关的kubeconfig条目。此外，还有一个计划在未来的版本中对 \n```kubectl config```\n 进行 \n重构\n，以使命令更加直观/易用/一致。",
+  "link": "https://stackoverflow.com/questions/37016546/kubernetes-how-do-i-delete-clusters-and-contexts-from-kubectl-config"
+ },
+ {
+  "category": "kubernetes",
+  "question": "什么是 headless service，它的作用/目的是什么，以及它有哪些合理的用例？",
+  "answer": "嗯，我觉得你需要一些理论。整个互联网上有很多解释（包括官方文档），但我认为 Marco Luksa 解释得最好：\n\n\n\n\n每个到 service 的连接都会被转发到一个随机选择的后端 pod。但如果客户端需要连接到所有这些 pod 呢？如果后端 pod 本身需要各自连接到所有其他后端 pod 呢？通过 service 连接显然不是实现这一目标的方式。那该怎么做？\n\n\n要让客户端连接到所有 pod，它需要找出每个单独 pod 的 IP。一种选择是让客户端调用 Kubernetes API server，通过 API 调用获取 pod 列表及其 IP 地址，但由于你应该始终努力让你的应用与 Kubernetes 无关，使用 API server 并不理想。\n\n\n幸运的是，Kubernetes 允许客户端通过 DNS 查询来发现 pod IP。通常，当你对某个 service 执行 DNS 查询时，DNS server 会返回单个 IP——即该 service 的 cluster IP。但如果你告诉 Kubernetes 你的 service 不需要 cluster IP（你可以通过在 service specification 中将 clusterIP 字段设置为 None 来实现），DNS server 将返回 pod IP，而不是单个 service IP。DNS server 不会返回单个 DNS A record，而是会为该 service 返回多个 A records，每个都指向当时作为该 service 后端的某个单独 pod 的 IP。因此，客户端可以执行一次简单的 DNS A record 查询，就能获取属于该 service 的所有 pod 的 IP。然后客户端可以使用这些信息连接到一个、多个或全部 pod。\n\n\n在 service spec 中将 clusterIP 字段设置为 None 会使该 service 成为 headless，因为 Kubernetes 不会为它分配一个可供客户端连接到其后端 pod 的 cluster IP。\n\n\n\n\n——Marco Luksa《Kubernetes in Action》",
+  "link": "https://stackoverflow.com/questions/52707840/what-is-a-headless-service-what-does-it-do-accomplish-and-what-are-some-legiti"
+ },
+ {
+  "category": "kubernetes",
+  "question": "检查 Kubernetes pod 的 CPU 和内存利用率",
+  "answer": "无需 METRICS SERVER 或任何第三方工具即可检查\n\n\n\n\n\n\n如果你想在不安装任何第三方工具的情况下检查 pod 的 CPU/内存使用情况，那么你可以从 cgroup 获取 pod 的内存和 CPU 使用情况。\n\n\n\n\n进入 pod 的 exec 模式\n```kubectl exec -it pod_name -n namespace -- /bin/bash```\n\n\n运行\n```cat /sys/fs/cgroup/cpu/cpuacct.usage```\n以查看 CPU 使用情况\n\n\n运行\n```cat /sys/fs/cgroup/memory/memory.usage_in_bytes```\n以查看内存使用情况\n\n\n\n\n确保你已向 deployment 添加了 resources 部分（requests 和 limits），这样它才能基于 cgroup 计算使用量，并且容器会遵守在 pod 级别设置的 limits\n\n\n\n\n注意：此使用量以字节为单位。这会因 pod 使用情况而变化，并且这些值会频繁变动。",
+  "link": "https://stackoverflow.com/questions/54531646/checking-kubernetes-pod-cpu-and-memory-utilization"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何一次性删除 Kubernetes 中的所有资源？",
+  "answer": "方法 1\n：使用 \n```kubectl delete```\n 删除当前命名空间（通常是 \ndefault\n 命名空间）中的所有内容：\n\n\n```kubectl delete all --all\n```\n\n\n```all```\n 指代所有资源类型，例如 pods、deployments、services 等。\n```--all```\n 用于删除该资源类型的所有对象，而不是通过名称或标签来指定。\n\n\n要从某个特定命名空间删除所有内容，可以使用 -n 标志：\n\n\n```kubectl delete all --all -n {namespace}\n```\n\n\n方法 2\n：你也可以删除命名空间并重新创建它。这会删除属于该命名空间的所有内容：\n\n\n```kubectl delete namespace {namespace}\nkubectl create namespace {namespace}\n```\n\n\n注意\n（感谢 \n@Marcus\n）：Kubernetes 中的 \n```all```\n \n并不指代所有 Kubernetes 对象\n，例如管理级别的资源（limits、quota、policy、authorization rules）。如果你确实想确保删除所有内容，最好删除命名空间并重新创建它。另一种方法是使用 \n```kubectl api-resources```\n 获取所有资源类型，\n如此处所示\n：\n\n\n```kubectl delete \"$(kubectl api-resources --namespaced=true --verbs=delete -o name | tr \"\\n\" \",\" | sed -e 's/,$//')\" --all\n```",
+  "link": "https://stackoverflow.com/questions/47128586/how-to-delete-all-resources-from-kubernetes-one-time"
+ },
+ {
+  "category": "kubernetes",
+  "question": "kubectl port-forward 是如何建立连接的？",
+  "answer": "首先，有必要注意并记住，在 Kubernetes 中，\n每个\n pod 都会从 10.* 获得自己的 IP 地址，该地址仅在集群内部可用。现在，kubectl 的 \n```port-forward```\n 功能只是将流量从本地主机上的指定端口隧道传输到指定 pod 上的指定端口。从某种意义上说，API server 就成了你本地端口与 Kubernetes 集群之间的临时网关。\n\n\n```kubectl port-forward```\n 将连接转发到本地端口，再转发到 pod 上的端口。与 \n```kubectl proxy```\n 相比，\n```kubectl port-forward```\n 更通用，因为它可以转发 TCP 流量，而 \n```kubectl proxy```\n 只能转发 HTTP 流量。\n\n\n```kubectl port-forward```\n 对于测试/调试很有用，这样你就可以在本地访问服务而无需将其暴露出去。\n\n\n下面是 \n```pod```\n 的名称，它会将其端口 \n```6379```\n 转发到 \n```localhost:6379```\n。\n\n\n```kubectl port-forward redis-master-765d459796-258hz 6379:6379 \n```\n\n\n这等同于\n\n\n```kubectl port-forward pods/redis-master-765d459796-258hz 6379:6379\n```\n\n\n或者\n\n\n```kubectl port-forward deployment/redis-master 6379:6379 \n```\n\n\n或者\n\n\n```kubectl port-forward rs/redis-master 6379:6379 \n```\n\n\n或者\n\n\n```kubectl port-forward svc/redis-master 6379:6379\n```",
+  "link": "https://stackoverflow.com/questions/51468491/how-does-kubectl-port-forward-create-a-connection"
+ },
+ {
+  "category": "kubernetes",
+  "question": "列出命名空间中的所有资源",
+  "answer": "根据\n这条评论\n，列出所有资源的受支持方式是遍历由\n```kubectl api-resources```\n列出的所有 api 版本：\n\n\n\n\nkubectl api-resources 枚举了集群中可用的资源类型。\n\n\n这意味着你可以将其与 kubectl get 结合使用，以实际列出命名空间中每种资源类型的每个实例：\n\n\n\n\n```kubectl api-resources --verbs=list --namespaced -o name \\\n  | xargs -n 1 kubectl get --show-kind --ignore-not-found -l <label>=<value> -n <namespace>\n```",
+  "link": "https://stackoverflow.com/questions/47691479/listing-all-resources-in-a-namespace"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何调试“ImagePullBackOff”？",
+  "answer": "你可以使用 '\ndescribe pod\n' 语法\n\n\n对于 OpenShift，使用：\n\n\n```oc describe pod <pod-id>  \n```\n\n\n对于原生 Kubernetes：\n\n\n```kubectl describe pod <pod-id>  \n```\n\n\n检查输出中的事件。\n在我的情况下，它显示\n```Back-off pulling image unreachableserver/nginx:1.14.22222```\n\n\n在这种情况下，镜像\n```unreachableserver/nginx:1.14.22222```\n无法从互联网拉取，因为没有 Docker registry unreachableserver，并且镜像\n```nginx:1.14.22222```\n不存在。\n\n\n注意：如果你没有看到任何感兴趣的事件，并且 pod 已经处于 'ImagePullBackOff' 状态一段时间（似乎超过 60 分钟），你需要删除该 pod 并查看新 pod 的事件。\n\n\n对于 OpenShift，使用：\n\n\n```oc delete pod <pod-id>\noc get pods\noc get pod <new-pod-id>\n```\n\n\n对于原生 Kubernetes：\n\n\n```kubectl delete pod <pod-id>  \nkubectl get pods\nkubectl get pod <new-pod-id>\n```\n\n\n示例输出：\n\n\n```  Type     Reason     Age                From               Message\n  ----     ------     ----               ----               -------\n  Normal   Scheduled  32s                default-scheduler  Successfully assigned rk/nginx-deployment-6c879b5f64-2xrmt to aks-agentpool-x\n  Normal   Pulling    17s (x2 over 30s)  kubelet            Pulling image \"unreachableserver/nginx:1.14.22222\"\n  Warning  Failed     16s (x2 over 29s)  kubelet            Failed to pull image \"unreachableserver/nginx:1.14.22222\": rpc error: code = Unknown desc = Error response from daemon: pull access denied for unreachableserver/nginx, repository does not exist or may require 'docker login': denied: requested access to the resource is denied\n  Warning  Failed     16s (x2 over 29s)  kubelet            Error: ErrImagePull\n  Normal   BackOff    5s (x2 over 28s)   kubelet            Back-off pulling image \"unreachableserver/nginx:1.14.22222\"\n  Warning  Failed     5s (x2 over 28s)   kubelet            Error: ImagePullBackOff\n```\n\n\n额外的调试步骤\n\n\n\n\n尝试在你的计算机上手动拉取 docker 镜像和标签\n\n\n通过执行 'kubectl/oc get pods -o wide' 识别节点\n\n\nssh 进入无法拉取 docker 镜像的节点（如果可以）\n\n\n通过执行 ping 检查节点是否可以解析 docker registry 的 DNS。\n\n\n尝试在节点上手动拉取 docker 镜像\n\n\n如果你使用的是私有 registry，请检查你的\nsecret\n是否存在且正确。你的 secret 也应该在同一个命名空间中。感谢\nswenzel\n\n\n一些 registry 有防火墙限制 IP 地址访问。防火墙可能会阻止拉取\n\n\n一些 CI 创建带有临时 docker secret 的部署。因此 secret 会在几天后过期（你这是在自找生产故障...）",
+  "link": "https://stackoverflow.com/questions/34848422/how-can-i-debug-imagepullbackoff"
+ },
+ {
+  "category": "kubernetes",
+  "question": "解码 Kubernetes secret",
+  "answer": "你可以使用\n```kubectl get secrets/db-user-pass -o yaml```\n或\n```-o json```\n，其中你会看到 base64 编码的\n```username```\n和\n```password```\n。然后你可以复制该值，并用类似\n```echo <ENCODED_VALUE> | base64 -d```\n的命令进行解码。\n\n\n更简洁的一行命令如下：\n\n\n```kubectl get secrets/db-user-pass --template={{.data.password}} | base64 -d\n```\n\n\n用户名同理：\n\n\n```kubectl get secrets/db-user-pass --template={{.data.username}} | base64 -d\n```",
+  "link": "https://stackoverflow.com/questions/56909180/decoding-kubernetes-secret"
+ },
+ {
+  "category": "kubernetes",
+  "question": "将单个文件共享/挂载到 Pod 中的最佳方式是什么？",
+  "answer": "例如，你有一个包含 2 个配置文件的 configmap：\n\n\n```kubectl create configmap config --from-file <file1> --from-file <file2>\n```\n\n\n你可以像这样使用 subPath，将单个文件挂载到现有目录中：\n\n\n```---\n        volumeMounts:\n        - name: \"config\"\n          mountPath: \"/<existing folder>/<file1>\"\n          subPath: \"<file1>\"\n        - name: \"config\"\n          mountPath: \"/<existing folder>/<file2>\"\n          subPath: \"<file2>\"\n      restartPolicy: Always\n      volumes:\n        - name: \"config\"\n          configMap:\n            name: \"config\"\n---\n```\n\n\n完整示例见\n这里",
+  "link": "https://stackoverflow.com/questions/33415913/whats-the-best-way-to-share-mount-one-file-into-a-pod"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何在 Kubernetes 中在一个 yaml 文件里设置多个命令？",
+  "answer": "```command: [\"/bin/sh\",\"-c\"]\nargs: [\"command one; command two && command three\"]\n```\n\n\n解释：\n```command [\"/bin/sh\", \"-c\"]```\n表示“运行一个 shell，并执行以下指令”。然后 args 作为命令传递给 shell。在 shell 脚本中，分号用于分隔命令，而\n```&&```\n会在前一个命令成功时条件性地运行下一个命令。在上面的示例中，它总是运行\n```command one```\n，接着运行\n```command two```\n，并且只有在\n```command two```\n成功时才运行\n```command three```\n。\n\n\n替代方案：\n在许多情况下，你想要运行的一些命令可能是在为最终要运行的命令做准备。在这种情况下，构建你自己的\nDockerfile\n才是正确做法。尤其要看看\nRUN\n指令。",
+  "link": "https://stackoverflow.com/questions/33887194/how-to-set-multiple-commands-in-one-yaml-file-with-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "我的 Kubernetes Pod 一直因 &quot;CrashLoopBackOff&quot; 崩溃，但我找不到任何日志",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/41604499/my-kubernetes-pods-keep-crashing-with-crashloopbackoff-but-i-cant-find-any-lo"
+ },
+ {
+  "category": "kubernetes",
+  "question": "使用 Kubernetes 管理多环境（Staging、QA、生产等）",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/43212836/multiple-environments-staging-qa-production-etc-with-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "在 Pod 内重启容器",
+  "answer": "是否可以重启单个容器\n\n\n\n\n无法通过 \n```kubectl```\n 实现，不过根据集群的配置，你可以“取巧”使用 \n```docker kill the-sha-goes-here```\n，这会导致 kubelet 重启“失败”的容器（当然，前提是 Pod 的重启策略规定要这么做）\n\n\n\n\n如何重启 Pod\n\n\n\n\n这取决于 Pod 是如何创建的，但根据你提供的 Pod 名称来看，它似乎由 ReplicaSet 管理，所以你只需 \n```kubectl delete pod test-1495806908-xn5jn```\n，Kubernetes 就会创建一个新的 Pod 来替代它（新 Pod 的名称会不同，所以不要指望 \n```kubectl get pods```\n 会再返回 \n```test-1495806908-xn5jn```\n）",
+  "link": "https://stackoverflow.com/questions/46123457/restart-container-within-pod"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes Deployments 与 StatefulSets 的对比",
+  "answer": "Deployments 和 ReplicationControllers 适用于无状态场景，相对轻量。\nStatefulSets\n 用于需要持久化状态的情况。因此，后者使用\n```volumeClaimTemplates```\n / 对持久卷的声明来确保状态在组件重启后仍能保留。\n\n\n所以，如果你的应用是有状态的，或者你想在 Kubernetes 之上部署有状态存储，请使用 StatefulSet。\n\n\n如果你的应用是无状态的，或者状态可以在启动时从后端系统构建，那么请使用 Deployments。\n\n\n关于运行有状态应用的更多细节，可以在\n2016 年 kubernetes 关于有状态应用的博客文章中找到",
+  "link": "https://stackoverflow.com/questions/41583672/kubernetes-deployments-vs-statefulsets"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何清晰地列出 kubernetes pod 中的所有容器？",
+  "answer": "答案\n\n\n```kubectl get pods POD_NAME_HERE -o jsonpath='{.spec.containers[*].name}'\n```\n\n\n解释\n\n\n这会获取表示该 pod 的 JSON 对象。然后它使用 kubectl 的\nJSONpath\n 从 pod 中提取每个容器的名称。",
+  "link": "https://stackoverflow.com/questions/33924198/how-do-you-cleanly-list-all-the-containers-in-a-kubernetes-pod"
+ },
+ {
+  "category": "kubernetes",
+  "question": "更新 Deployment 时清理“Replica Sets”？",
+  "answer": "移除旧的 replicasets 是 Deployment 对象的一部分，但它是可选的。你可以设置\n```.spec.revisionHistoryLimit```\n来告诉 Deployment 保留多少个旧的 replicasets。\n\n\n以下是一个 YAML 示例：\n\n\n```apiVersion: apps/v1\nkind: Deployment\n# ...\nspec:\n  # ...\n  revisionHistoryLimit: 0 # 如果未指定，默认为 10\n  # ...\n```",
+  "link": "https://stackoverflow.com/questions/37255731/clean-up-replica-sets-when-updating-deployments"
+ },
+ {
+  "category": "kubernetes",
+  "question": "当 Kubernetes 中的 Secret 是从文件生成时，我如何更新它？",
+  "answer": "这应该可行：\n\n\n```kubectl create secret generic production-tls \\\n--save-config \\\n--dry-run=client \\\n--from-file=./tls.key --from-file=./tls.crt \\\n-o yaml | \\\nkubectl apply -f -\n```",
+  "link": "https://stackoverflow.com/questions/45879498/how-can-i-update-a-secret-on-kubernetes-when-it-is-generated-from-a-file"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes：列出所有 Pod 及其所在节点",
+  "answer": "你可以使用自定义列来实现：\n\n```kubectl get pod -o=custom-columns=NAME:.metadata.name,STATUS:.status.phase,NODE:.spec.nodeName --all-namespaces\n```\n\n或者直接使用：\n\n```kubectl get pod -o=custom-columns=NODE:.spec.nodeName,NAME:.metadata.name --all-namespaces\n```",
+  "link": "https://stackoverflow.com/questions/48983354/kubernetes-list-all-pods-and-its-nodes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何登录 Kubernetes Dashboard？",
+  "answer": "从 1.7 版本开始，Dashboard 支持基于以下方式的用户认证：\n\n```Authorization: Bearer <token>```\n 头部在每个请求中传递给 Dashboard。从 1.6 版本开始支持。具有最高优先级。如果存在，将不会显示登录视图。\n\nBearer Token，可用于 Dashboard 登录视图。\n\n用户名/密码，可用于 Dashboard 登录视图。\n\nKubeconfig 文件，可用于 Dashboard 登录视图。\n\n— Github 上的 Dashboard\n\nToken\n\n这里的 ```Token``` 可以是 ```Static Token```、```Service Account Token```、来自 Kubernetes Authenticating 的 ```OpenID Connect Token```，但不能是 kubeadm 的 ```Bootstrap Token```。\n\n使用 kubectl，我们可以获取 Kubernetes 中默认创建的服务账户（例如 deployment controller）。\n\n```$ kubectl -n kube-system get secret\n# 所有类型为 'kubernetes.io/service-account-token' 的 secret 都允许登录。\n# 注意它们具有不同的权限。\nNAME                                     TYPE                                  DATA      AGE\ndeployment-controller-token-frsqj        kubernetes.io/service-account-token   3         22h\n\n$ kubectl -n kube-system describe secret deployment-controller-token-frsqj\nName:         deployment-controller-token-frsqj\nNamespace:    kube-system\nLabels:       <none>\nAnnotations:  kubernetes.io/service-account.name=deployment-controller\n              kubernetes.io/service-account.uid=64735958-ae9f-11e7-90d5-02420ac00002\n\nType:  kubernetes.io/service-account-token\n\nData\n====\nca.crt:     1025 bytes\nnamespace:  11 bytes\ntoken:      eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJrdWJlLXN5c3RlbSIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VjcmV0Lm5hbWUiOiJkZXBsb3ltZW50LWNvbnRyb2xsZXItdG9rZW4tZnJzcWoiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC5uYW1lIjoiZGVwbG95bWVudC1jb250cm9sbGVyIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZXJ2aWNlLWFjY291bnQudWlkIjoiNjQ3MzU5NTgtYWU5Zi0xMWU3LTkwZDUtMDI0MjBhYzAwMDAyIiwic3ViIjoic3lzdGVtOnNlcnZpY2VhY2NvdW50Omt1YmUtc3lzdGVtOmRlcGxveW1lbnQtY29udHJvbGxlciJ9.OqFc4CE1Kh6T3BTCR4XxDZR8gaF1MvH4M3ZHZeCGfO-sw-D0gp826vGPHr_0M66SkGaOmlsVHmP7zmTi-SJ3NCdVO5viHaVUwPJ62hx88_JPmSfD0KJJh6G5QokKfiO0WlGN7L1GgiZj18zgXVYaJShlBSz5qGRuGf0s1jy9KOBt9slAN5xQ9_b88amym2GIXoFyBsqymt5H-iMQaGP35tbRpewKKtly9LzIdrO23bDiZ1voc5QZeAZIWrizzjPY5HPM1qOqacaY9DcGc7akh98eBJG_4vZqH2gKy76fMf0yInFTeNKr45_6fWt8gRM77DQmPwb3hbrjWXe1VvXX_g\n```\n\nKubeconfig\n\nDashboard 需要 kubeconfig 文件中的用户具有 ```username & password``` 或 ```token```，但 ```admin.conf``` 只有 ```client-certificate```。你可以编辑配置文件，添加使用上述方法提取的 token。\n\n```\n$ kubectl config set-credentials cluster-admin --token=bearer_token\n```\n\n替代方案（不建议在生产环境中使用）\n\n以下是两种绕过认证的方法，但请谨慎使用。\n\n使用 HTTP 部署 Dashboard\n\n```$ kubectl apply -f https://raw.githubusercontent.com/kubernetes/dashboard/master/src/deploy/alternative/kubernetes-dashboard.yaml\n```\n\n可以通过 ```kubectl proxy``` 在 http://localhost:8001/ui 加载 Dashboard。\n\n为 Dashboard 的服务账户授予管理员权限\n\n```$ cat <<EOF | kubectl create -f -\napiVersion: rbac.authorization.k8s.io/v1beta1\nkind: ClusterRoleBinding\nmetadata:\n  name: kubernetes-dashboard\n  labels:\n    k8s-app: kubernetes-dashboard\nroleRef:\n  apiGroup: rbac.authorization.k8s.io\n  kind: ClusterRole\n  name: cluster-admin\nsubjects:\n- kind: ServiceAccount\n  name: kubernetes-dashboard\n  namespace: kube-system\nEOF\n```\n\n之后，你可以在登录页面使用 Skip 选项访问 Dashboard。\n\n如果你使用的是 Dashboard v1.10.1 或更高版本，还必须将 ```--enable-skip-login``` 添加到 deployment 的命令行参数中。你可以通过将其添加到 ```kubectl edit deployment/kubernetes-dashboard --namespace=kube-system``` 中的 ```args``` 来实现。\n\n示例：\n\n```      containers:\n      - args:\n        - --auto-generate-certificates\n        - --enable-skip-login            # <-- 添加此行\n        image: k8s.gcr.io/kubernetes-dashboard-amd64:v1.10.1\n```",
+  "link": "https://stackoverflow.com/questions/46664104/how-to-sign-in-kubernetes-dashboard"
+ },
+ {
+  "category": "kubernetes",
+  "question": "kubectl get events only for a pod",
+  "answer": "你可以使用 `kubectl` 的 `event` 命令。\n\n要过滤特定的 pod，可以使用 field-selector：\n\n```kubectl get event --namespace abc-namespace --field-selector involvedObject.name=my-pod-zl6m6\n```\n\n要查看可用的字段，可以对任意 event 使用 `kubectl describe`。",
+  "link": "https://stackoverflow.com/questions/51931113/kubectl-get-events-only-for-a-pod"
+ },
+ {
+  "category": "kubernetes",
+  "question": "What will happen to evicted pods in kubernetes?",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/46419163/what-will-happen-to-evicted-pods-in-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何在 Kubernetes 中停止/暂停一个 Pod",
+  "answer": "正如其他人所指出的，Kubernetes 并不支持暂停 Pod 的当前状态并在需要时恢复。不过，你仍然可以通过让 Deployment 不工作来实现这一点，即将副本数设置为 0。\n\n\n```kubectl scale --replicas=0 deployment/<your-deployment>\n```\n\n\n查看帮助信息\n\n\n```# Set a new size for a Deployment, ReplicaSet, Replication Controller, or StatefulSet.\nkubectl scale --help\n\n```\n\n\nscale 还允许用户为缩放操作指定一个或多个前置条件。\n\n\n如果指定了 \n```--current-replicas```\n 或 \n```--resource-version```\n，它会在尝试缩放之前进行校验，并保证在将缩放请求发送到服务器时前置条件仍然成立。\n\n\n示例：\n\n\n```  # Scale a replicaset named 'foo' to 3.\n  kubectl scale --replicas=3 rs/foo\n\n  # Scale a resource identified by type and name specified in \"foo.yaml\" to 3.\n  kubectl scale --replicas=3 -f foo.yaml\n\n  # If the deployment named mysql's current size is 2, scale mysql to 3.\n  kubectl scale --current-replicas=2 --replicas=3 deployment/mysql\n\n  # Scale multiple replication controllers.\n  kubectl scale --replicas=5 rc/foo rc/bar rc/baz\n\n  # Scale statefulset named 'web' to 3.\n  kubectl scale --replicas=3 statefulset/web\n```",
+  "link": "https://stackoverflow.com/questions/54821044/how-to-stop-pause-a-pod-in-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Pod 存在未绑定的 PersistentVolumeClaims",
+  "answer": "你必须定义一个 \nPersistentVolume\n 来提供磁盘空间供 \nPersistentVolumeClaim\n 使用。\n\n\n当使用 \n```storageClass```\n 时，Kubernetes 会启用 \n\"Dynamic Volume Provisioning\"\n，而该功能无法与本地文件系统配合使用。\n\n\n\n\n要解决你的问题：\n\n\n\n\n提供一个满足该 claim 约束条件的 \nPersistentVolume\n（大小 >= 100Mi）\n\n\n从 \nPersistentVolumeClaim\n 中移除 \n```storageClass```\n，或将其设置为空值（\n```\"\"```\n）\n\n\n从集群中移除 \nStorageClass\n\n\n\n\n\n\n这些组件是如何协同工作的？\n\n\n在创建 Deployment 的状态描述时，通常已经知道应用程序需要何种类型（容量、速度等）的存储。\n\n为了让 Deployment 具有通用性，你会希望避免对存储产生硬依赖。Kubernetes 的卷抽象允许你以标准化的方式提供和消费存储。\n\n\n\nPersistentVolumeClaim\n 用于在部署应用程序的同时提供存储约束。\n\n\n\nPersistentVolume\n 提供集群范围内可供消费（\"\n```bound```\n\"）的卷实例。一个 PersistentVolume 会绑定到 \n一个\n claim。但由于该 claim 的多个实例可能运行在多个节点上，因此该卷可能会被多个节点\n访问\n。\n\n\n没有 StorageClass 的 \nPersistentVolume 被视为\n静态\n。\n\n\n\"Dynamic Volume Provisioning\"\n 与\n StorageClass\n 结合使用时，允许集群按需提供 PersistentVolume。\n要实现这一点，给定的存储提供者必须支持 \nprovisioning\n —— 这样当出现未满足的 \nPersistentVolumeClaim\n 时，集群就可以请求提供一个\"新\"的 \nPersistentVolume\n。\n\n\n\n\nPersistentVolume 示例\n\n\n为了了解如何指定各项配置，最好查看 \n你所使用的 Kubernetes 版本的 API\n，因此以下示例基于 \nK8S 1.17 的 API 参考\n：\n\n\n```apiVersion: v1\nkind: PersistentVolume\nmetadata:\n  name: ckan-pv-home\n  labels:\n    type: local\nspec:\n  capacity:\n    storage: 100Mi\n  hostPath:\n    path: \"/mnt/data/ckan\"\n```\n\n\n\nPersistentVolumeSpec\n 允许我们定义多个属性。\n我选择了一个 \n```hostPath```\n 卷，它将本地目录映射为卷的内容。capacity 允许资源调度器根据资源需求识别该卷是否适用。\n\n\n\n\n其他资源：\n\n\n\n\nConfigure PersistentVolume Guide",
+  "link": "https://stackoverflow.com/questions/52668938/pod-has-unbound-persistentvolumeclaims"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何自动删除由 CronJob 创建的已完成的 Kubernetes Job？",
+  "answer": "现在你可以设置历史记录限制，或者完全禁用历史记录，这样失败或成功的 CronJob 就不会无限期保留。请参阅我的回答\n这里\n。文档在\n这里\n。\n\n\n要设置\n历史记录限制\n：\n\n\n\n\n```.spec.successfulJobsHistoryLimit```\n 和 \n```.spec.failedJobsHistoryLimit```\n 字段是可选的。这些字段指定应保留多少个已完成和失败的 job。默认情况下，它们分别设置为 3 和 1。将限制设置为 \n```0```\n 对应于在相应类型的 job 完成后不保留任何 job。\n\n\n\n\n限制为 0 的配置如下所示：\n\n\n```apiVersion: batch/v1beta1\nkind: CronJob\nmetadata:\n  name: hello\nspec:\n  schedule: \"*/1 * * * *\"\n  successfulJobsHistoryLimit: 0\n  failedJobsHistoryLimit: 0\n  jobTemplate:\n    spec:\n      template:\n        spec:\n          containers:\n          - name: hello\n            image: busybox\n            args:\n            - /bin/sh\n            - -c\n            - date; echo Hello from the Kubernetes cluster\n          restartPolicy: OnFailure\n```",
+  "link": "https://stackoverflow.com/questions/41385403/how-to-automatically-remove-completed-kubernetes-jobs-created-by-a-cronjob"
+ },
+ {
+  "category": "kubernetes",
+  "question": "对于 helm chart，有哪些可用版本？",
+  "answer": "简短回答\n\n\n你可以使用 \n```search repo```\n 功能结合 \n```--versions```\n 标志来列出 chart 的所有可用版本：\n\n\n```helm search repo <reponame>/<chartname> --versions```\n\n\n这要求之前已经添加了该 repo，并且它是最新的。如果你的 repo 是之前添加的，请确保使用 \n```helm repo update```\n 保持本地缓存更新，以便也能看到最近发布的版本。\n\n\n在 Helm v2 和 Helm v3 之间，仓库中 chart 的管理方式略有变化。因此，请参阅相应部分了解详细信息。\n\n\nHelm v3\n\n\nHelm v3 改为更去中心化的 chart 管理方式，因此与直接从预配置的 \n```stable```\n 仓库获取许多 chart 相比，你可能需要预先添加某个仓库。列出某个 chart 的版本可以通过运行 \n```helm search repo```\n 命令，并指定 chart 的完整路径（指定 repo 和 chart 名称），再结合 \n```--versions```\n 标志（或简写 \n```-l```\n）来完成，如下所示：\n\n\n```helm search repo <reponame>/<chartname> --versions```\n\n\n如果你对 \n```1.1.0-rc.1```\n 或 \n```3.0.0-alpha.2```\n 之类的预发布构建感兴趣，则必须添加 \n```--devel```\n 标志，以便也将这些版本包含在内。\n\n\n```helm search repo <reponame>/<chartname> --versions --devel```\n\n\n你可以通过使用 SEMVER 表示法指定版本约束，并结合 \n```--versions```\n 使用 \n```--version```\n 标志来限制结果数量。例如，这允许将结果限制为仅 v1 chart：\n\n\n```helm search repo <reponame>/<chartname> --versions --version ^v1.0```\n\n\n根据你的 shell，由于 \n```^```\n 等特殊字符，可能需要将版本字符串放在单引号（\n```'```\n）中。\n\n\n示例\n\n\n一个使用 jetstack 的 cert-manager charts 的具体示例：\n\n\n```$ helm repo add jetstack https://charts.jetstack.io\n\"jetstack\" has been added to your repositories\n```\n\n\n常规搜索包含 \n```jetstack```\n 的结果\n\n\n```$ helm search repo jetstack\nNAME                    CHART VERSION   APP VERSION DESCRIPTION\njetstack/cert-manager   v1.0.4          v1.0.4      A Helm chart for cert-manager\njetstack/tor-proxy      0.1.1                       A Helm chart for Kubernetes\n```\n\n\n常规搜索特定 chart\n\n\n```$ helm search repo jetstack/cert-manager\nNAME                    CHART VERSION   APP VERSION DESCRIPTION\njetstack/cert-manager   v1.0.4          v1.0.4      A Helm chart for cert-manager\n```\n\n\n列出某个特定 chart 的所有版本\n\n\n```$ helm search repo jetstack/cert-manager --versions\nNAME                    CHART VERSION   APP VERSION DESCRIPTION\njetstack/cert-manager   v1.0.4          v1.0.4      A Helm chart for cert-manager\njetstack/cert-manager   v1.0.3          v1.0.3      A Helm chart for cert-manager\njetstack/cert-manager   v1.0.2          v1.0.2      A Helm chart for cert-manager\njetstack/cert-manager   v1.0.1          v1.0.1      A Helm chart for cert-manager\n...\n```\n\n\n列出不稳定/预发布构建时也会包含 alpha 版本。\n\n\n```$ helm search repo jetstack/cert-manager --versions --devel\nNAME                    CHART VERSION   APP VERSION     DESCRIPTION\njetstack/cert-manager   v1.1.0-alpha.1  v1.1.0-alpha.1  A Helm chart for cert-manager\njetstack/cert-manager   v1.1.0-alpha.0  v1.1.0-alpha.0  A Helm chart for cert-manager\njetstack/cert-manager   v1.0.4          v1.0.4          A Helm chart for cert-manager\njetstack/cert-manager   v1.0.3          v1.0.3          A Helm chart for cert-manager\n...\n```\n\n\n由于列出版本已集成到搜索中，因此使用 \n```--versions```\n 并不限于单个 chart。指定此标志将列出与查询字符串匹配的所有 chart 的所有可用版本。\n\n\n如需更多信息，请查看位于 \nhttps://helm.sh/docs/helm/helm_search_repo/\n 的 helm 文档。\n\n\nHelm v2\n\n\n对于 Helm v2，许多制品可通过随 Helm CLI 预配置的 \n```stable```\n repo 访问。列出所有版本的方式类似，但命令不同。要使用 Helm v2 列出 chart 的可用版本，请使用以下命令：\n\n\n```helm search -l stable/<some_chart>```\n\n\n```-l```\n 或 \n```--versions```\n 标志用于显示每个 chart 的所有版本，而不仅仅是最新版本。\n\n\n在 Helm v2 中，你可以使用 \n```helm update```\n 命令保持 repo 更新。\n\n\n参考：\nhttps://v2.helm.sh/docs/helm/#helm-search",
+  "link": "https://stackoverflow.com/questions/51031294/for-a-helm-chart-what-versions-are-available"
+ },
+ {
+  "category": "kubernetes",
+  "question": "kubernetes 列出所有正在运行的 pod 名称",
+  "answer": "个人而言，我更喜欢这种方法，因为它只依赖 kubectl，输出不冗长，而且不会在结果中带有 pod/ 前缀：\n\n\n```kubectl get pods --no-headers -o custom-columns=\":metadata.name\"\n```",
+  "link": "https://stackoverflow.com/questions/35797906/kubernetes-list-all-running-pods-name"
+ },
+ {
+  "category": "kubernetes",
+  "question": "访问 EKS 集群时 kubectl 报错 You must be logged in to the server (Unauthorized)",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/50791303/kubectl-error-you-must-be-logged-in-to-the-server-unauthorized-when-accessing"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes 按年龄排序 Pod",
+  "answer": "Pod 有 status，你可以用它来找出 startTime。\n\n\n我猜类似这样的命令\n```kubectl get po --sort-by=.status.startTime```\n应该可以。\n\n\n你也可以试试：\n\n\n\n\n```kubectl get po --sort-by='{.firstTimestamp}'```\n。\n\n\n```kubectl get pods --sort-by=.metadata.creationTimestamp```\n感谢 @chris\n\n\n\n\n另外，据说在 Kubernetes 1.7 版本中，sort-by 是坏的。\n\n\nhttps://github.com/kubernetes/kubectl/issues/43\n\n\n这是 bug 报告：\nhttps://github.com/kubernetes/kubernetes/issues/48602\n\n\n这是 PR：\nhttps://github.com/kubernetes/kubernetes/pull/48659/files",
+  "link": "https://stackoverflow.com/questions/45310287/kubernetes-sort-pods-by-age"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何通过 SSH 进入 Minikube 的 VM？",
+  "answer": "你可以使用 Minikube 二进制文件来完成这个操作，\n```minikube ssh```\n。",
+  "link": "https://stackoverflow.com/questions/38870277/how-do-i-ssh-into-the-vm-for-minikube"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes：如何设置 VolumeMount 的用户组和文件权限",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/43544370/kubernetes-how-to-set-volumemount-user-group-and-file-permissions"
+ },
+ {
+  "category": "kubernetes",
+  "question": "简单来说，持久卷（PV）和持久卷声明（PVC）之间有什么区别？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/48956049/what-is-the-difference-between-persistent-volume-pv-and-persistent-volume-clai"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何优雅地从 Kubernetes 中移除一个节点？",
+  "answer": "列出节点并获取你想要 drain（或从集群中移除）的 \n```<node-name>```\n\n\n```kubectl get nodes\n```\n\n\n1) 首先 drain 该节点\n\n\n```kubectl drain <node-name>\n```\n\n\n你可能需要忽略 daemonsets 和机器上的 local-data\n\n\n```kubectl drain <node-name> --ignore-daemonsets --delete-local-data\n```\n\n\n2) 编辑节点的 instance group（仅当你使用 kops 时）\n\n\n```kops edit ig nodes\n```\n\n\n将 MIN 和 MAX 大小设置为当前值减 1\n   只需保存文件（无需额外操作）\n\n\n你可能仍会在已 drain 的节点上看到一些与 daemonsets 相关的 pod，例如网络插件、用于日志的 fluentd、kubedns/coredns 等\n\n\n3) 最后删除该节点\n\n\n```kubectl delete node <node-name>\n```\n\n\n4) 将 KOPS 的状态提交到 s3：（仅当你使用 kops 时）\n\n\n```kops update cluster --yes\n```\n\n\n或者（如果你使用 kubeadm）\n\n\n如果你使用 kubeadm，并且希望将机器重置为运行 \n```kubeadm join```\n 之前的状态，那么运行\n\n\n```kubeadm reset\n```",
+  "link": "https://stackoverflow.com/questions/35757620/how-to-gracefully-remove-a-node-from-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Docker ENTRYPOINT 与 Kubernetes 容器 spec COMMAND 之间的区别是什么？",
+  "answer": "Kubernetes 为我们提供了多种使用这些命令的选项：\n\n\n当你在 Kubernetes .yaml 文件中覆盖默认的 Entrypoint 和 Cmd 时，适用以下规则：\n\n\n\n\n如果你没有为 Container 提供 command 或 args，则使用 Docker 镜像中定义的默认值。\n\n\n如果你只为 Container 提供了 args，则会使用你提供的 args 运行 Docker 镜像中定义的默认 Entrypoint。\n\n\n如果你为 Container 提供了 command，则只使用提供的 command。Docker 镜像中定义的默认 EntryPoint 和默认 Cmd 会被忽略。你的 command 会使用提供的 args 运行（如果未提供 args，则不使用 args）。\n\n\n\n\n以下是一个示例：\n\n\nDockerfile：\n\n\n```FROM alpine:latest\nCOPY \"executable_file\" /\nENTRYPOINT [ \"./executable_file\" ]\n```\n\n\nKubernetes yaml 文件：\n\n\n``` spec:\n    containers:\n      - name: container_name\n        image: image_name\n        args: [\"arg1\", \"arg2\", \"arg3\"]\n```\n\n\nhttps://kubernetes.io/docs/tasks/inject-data-application/define-command-argument-container/",
+  "link": "https://stackoverflow.com/questions/44316361/difference-between-docker-entrypoint-and-kubernetes-container-spec-command"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Docker-Swarm、Kubernetes、Mesos 与 Core-OS Fleet",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/27640633/docker-swarm-kubernetes-mesos-core-os-fleet"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes 究竟做什么？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/28086732/what-does-kubernetes-actually-do"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes 中的 'endpoint' 是什么？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/52857825/what-is-an-endpoint-in-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "“kubectl apply”的反向操作是什么？",
+  "answer": "一种方法是\n```kubectl delete -f <filename>```\n但这意味着几件事：\n\n\n\n\n资源最初是被创建的。这个命令只是简单地移除所有这些资源，如果你真的想要“恢复到之前的状态”，我不确定 Kubernetes 中有内置工具能做到这一点（所以你真的需要从备份中恢复，如果你有备份的话）\n\n\n容器没有修改宿主机：容器可能挂载根文件系统并更改它，或者修改内核子系统（iptables 等）。\n```delete```\n命令也不会恢复这些更改，在这种情况下，你真的需要查看产品的文档，看看他们是否提供了任何官方方式来保证正确的清理",
+  "link": "https://stackoverflow.com/questions/57683206/what-is-the-reverse-of-kubectl-apply"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes Pod 警告：1 个节点存在卷节点亲和性冲突",
+  "answer": "当 Pod 使用的 PersistentVolumeClaim 被调度到不同的可用区，而不是同一个可用区时，就会出现“volume node affinity conflict”错误，导致 Pod 无法被调度，因为它无法从另一个可用区连接到该卷。要检查这一点，你可以查看所有 PersistentVolume 的详细信息。\n首先获取你的 PVC：\n\n\n```$ kubectl get pvc -n <namespace>\n```\n\n\n然后获取 PersistentVolume（不是 VolumeClaim）的详细信息：\n\n\n```$  kubectl get pv\n```\n\n\n找到与你的 PVC 对应的 PV，并查看它们的详细信息：\n\n\n```$  kubectl describe pv <pv1> <pv2>\n```\n\n\n你可以检查每个 PV 的 Source.VolumeID，它们很可能位于不同的可用区，因此你的 Pod 会报出亲和性错误。\n要解决这个问题，请为单个可用区创建一个 StorageClass，并在你的 PVC 中使用该 StorageClass。\n\n\n```kind: StorageClass\napiVersion: storage.k8s.io/v1\nmetadata:\n  name: region1storageclass\nprovisioner: kubernetes.io/aws-ebs\nparameters:\n  type: gp2\n  encrypted: \"true\" # if encryption required\nvolumeBindingMode: WaitForFirstConsumer\nallowedTopologies:\n- matchLabelExpressions:\n  - key: failure-domain.beta.kubernetes.io/zone\n    values:\n    - eu-west-2b # this is the availability zone, will depend on your cloud provider\n    # multi-az can be added, but that defeats the purpose in our scenario\n```",
+  "link": "https://stackoverflow.com/questions/51946393/kubernetes-pod-warning-1-nodes-had-volume-node-affinity-conflict"
+ },
+ {
+  "category": "kubernetes",
+  "question": "以 root 访问权限在 Kubernetes Pod 上执行命令",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/42793382/exec-commands-on-kubernetes-pods-with-root-access"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes Controller 和 Kubernetes Operator 之间有什么区别？",
+  "answer": "我认为“kubernetes operator”这个术语是由 CoreOS 的人在这里引入的。\n\n\n\n\nOperator 是一种特定于应用的控制器，它扩展了 Kubernetes API，以便代表 Kubernetes 用户创建、配置和管理复杂有状态应用的实例。它建立在基本的 Kubernetes 资源和控制器概念之上，同时还包含了领域或应用特定的知识，以更好地自动化那些更适合由计算机管理的常见任务。\n\n\n\n\n所以基本上，kubernetes operator 是一种模式的名称，该模式由一个 kubernetes 控制器组成，它向 Kubernetes API 添加新对象，以便配置和管理诸如 Prometheus 或 etcd 之类的应用。\n\n\n一句话概括：operator 是一种领域特定的控制器。\n\n\n更新\n\n\n在 Github 上有一个关于这个完全相同主题的新讨论，链接到了同一篇博客文章。讨论中的相关要点如下：\n\n\n\n\n所有 Operator 都使用控制器模式，但并非所有控制器都是 Operator。只有当它具备以下条件时才是 Operator：控制器模式 + API 扩展 + 单一应用聚焦。\n\n\nOperator 是使用 CRD 实现的自定义控制器。它遵循与内置控制器相同的模式（即 watch、diff、action）。\n\n\n\n\n更新 2\n\n\n我找到了一篇新的博客文章，也试图解释这一区别。",
+  "link": "https://stackoverflow.com/questions/47848258/what-is-the-difference-between-a-kubernetes-controller-and-a-kubernetes-operator"
+ },
+ {
+  "category": "kubernetes",
+  "question": "在 Kubernetes 中禁用 cronjob",
+  "answer": "如果你想通过 patch 来暂停 cronjob，请使用：\n\n\n```kubectl patch cronjobs <job-name> -p '{\"spec\" : {\"suspend\" : true }}'\n```\n\n\n你可能需要转义 \" 和/或指定 namespace\n\n\n``` kubectl patch cronjob <job-name> [-n namespace] -p '{\\\"spec\\\" : {\\\"suspend\\\" : true }}'\n```",
+  "link": "https://stackoverflow.com/questions/52776690/disabling-cronjob-in-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "在不删除现有 ConfigMap 或 Secret 的情况下更新 k8s ConfigMap 或 Secret",
+  "answer": "你可以从 \n```kubectl create configmap```\n 命令获取 YAML，并将其通过管道传递给 \n```kubectl apply```\n，如下所示：\n\n\n```kubectl create configmap foo --from-file foo.properties -o yaml --dry-run=client | kubectl apply -f -\n```",
+  "link": "https://stackoverflow.com/questions/38216278/update-k8s-configmap-or-secret-without-deleting-the-existing-one"
+ },
+ {
+  "category": "kubernetes",
+  "question": "升级失败：另一个操作（安装/升级/回滚）正在进行中",
+  "answer": "这个错误可能由多种原因引起，但正如你提到的，最常见的情况是在升级/安装过程中发生了中断。\n\n\n要解决这个问题，可能需要先回滚到另一个版本，然后重新安装或再次执行 helm upgrade。\n\n\n尝试使用以下命令列出：\n\n\n```helm ls --namespace <namespace>\n```\n\n\n但你可能注意到，运行该命令时，它可能不会显示任何包含信息的列。\n\n\n尝试检查之前部署的历史记录：\n\n\n```helm history <release> --namespace <namespace>\n```\n\n\n这会提供一些信息，通常表明原始安装从未成功完成，并且处于 \npending state\n，类似 STATUS: pending-upgrade state。\n\n\n要摆脱这种状态，请使用 rollback 命令：\n\n\n```helm rollback <release> <revision> --namespace <namespace>\n```\n\n\nrevision 是可选的，但你应该尽量提供它。\n\n\n然后你可以再次尝试执行原始命令来升级或重新安装。\n\n\n参考：\nhelm-upgrade-failed-another-operation-is-in-progress-how-to-fix-it-",
+  "link": "https://stackoverflow.com/questions/71599858/upgrade-failed-another-operation-install-upgrade-rollback-is-in-progress"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何使用 Helm charts 拉取环境变量",
+  "answer": "你可以\n```export```\n该变量，并在运行 \n```helm install```\n 时使用它。\n\n\n在此之前，你需要修改你的 chart，以便在安装时能够 \n```set```\n该值。\n\n\n如果你已经知道如何设置模板字段，可以跳过这部分。\n\n\n\n\n由于你不想暴露数据，因此最好将其作为 secret 保存在 kubernetes 中。\n\n\n首先，在你的 \n```Values```\n 文件中添加这两行，以便这两个值可以从外部设置。\n\n\n```username: root\npassword: password\n```\n\n\n现在，在你的 \n```template```\n 文件夹内添加一个 \n```secret.yaml```\n 文件，并将这段代码片段复制到该文件中。\n\n\n```apiVersion: v1\nkind: Secret\nmetadata:\n  name: {{ .Release.Name }}-auth\ndata:\n  password: {{ .Values.password | b64enc }}\n  username: {{ .Values.username | b64enc }}\n```\n\n\n现在调整你的 deployment yaml 模板，并在 \n```env```\n 部分进行修改，如下所示\n\n\n```...\n...\n    spec:\n      restartPolicy: Always\n      containers:\n        - name: sample-app\n          image: \"sample-app:latest\"\n          imagePullPolicy: Always\n          env:          \n          - name: \"USERNAME\"\n            valueFrom:\n              secretKeyRef:\n                key:  username\n                name: {{ .Release.Name }}-auth\n          - name: \"PASSWORD\"\n            valueFrom:\n              secretKeyRef:\n                key:  password\n                name: {{ .Release.Name }}-auth\n...\n...\n```\n\n\n\n\n如果你已经正确修改了模板以支持 \n```--set```\n 标志，\n你可以使用环境变量来设置它。\n\n\n```$ export USERNAME=root-user\n```\n\n\n现在在运行 helm install 时使用这个变量，\n\n\n```$ helm install --set username=$USERNAME ./mychart\n```\n\n\n如果你以 \n```dry-run```\n 模式运行这个 \n```helm install```\n，你可以验证这些更改，\n\n\n```$ helm install --dry-run --set username=$USERNAME --debug ./mychart\n[debug] Created tunnel using local port: '44937'\n\n[debug] SERVER: \"127.0.0.1:44937\"\n\n[debug] Original chart version: \"\"\n[debug] CHART PATH: /home/maruf/go/src/github.com/the-redback/kubernetes-yaml-drafts/helm-charts/mychart\n\nNAME:   irreverant-meerkat\nREVISION: 1\nRELEASED: Fri Apr 20 03:29:11 2018\nCHART: mychart-0.1.0\nUSER-SUPPLIED VALUES:\nusername: root-user\n\nCOMPUTED VALUES:\npassword: password\nusername: root-user\n\nHOOKS:\nMANIFEST:\n\n---\n# Source: mychart/templates/secret.yaml\napiVersion: v1\nkind: Secret\nmetadata:\n  name: irreverant-meerkat-auth\ndata:\n  password: password\n  username: root-user\n---\n# Source: mychart/templates/deployment.yaml\napiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: irreverant-meerkat\n  labels:\n    app: irreverant-meerkat\nspec:\n  replicas: 1\n  template:\n    metadata:\n      name: irreverant-meerkat\n      labels:\n        app: irreverant-meerkat\n    spec:\n      containers:\n      - name: irreverant-meerkat\n        image: alpine\n        env:\n        - name: \"USERNAME\"\n          valueFrom:\n            secretKeyRef:\n              key:  username\n              name: irreverant-meerkat-auth\n        - name: \"PASSWORD\"\n          valueFrom:\n            secretKeyRef:\n              key:  password\n              name: irreverant-meerkat-auth\n\n        imagePullPolicy: IfNotPresent\n      restartPolicy: Always\n  selector:\n    matchLabels:\n      app: irreverant-meerkat\n```\n\n\n你可以看到 secret 中 username 的数据已经变成了 \n```root-user```\n。\n\n\n我已经将这个示例添加到了 github 仓库中。\n\n\n在 \nkubernetes/helm\n 仓库中也有一些关于此的讨论。你可以查看 \nthis issue\n 来了解使用环境变量的所有其他方式。",
+  "link": "https://stackoverflow.com/questions/49928819/how-to-pull-environment-variables-with-helm-charts"
+ },
+ {
+  "category": "kubernetes",
+  "question": "在 Kubernetes Ingress 中从 v1beta1 切换到 v1 时出现错误 &quot;unknown field &quot;serviceName&quot; in io.k8s.api.networking.v1.IngressBackend&quot;",
+  "answer": "我认为这个 \nPR\n 包含了你所询问的更改。\n\n\n````Ingress` 和 `IngressClass` 资源已经升级到 `networking.k8s.io/v1`。`extensions/v1beta1` 和 `networking.k8s.io/v1beta1` API 版本中的 Ingress 和 IngressClass 类型已被弃用，并且将不再在 1.22+ 中提供服务。持久化对象可以通过 `networking.k8s.io/v1` API 访问。v1 Ingress 对象中的显著变化（v1beta1 字段名保持不变）：\n* `spec.backend` -> `spec.defaultBackend`\n* `serviceName` -> `service.name`\n* `servicePort` -> `service.port.name`（用于字符串值）\n* `servicePort` -> `service.port.number`（用于数值）\n* `pathType` 在 v1 中不再有默认值；必须指定 \"Exact\"、\"Prefix\" 或 \"ImplementationSpecific\"\n其他 Ingress API 更新：\n* backend 现在可以是 resource 或 service backend\n* `path` 不再需要是有效的正则表达式\n```\n\n\n如果你查看 \n1.19 Ingress 文档\n，新的语法看起来应该是：\n\n\n```apiVersion: networking.k8s.io/v1\nkind: Ingress\nmetadata:\n  name: minimal-ingress\n  annotations:\n    nginx.ingress.kubernetes.io/rewrite-target: /\nspec:\n  rules:\n  - http:\n      paths:\n      - path: /testpath\n        pathType: Prefix\n        backend:\n          service:\n            name: test\n            port:\n              number: 80\n```\n\n\n遗憾的是我没有 1.19 集群可以自己测试，但我认为这就是你遇到的问题。",
+  "link": "https://stackoverflow.com/questions/64125048/get-error-unknown-field-servicename-in-io-k8s-api-networking-v1-ingressbacken"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何在 Pod 内的容器中获取 Pod 自身的 IP 地址？",
+  "answer": "最简单的做法是确保你的 pod 或 replication controller 的 yaml/json 文件通过添加下面定义的配置块，将 pod IP 作为环境变量加入。（下面的配置块还会让 pod 可以使用 name 和 namespace）\n\n\n```env:\n- name: MY_POD_NAME\n  valueFrom:\n    fieldRef:\n      fieldPath: metadata.name\n- name: MY_POD_NAMESPACE\n  valueFrom:\n    fieldRef:\n      fieldPath: metadata.namespace\n- name: MY_POD_IP\n  valueFrom:\n    fieldRef:\n      fieldPath: status.podIP\n```\n\n\n重新创建 pod/rc，然后尝试\n\n\n```echo $MY_POD_IP\n```\n\n\n同时运行\n```env```\n查看 Kubernetes 还为你提供了哪些信息。",
+  "link": "https://stackoverflow.com/questions/30746888/how-to-know-a-pods-own-ip-address-from-inside-a-container-in-the-pod"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何在 pod 容器内访问 Kubernetes API？",
+  "answer": "在官方文档中我找到了这个：\n\n\nhttps://kubernetes.io/docs/tasks/access-application-cluster/access-cluster/#accessing-the-api-from-a-pod\n\n\n显然，我漏掉了一个安全令牌，而在之前版本的 Kubernetes 中并不需要它。由此，我想出了一个比运行代理或在容器中安装 golang 更简单的方案。请看这个示例，它从 API 获取当前容器的信息：\n\n\n```KUBE_TOKEN=$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)\ncurl -sSk -H \"Authorization: Bearer $KUBE_TOKEN\" \\\n      https://$KUBERNETES_SERVICE_HOST:$KUBERNETES_PORT_443_TCP_PORT/api/v1/namespaces/default/pods/$HOSTNAME\n```\n\n\n我还会附带一个简单的二进制工具 jq（\nhttp://stedolan.github.io/jq/download/\n），用于在 bash 脚本中解析 json。",
+  "link": "https://stackoverflow.com/questions/30690186/how-do-i-access-the-kubernetes-api-from-within-a-pod-container"
+ },
+ {
+  "category": "kubernetes",
+  "question": "在版本 \"extensions/v1beta1\" 中找不到类型 \"Deployment\" 的匹配项",
+  "answer": "在 Kubernetes 1.16 中，一些 \n```api```\n 已经发生了变化。\n\n\n你可以使用以下命令检查哪些 api 支持当前的 Kubernetes 对象：\n\n\n```$ kubectl api-resources | grep deployment\ndeployments                       deploy       apps                           true         Deployment\n```\n\n\n这意味着只有使用 \n```apps```\n 的 apiVersion 才是 Deployment 的正确选择（\n```extensions```\n 不支持 \n```Deployment```\n）。StatefulSet 也是同样的情况。\n\n\n你需要将 Deployment 和 StatefulSet 的 apiVersion 改为 \n```apiVersion: apps/v1```\n。\n\n\n如果这没有帮助，请将你的 YAML 添加到问题中。\n\n\n编辑\n\n由于该问题是由 HELM 模板在 Deployments 中包含了 1.16 版本不支持的旧 apiVersions 引起的，有两种可能的解决方案：\n\n\n1.\n \n```git clone```\n 整个仓库，并使用脚本将所有 templates/deployment.yaml 中的 apiVersion 替换为 \n```apps/v1```\n\n\n2.\n 使用较旧版本的 Kubernetes（1.15），此时验证器接受 \n```extensions```\n 作为 \n```Deployment```\n 和 \n```StatefulSet```\n 的 \n```apiVersion```\n。",
+  "link": "https://stackoverflow.com/questions/58481850/no-matches-for-kind-deployment-in-version-extensions-v1beta1"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何使用 Kubernetes yaml 文件设置动态值",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/48296082/how-to-set-dynamic-values-with-kubernetes-yaml-file"
+ },
+ {
+  "category": "kubernetes",
+  "question": "缩减 Kubernetes Pods",
+  "answer": "你正在执行正确的操作；\n传统上，\n```scale```\n动词仅应用于资源名称，例如\n```kubectl scale deploy my-awesome-deployment --replicas=0```\n，这样就无需始终指向描述该部署的\n特定文件\n，但如果对你来说使用文件更方便，据我所知，这并没有什么问题。",
+  "link": "https://stackoverflow.com/questions/47572597/scale-down-kubernetes-pods"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes 中与 Docker env-file 等效的功能",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/33478555/kubernetes-equivalent-of-env-file-in-docker"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes 大小定义：“Gi”和“G”有什么区别？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/50804915/kubernetes-size-definitions-whats-the-difference-of-gi-and-g"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes pod 上 ImagePullBackOff 状态的含义是什么？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/37302776/what-is-the-meaning-of-imagepullbackoff-status-on-a-kubernetes-pod"
+ },
+ {
+  "category": "kubernetes",
+  "question": "在 Kubernetes 上出现“did you specify the right host or port?”错误",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/36650642/did-you-specify-the-right-host-or-port-error-on-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Docker 分离模式",
+  "answer": "你可以使用 `-d` 选项以分离模式启动 Docker 容器。这样容器就会在后台启动并运行。也就是说，启动容器后，你可以继续使用控制台执行其他命令。\n\n\n与分离模式相对的是前台模式。这是默认模式，即未使用 `-d` 选项时。在此模式下，你用来执行 `docker run` 的控制台会附加到标准输入、输出和错误。这意味着你的控制台会连接到容器的进程。\n\n\n在分离模式下，你可以使用 `docker logs -f <container_ID>` 来跟踪 Docker 容器的标准输出。\n\n\n不妨两种选项都试试。我总是使用分离模式来运行我的容器。希望我解释得足够清楚。",
+  "link": "https://stackoverflow.com/questions/34029680/docker-detached-mode"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何从 kubectl logs -f 的大量日志中查看最后几行",
+  "answer": "在集群中，最佳实践是通过聚合器将所有日志收集到一个中心点，并使用专门的工具进行分析。因此，在 K8S 中，log 命令相当基础。\n\n\n无论如何，\n```kubectl logs -h```\n显示了一些对你有用的选项：\n\n\n```# 仅显示 pod nginx 输出中最近的 20 行\nkubectl logs --tail=20 nginx\n\n# 显示 pod nginx 在过去一小时内写入的所有日志\nkubectl logs --since=1h nginx\n```\n\n\nGitHub 上有一些满足你需求（甚至更多）的工具，其中包括：\n\n\n\n\nhttps://github.com/boz/kail\n\n\n\n\nhttps://github.com/stern/stern\n\n\n\n\nhttps://github.com/rogosprojects/klogs",
+  "link": "https://stackoverflow.com/questions/51835066/tailing-few-lines-from-huge-logs-of-kubectl-logs-f"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何使用 kubectl 获取当前上下文的当前命名空间",
+  "answer": "如果你的上下文中选择了命名空间，这可以正常工作：\n\n\n```kubectl config view --minify -o jsonpath='{..namespace}'\n```\n\n\n此外，\nkube-ps1\n 可用于在 shell 提示符中显示当前上下文和命名空间。",
+  "link": "https://stackoverflow.com/questions/55853977/how-to-get-the-current-namespace-of-current-context-using-kubectl"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何判断 Job 已完成",
+  "answer": "从 1.11 版本开始，你可以这样做：\n\n\n```kubectl wait --for=condition=complete job/myjob\n```\n\n\n你也可以设置超时时间：\n\n\n```kubectl wait --for=condition=complete --timeout=30s job/myjob\n```",
+  "link": "https://stackoverflow.com/questions/44686568/tell-when-job-is-complete"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何为 Kubernetes 创建本地开发环境？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/29746926/how-to-create-a-local-development-environment-for-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何将 kubectl 配置文件与 ~/.kube/config 合并？",
+  "answer": "执行以下操作：\n\n\n```export KUBECONFIG=~/.kube/config:~/someotherconfig \nkubectl config view --flatten\n```\n\n\n如果需要，你可以将其输出到新文件中。",
+  "link": "https://stackoverflow.com/questions/46184125/how-to-merge-kubectl-config-file-with-kube-config"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何列出 Kubernetes 节点上的污点？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/43379415/how-can-i-list-the-taints-on-kubernetes-nodes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何通过命令和 API 删除节点标签？",
+  "answer": "为节点创建标签：\n\n\n```kubectl label node <nodename> <labelname>=allow```\n\n\n从相应节点删除上述标签：\n\n\n```kubectl label node <nodename> <labelname>-```",
+  "link": "https://stackoverflow.com/questions/34067979/how-to-delete-a-node-label-by-command-and-api"
+ },
+ {
+  "category": "kubernetes",
+  "question": "能否在 Amazon 之外连接到 Amazon ElastiCache Redis？",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/21917661/can-you-connect-to-amazon-elasti%d0%a1ache-redis-outside-of-amazon"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes Helm 卡在更新进行中",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/65006907/kubernetes-helm-stuck-with-an-update-in-progress"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何在 Kubernetes 中找到服务的 URL？",
+  "answer": "服务的 URL 格式如下：\n\n\n```<service-name>.<namespace>.svc.cluster.local:<service-port>\n```\n\n\n在你的情况下，它是：\n\n\n```helloworldsvc.test.svc.cluster.local:9111\n```",
+  "link": "https://stackoverflow.com/questions/59558303/how-to-find-the-url-of-a-service-in-kubernetes"
+ },
+ {
+  "category": "kubernetes",
+  "question": "不同命名空间中 k8s 的 Ingress 配置",
+  "answer": "我想为那些对 Kubernetes 及其 ingress 选项相对陌生的人简化一下答案。要让 ingress 正常工作，需要存在两个独立的部分：\n\n\n\n\nIngress Controller\n：一个独立的 \n```DaemonSet```\n（一个运行在所有节点上的控制器，包括未来新增的节点），以及一个可用于实现路由和代理的 \n```Service```\n。它例如基于 NGINX，充当传统的反向代理，接收传入流量并将其转发到下面第 2 点中 \n```Ingress```\n 资源里定义的 HTTP(S) 路由（通过它们不同的路由/URL 来区分）；\n\n\nIngress rules\n：独立的 Kubernetes 资源，带有 \n```kind: Ingress```\n。只有当 Ingress Controller 已经在该节点上 \ndeployed\n 时才会生效。\n\n\n\n\n虽然 \nIngress Controller 可以部署在任何命名空间中\n，但它通常部署在与你的应用服务不同的命名空间中（例如 \n```ingress```\n 或 \n```kube-system```\n）。它可以查看所有其他命名空间中的 \n```Ingress```\n 规则并将其拾取。然而，每条 \nIngress 规则都必须位于它们所配置的应用所在的命名空间中。\n\n\n对此有一些变通方法，但这是最常见的做法。",
+  "link": "https://stackoverflow.com/questions/59844622/ingress-configuration-for-k8s-in-different-namespaces"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Helm install 未知标志 --name",
+  "answer": "在 Helm v3 中，release 名称现在是命令的必填部分，参见 \n```helm install --help```\n：\n\n\n\n\n用法：\n\n    helm install [NAME] [CHART] [flags]\n\n\n\n\n你的命令应该是\n：\n\n\n```helm install my-nginx stable/nginx-ingress```\n\n\n\n\n此外，Helm 不再自动为 release 生成名称。如果你想要“旧行为”，可以使用 \n```--generate-name```\n 标志。例如：\n\n\n```helm install --generate-name stable/nginx-ingress```\n\n\nv3 文档可在 \nhttps://v3.helm.sh/docs/\n 获取，但由于它是 beta 版本，文档在一段时间内不会准确。最好依赖 CLI \n```--help```\n，它是由 Go/\nCobra\n 自动生成的。",
+  "link": "https://stackoverflow.com/questions/57961162/helm-install-unknown-flag-name"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何使用 kubectl 在 Pod 中执行 bash 命令？",
+  "answer": "双破折号 \"--\" 用于将你要在容器内运行的命令与 kubectl 参数分隔开。\n因此正确的写法是：\n\n\n```kubectl exec -it --namespace=tools mongo-pod -- bash -c \"mongo\"\n```\n\n\n你在 \"--\" 和 \"bash\" 之间漏掉了一个空格。\n\n\n要执行多条命令，你可以：\n\n\n\n\n创建一个脚本，将其作为 volume 挂载到 Pod 中并执行\n\n\n\n\n启动一个带有该脚本的 side container 并运行它",
+  "link": "https://stackoverflow.com/questions/51247619/execute-bash-command-in-pod-with-kubectl"
+ },
+ {
+  "category": "kubernetes",
+  "question": "如何从 K8s API 获取 Kubernetes 集群名称",
+  "answer": "",
+  "link": "https://stackoverflow.com/questions/38242062/how-to-get-kubernetes-cluster-name-from-k8s-api"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes 与 CloudFoundry 的对比",
+  "answer": "作为 CloudFoundry（过去）和 Kubernetes（现在）的提交者，我可能特别有资格回答这个问题。\n\n\n类 PaaS\n\n\n我喜欢称 CloudFoundry 为“应用 PaaS”，Kubernetes 为“容器 PaaS”，但这一区别相当微妙且流动，因为两个项目都在随时间变化，以在同一市场竞争。\n\n\n两者的区别在于，CF 有一个 staging 层，它接收（12-factor）用户应用（例如 jar 或 gem）和 Heroku 风格的 buildpack（例如 Java+Tomcat 或 Ruby），并生成一个 droplet（类似于 Docker 镜像）。CF 不向用户暴露容器化接口，但 Kubernetes 会。\n\n\n受众\n\n\nCloudFoundry 的主要受众是希望使用 Heroku 风格 buildpack 部署 12-factor 无状态应用的企业应用开发者。\n\n\nKubernetes 的受众稍广一些，包括提供自己容器的无状态应用和有状态服务开发者。\n\n\n这种区别未来可能会改变：\n\n\n\n\nCloudFoundry 可能开始接受 docker 镜像（\nLattice 接受 Docker 镜像\n）。\n\n\nKubernetes 可能添加镜像生成层（\nOpenShift 做了类似的事情\n）。\n\n\n\n\n功能对比\n\n\n随着两个项目成熟并竞争，它们的相似之处和差异会发生变化。因此，对以下功能对比请持保留态度。\n\n\nCF 和 K8s 共享许多相似功能，如容器化、命名空间、认证，\n\n\nKubernetes 的竞争优势：\n\n\n\n\n对共享网络栈的容器组（pods）进行分组和扩展，而不仅仅是独立扩展\n\n\n自带容器\n\n\n有状态持久化层\n\n\n更大、更活跃的 OSS 社区\n\n\n更可扩展的架构，具有可替换组件和第三方插件\n\n\n免费 Web GUI\n\n\n\n\nCloudFoundry 的竞争优势：\n\n\n\n\n成熟的认证、用户分组和多租户支持 [x]\n\n\n自带应用\n\n\n包含负载均衡器\n\n\n由 BOSH 部署、扩展和保持存活 [x]\n\n\n强大的日志和指标聚合 [x]\n\n\n企业级 Web GUI [x]\n\n\n\n\n[x] 这些功能不属于 Diego 或包含在 Lattice 中。\n\n\n部署\n\n\nCloudFoundry 的竞争优势之一是它有一个成熟的部署引擎 BOSH，它支持核心 CF 组件的扩展、复活和监控等功能。BOSH 还通过可插拔的云提供商抽象支持许多 IaaS 层。不幸的是，BOSH 的学习曲线和部署配置管理非常噩梦般。（作为 BOSH 提交者，我想我可以准确地说这一点。）\n\n\nKubernetes 的部署抽象仍处于起步阶段。核心仓库中提供了多个目标环境，但它们并非全部工作、经过良好测试或由主要开发者支持。这主要是成熟度的问题。人们可能期望这随时间改善并增加抽象。例如，\nDCOS 上的 Kubernetes\n 允许使用单个命令将 Kubernetes 部署到现有的 \nDCOS\n 集群。\n\n\n历史背景\n\n\nDiego 是 CF 的 Droplet Execution Agent 的重写。它最初在 Kubernetes 宣布之前开发，并随着竞争格局的演变承担了更多功能范围。其最初目标是生成 droplets（用户应用 + CF buildpack）并在 Warden（在 Go 中重写后更名为 Garden）容器中运行它们。自成立以来，它还被重新打包为 \nLattice\n，这有点像是 CloudFoundry-lite（尽管该名称已被一个\n现有项目\n占用）。因此，Lattice 有点玩具化，因为它故意减少了用户受众和范围，明确缺少使其“企业就绪”的功能。CF 已经提供的功能。这部分是因为 Lattice 用于测试核心组件，而无需更复杂的 CF 的一些开销，但你也可以在内部高信任环境中使用 Lattice，其中安全性和多租户不是那么大的问题。\n\n\n还值得一提的是，CloudFoundry 和 Warden（其容器引擎）也比 Docker 早几年。\n\n\n另一方面，Kubernetes 是一个相对较新的项目，由 Google 基于多年使用 BORG 和 Omega 的容器经验开发。Kubernetes 可以被认为是 Google 的第三代容器编排，就像 Diego 是 Pivotal/VMware 的第三代容器编排一样（v1 在 VMware 编写；v2 在 VMware 与 Pivotal Labs 帮助下编写；v3 在 Pivotal 接管项目后编写）。",
+  "link": "https://stackoverflow.com/questions/32047563/kubernetes-vs-cloudfoundry"
+ },
+ {
+  "category": "kubernetes",
+  "question": "Kubernetes：无法删除 PersistentVolumeClaim（pvc）",
+  "answer": "当持久卷受保护时会发生这种情况。你应该能够交叉验证这一点：\n\n\n命令：\n\n\n```kubectl describe pvc PVC_NAME | grep Finalizers```\n\n\n输出：\n\n\n```Finalizers:    [kubernetes.io/pvc-protection]```\n\n\n你可以通过使用 \n```kubectl patch```\n 将 finalizers 设置为 null 来修复此问题：\n\n\n```kubectl patch pvc PVC_NAME -p '{\"metadata\":{\"finalizers\": []}}' --type=merge```\n\n\n参考；\n使用中的存储对象保护",
+  "link": "https://stackoverflow.com/questions/51358856/kubernetes-cant-delete-persistentvolumeclaim-pvc"
+ }
+]
